@@ -1,0 +1,24 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "lsg-bestenliste/ewige-bestenliste",
+	"title": "LSG Ewige Bestenliste",
+	"category": "widgets",
+	"icon": "star-filled",
+	"description": "All-time Bestenliste der LSG Karlsruhe (Top 20, bei 10km Top 30) je Distanz, mit Filtern für Geschlecht, Altersklasse und Distanz.",
+	"keywords": [ "lsg", "ewige bestenliste", "rekord", "lauf" ],
+	"textdomain": "lsg-bestenliste",
+	"attributes": {
+		"defaultGender": { "type": "string", "default": "m" },
+		"defaultAk": { "type": "string", "default": "alle" },
+		"defaultDistance": { "type": "string", "default": "alle" }
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ]
+	},
+	"editorScript": "lsg-bestenliste-edit-ewige-bestenliste",
+	"style": "file:../../assets/css/frontend.css",
+	"viewScript": "lsg-bestenliste-frontend",
+	"render": "file:./render.php"
+}

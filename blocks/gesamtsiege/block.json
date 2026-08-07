@@ -1,0 +1,22 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "lsg-bestenliste/gesamtsiege",
+	"title": "LSG Gesamtsiege",
+	"category": "widgets",
+	"icon": "awards",
+	"description": "Chronologische Liste aller Vereinssiege eines Jahres der LSG Karlsruhe, mit Jahres-Filter.",
+	"keywords": [ "lsg", "gesamtsiege", "sieg", "lauf" ],
+	"textdomain": "lsg-bestenliste",
+	"attributes": {
+		"defaultYear": { "type": "number", "default": 0 }
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ]
+	},
+	"editorScript": "lsg-bestenliste-edit-gesamtsiege",
+	"style": "file:../../assets/css/frontend.css",
+	"viewScript": "lsg-bestenliste-frontend",
+	"render": "file:./render.php"
+}

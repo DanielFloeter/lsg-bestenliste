@@ -1,0 +1,25 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "lsg-bestenliste/bestenliste",
+	"title": "LSG Bestenliste",
+	"category": "widgets",
+	"icon": "chart-line",
+	"description": "Jahres-Bestenliste der LSG Karlsruhe: Ergebnisse eines Jahres nach Distanz, mit Filtern für Jahr, Geschlecht, Altersklasse und Distanz.",
+	"keywords": [ "lsg", "bestenliste", "lauf", "ergebnisse" ],
+	"textdomain": "lsg-bestenliste",
+	"attributes": {
+		"defaultYear": { "type": "number", "default": 0 },
+		"defaultGender": { "type": "string", "default": "m" },
+		"defaultAk": { "type": "string", "default": "alle" },
+		"defaultDistance": { "type": "string", "default": "alle" }
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ]
+	},
+	"editorScript": "lsg-bestenliste-edit-bestenliste",
+	"style": "file:../../assets/css/frontend.css",
+	"viewScript": "lsg-bestenliste-frontend",
+	"render": "file:./render.php"
+}
