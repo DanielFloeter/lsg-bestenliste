@@ -99,7 +99,7 @@ function lsg_bl_render_result_table( $rows, $show_heading = true, $distance = ''
 					<td class="lsg-col-name"><?php echo lsg_bl_cell( $name ); ?></td>
 					<td class="lsg-col-town"><?php echo lsg_bl_cell( $row['town'] ); ?></td>
 					<td class="lsg-col-date"><?php echo lsg_bl_cell( lsg_bl_format_date( $row['date'] ) ); ?></td>
-					<td class="lsg-col-ak"><?php echo lsg_bl_cell( $row['ak'] ); ?></td>
+					<td class="lsg-col-ak"><?php echo lsg_bl_cell( lsg_bl_ak_strip_gender( $row['ak'] ) ); ?></td>
 				</tr>
 			<?php endforeach; ?>
 		</tbody>

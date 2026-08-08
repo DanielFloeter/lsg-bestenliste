@@ -61,7 +61,7 @@
 							}
 						} ),
 						el( TextControl, {
-							label: __( 'Altersklasse (z.B. m45, w40 oder "alle")', 'lsg-bestenliste' ),
+							label: __( 'Altersklasse (z.B. 45, hk oder "alle")', 'lsg-bestenliste' ),
 							value: attributes.defaultAk,
 							onChange: function ( value ) {
 								setAttributes( { defaultAk: value || 'alle' } );

@@ -15,8 +15,8 @@
 		{ label: '10 km', value: '10km' },
 		{ label: '15 km', value: '15km' },
 		{ label: '20 km', value: '20km' },
-		{ label: '25 km', value: '25km' },
 		{ label: 'Halbmarathon', value: 'HM' },
+		{ label: '25 km', value: '25km' },
 		{ label: 'Marathon', value: 'Marathon' },
 		{ label: '50 km', value: '50km' },
 		{ label: '100 km', value: '100km' },
@@ -53,7 +53,7 @@
 							}
 						} ),
 						el( TextControl, {
-							label: __( 'Altersklasse (z.B. m45, w40 oder "alle")', 'lsg-bestenliste' ),
+							label: __( 'Altersklasse (z.B. 45, hk oder "alle")', 'lsg-bestenliste' ),
 							value: attributes.defaultAk,
 							onChange: function ( value ) {
 								setAttributes( { defaultAk: value || 'alle' } );

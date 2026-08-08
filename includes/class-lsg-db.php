@@ -60,7 +60,9 @@ function lsg_bl_get_best_rows( $distance, $gender, $ak, $year = 0 ) {
 	}
 
 	if ( $ak && 'alle' !== $ak ) {
-		$where[]  = 'b.ak = %s';
+		// $ak ist der Altersklassen-Code ohne Geschlechts-Präfix (z.B. '45',
+		// 'hk'), daher hier auf den Teil ab dem 2. Zeichen von b.ak matchen.
+		$where[]  = 'SUBSTRING(b.ak, 2) = %s';
 		$params[] = $ak;
 	}
 
@@ -109,7 +111,9 @@ function lsg_bl_get_distances_present( $gender, $ak, $year = 0 ) {
 		$params[] = lsg_bl_gender_ak_pattern( $gender );
 	}
 	if ( $ak && 'alle' !== $ak ) {
-		$where[]  = 'b.ak = %s';
+		// $ak ist der Altersklassen-Code ohne Geschlechts-Präfix (z.B. '45',
+		// 'hk'), daher hier auf den Teil ab dem 2. Zeichen von b.ak matchen.
+		$where[]  = 'SUBSTRING(b.ak, 2) = %s';
 		$params[] = $ak;
 	}
 	if ( $year > 0 ) {

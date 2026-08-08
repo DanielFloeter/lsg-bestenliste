@@ -213,6 +213,20 @@ function lsg_bl_gender_ak_pattern( $gender ) {
 }
 
 /**
+ * Entfernt das führende Geschlechts-Präfix ('m'/'w') aus einem
+ * Altersklassen-Code, z.B. 'm45' => '45', 'whk' => 'hk'. Das Geschlecht wird
+ * bereits über ein eigenes Dropdown gewählt, daher soll es in der
+ * Altersklassen-Anzeige nicht noch einmal (doppelt) auftauchen.
+ */
+function lsg_bl_ak_strip_gender( $ak ) {
+	$ak = strtolower( trim( (string) $ak ) );
+	if ( 0 === strpos( $ak, 'm' ) || 0 === strpos( $ak, 'w' ) ) {
+		return substr( $ak, 1 );
+	}
+	return $ak;
+}
+
+/**
  * Sortierschlüssel für Altersklassen: Hauptklasse (hk) zuerst, danach
  * aufsteigend nach Alterszahl.
  */
@@ -229,9 +243,11 @@ function lsg_bl_ak_sort_key( $ak ) {
 
 /**
  * Liste der verfügbaren Altersklassen für ein Geschlecht ('m'/'f'), oder für
- * beide zusammen ('alle'), aus der Tabelle lsg_ak. Sortiert nach Hauptklasse
- * zuerst, dann aufsteigend nach Alter; bei gleichem Alter alphabetisch
- * (dadurch stehen z.B. 'm45' und 'w45' bei "Alle" direkt nebeneinander).
+ * beide zusammen ('alle'), aus der Tabelle lsg_ak. Gibt die Codes ohne
+ * Geschlechts-Präfix zurück (z.B. 'hk', '30', '35', …) und dedupliziert sie,
+ * damit bei "Alle" nicht jede Alterszahl doppelt (einmal für m, einmal für w)
+ * auftaucht – das Geschlecht wird ja bereits über ein eigenes Dropdown
+ * gewählt. Sortiert nach Hauptklasse zuerst, dann aufsteigend nach Alter.
  *
  * @return string[]
  */
@@ -247,6 +263,17 @@ function lsg_bl_ak_list_for_gender( $gender ) {
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT ak FROM {$table} WHERE ak LIKE %s", $pattern ) ); // phpcs:ignore
 	}
+
+	// Hinweis: NICHT als Array-Keys deduplizieren – PHP wandelt numerische
+	// String-Keys (z.B. '30') automatisch in int(30) um, wodurch der spätere
+	// strikte Vergleich mit dem String-Wert aus $_GET/dem Request
+	// (in_array( $ak, $valid_ak, true )) fehlschlagen und die Auswahl immer
+	// auf "alle" zurückfallen würde.
+	$suffixes = array();
+	foreach ( $rows as $ak ) {
+		$suffixes[] = lsg_bl_ak_strip_gender( $ak );
+	}
+	$rows = array_values( array_unique( $suffixes, SORT_STRING ) );
 
 	usort(
 		$rows,
