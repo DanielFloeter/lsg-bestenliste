@@ -111,8 +111,12 @@
 }
 
 .lsg-table .lsg-col-ak {
-	text-transform: lowercase;
 	white-space: nowrap;
+}
+
+/* Frauen-Zeilen (Gesamtsiege; Bestenliste bei Geschlecht "Alle") in roter Schrift. */
+.lsg-table tr.lsg-row-frau td {
+	color: #c0102a;
 }
 
 .lsg-empty {

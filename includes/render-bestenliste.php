@@ -27,7 +27,7 @@ function lsg_bl_resolve_bestenliste_args( $attributes = array() ) {
 	$ak       = isset( $_GET['lsg_ak'] ) ? sanitize_text_field( wp_unslash( $_GET['lsg_ak'] ) ) : $default_ak; // phpcs:ignore
 	$distance = isset( $_GET['lsg_distance'] ) ? sanitize_text_field( wp_unslash( $_GET['lsg_distance'] ) ) : $default_distance; // phpcs:ignore
 
-	$gender = ( 'f' === $gender ) ? 'f' : 'm';
+	$gender = in_array( $gender, array( 'm', 'f', 'alle' ), true ) ? $gender : 'm';
 	if ( ! in_array( $year, $years, true ) ) {
 		$year = $current_year;
 	}
@@ -54,11 +54,13 @@ function lsg_bl_resolve_bestenliste_args( $attributes = array() ) {
 /**
  * Baut die HTML-Tabelle für eine einzelne Distanz.
  *
- * @param bool $reverse_order Wenn true, wird die Reihenfolge nach der
- *                             Leistungssortierung umgedreht (langsamste/
- *                             kürzeste Leistung zuerst statt zuletzt).
+ * @param bool $reverse_order    Wenn true, wird die Reihenfolge nach der
+ *                                Leistungssortierung umgedreht (schlechteste
+ *                                Leistung zuerst statt beste).
+ * @param bool $highlight_gender Wenn true, werden Frauen-Zeilen (athlete.cat = 'f')
+ *                                mit der Klasse "lsg-row-frau" markiert (rote Schrift).
  */
-function lsg_bl_render_result_table( $rows, $show_heading = true, $distance = '', $reverse_order = false ) {
+function lsg_bl_render_result_table( $rows, $show_heading = true, $distance = '', $reverse_order = false, $highlight_gender = false ) {
 	if ( empty( $rows ) ) {
 		return '';
 	}
@@ -88,9 +90,10 @@ function lsg_bl_render_result_table( $rows, $show_heading = true, $distance = ''
 			$rank = 0;
 			foreach ( $rows as $row ) :
 				++$rank;
-				$name = lsg_bl_athlete_display_name( $row['name'], $row['firstname'] );
+				$name    = lsg_bl_athlete_display_name( $row['name'], $row['firstname'] );
+				$is_frau = $highlight_gender && isset( $row['cat'] ) && ( 'f' === strtolower( trim( (string) $row['cat'] ) ) );
 				?>
-				<tr>
+				<tr class="<?php echo $is_frau ? 'lsg-row-frau' : ''; ?>">
 					<td class="lsg-col-rank"><?php echo (int) $rank; ?>.</td>
 					<td class="lsg-col-time"><?php echo lsg_bl_cell( $row['_perf']['display'] ); ?></td>
 					<td class="lsg-col-name"><?php echo lsg_bl_cell( $name ); ?></td>
@@ -124,16 +127,17 @@ function lsg_bl_render_bestenliste_results( $args ) {
 		return '<p class="lsg-empty">Keine Ergebnisse für diese Auswahl.</p>';
 	}
 
-	$show_heading = ( count( $distances ) > 1 ) || ( 'alle' === $args['distance'] );
-	$html         = '';
-	$any          = false;
+	$show_heading     = ( count( $distances ) > 1 ) || ( 'alle' === $args['distance'] );
+	$highlight_gender = ( 'alle' === $gender ); // Bei gemischter Ausgabe Frauen farblich hervorheben.
+	$html             = '';
+	$any              = false;
 	foreach ( $distances as $distance ) {
 		$rows = lsg_bl_get_best_rows( $distance, $gender, $ak, $year );
 		if ( empty( $rows ) ) {
 			continue;
 		}
 		$any   = true;
-		$html .= '<div class="lsg-distance-block">' . lsg_bl_render_result_table( $rows, $show_heading, $distance, true ) . '</div>';
+		$html .= '<div class="lsg-distance-block">' . lsg_bl_render_result_table( $rows, $show_heading, $distance, false, $highlight_gender ) . '</div>';
 	}
 
 	if ( ! $any ) {
@@ -165,6 +169,7 @@ function lsg_bl_render_bestenliste_filters( $args, $instance_id ) {
 		<label class="lsg-field">
 			<span>Geschlecht</span>
 			<select name="lsg_gender">
+				<option value="alle" <?php selected( $args['gender'], 'alle' ); ?>>Alle</option>
 				<option value="m" <?php selected( $args['gender'], 'm' ); ?>>Männer</option>
 				<option value="f" <?php selected( $args['gender'], 'f' ); ?>>Frauen</option>
 			</select>
@@ -204,6 +209,8 @@ function lsg_bl_render_bestenliste_block( $attributes = array() ) {
 	$html .= lsg_bl_render_bestenliste_filters( $args, $instance_id );
 	$html .= '<div id="' . esc_attr( $instance_id ) . '-results" class="lsg-results">';
 	$html .= lsg_bl_render_bestenliste_results( $args );
+	$html .= '</div>';
+	$html .= '<p class="lsg-contact">Fragen zu Einträgen an: bestenliste(at)lsg-ka.de</p>';
 	$html .= '</div>';
 
 	return $html;

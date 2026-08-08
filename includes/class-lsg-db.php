@@ -41,7 +41,7 @@ function lsg_bl_get_win_years() {
  * keine Sortierung (das übernimmt der Aufrufer je nach Distanztyp).
  *
  * @param string $distance Distanzcode, z.B. '5km'.
- * @param string $gender   'm' oder 'f'.
+ * @param string $gender   'm', 'f' oder 'alle' (dann kein Geschlechtsfilter).
  * @param string $ak       Altersklassen-Code oder 'alle'.
  * @param int    $year     Jahr, oder 0 für alle Jahre (Ewige Bestenliste).
  * @return array<int,array>
@@ -51,8 +51,13 @@ function lsg_bl_get_best_rows( $distance, $gender, $ak, $year = 0 ) {
 	$t_best    = lsg_bl_table( 'lsg_best' );
 	$t_athlete = lsg_bl_table( 'lsg_athlete' );
 
-	$where  = array( 'b.distance = %s', 'b.ak LIKE %s' );
-	$params = array( $distance, lsg_bl_gender_ak_pattern( $gender ) );
+	$where  = array( 'b.distance = %s' );
+	$params = array( $distance );
+
+	if ( 'alle' !== $gender ) {
+		$where[]  = 'b.ak LIKE %s';
+		$params[] = lsg_bl_gender_ak_pattern( $gender );
+	}
 
 	if ( $ak && 'alle' !== $ak ) {
 		$where[]  = 'b.ak = %s';
@@ -68,7 +73,7 @@ function lsg_bl_get_best_rows( $distance, $gender, $ak, $year = 0 ) {
 
 	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	$sql = $wpdb->prepare(
-		"SELECT b.id, b.distance, b.time, b.town, b.date, b.ak, a.name, a.firstname
+		"SELECT b.id, b.distance, b.time, b.town, b.date, b.ak, b.athletes_id, a.name, a.firstname, a.cat
 		 FROM {$t_best} b
 		 INNER JOIN {$t_athlete} a ON a.id = b.athletes_id
 		 WHERE {$where_sql}",
@@ -96,9 +101,13 @@ function lsg_bl_get_distances_present( $gender, $ak, $year = 0 ) {
 	global $wpdb;
 	$t_best = lsg_bl_table( 'lsg_best' );
 
-	$where  = array( 'b.ak LIKE %s' );
-	$params = array( lsg_bl_gender_ak_pattern( $gender ) );
+	$where  = array();
+	$params = array();
 
+	if ( 'alle' !== $gender ) {
+		$where[]  = 'b.ak LIKE %s';
+		$params[] = lsg_bl_gender_ak_pattern( $gender );
+	}
 	if ( $ak && 'alle' !== $ak ) {
 		$where[]  = 'b.ak = %s';
 		$params[] = $ak;
@@ -107,10 +116,15 @@ function lsg_bl_get_distances_present( $gender, $ak, $year = 0 ) {
 		$where[]  = 'YEAR(FROM_UNIXTIME(b.date)) = %d';
 		$params[] = $year;
 	}
-	$where_sql = implode( ' AND ', $where );
+	$where_sql = $where ? ( 'WHERE ' . implode( ' AND ', $where ) ) : '';
 
-	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-	$sql = $wpdb->prepare( "SELECT DISTINCT b.distance FROM {$t_best} b WHERE {$where_sql}", $params );
+	if ( $params ) {
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$sql = $wpdb->prepare( "SELECT DISTINCT b.distance FROM {$t_best} b {$where_sql}", $params );
+	} else {
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$sql = "SELECT DISTINCT b.distance FROM {$t_best} b {$where_sql}";
+	}
 	$present = $wpdb->get_col( $sql );
 
 	$map     = lsg_bl_distance_map();
@@ -175,7 +189,7 @@ function lsg_bl_get_win_rows( $year ) {
 
 	$where_sql = $where ? ( 'WHERE ' . implode( ' AND ', $where ) ) : '';
 
-	$sql = "SELECT w.id, w.date, w.town, w.event, w.distance, w.time, a.name, a.firstname
+	$sql = "SELECT w.id, w.date, w.town, w.event, w.distance, w.time, a.name, a.firstname, a.cat
 			FROM {$t_win} w
 			INNER JOIN {$t_athlete} a ON a.id = w.athletes_id
 			{$where_sql}

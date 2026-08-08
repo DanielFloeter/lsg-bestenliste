@@ -48,8 +48,11 @@ function lsg_bl_render_gesamtsiege_results( $args ) {
 		</thead>
 		<tbody>
 			<?php foreach ( $rows as $row ) : ?>
-				<?php $name = lsg_bl_athlete_display_name( $row['name'], $row['firstname'] ); ?>
-				<tr>
+				<?php
+				$name    = lsg_bl_athlete_display_name( $row['name'], $row['firstname'] );
+				$is_frau = ( 'f' === strtolower( trim( (string) $row['cat'] ) ) );
+				?>
+				<tr class="<?php echo $is_frau ? 'lsg-row-frau' : ''; ?>">
 					<td class="lsg-col-date"><?php echo lsg_bl_cell( lsg_bl_format_date( $row['date'] ) ); ?></td>
 					<td class="lsg-col-town"><?php echo lsg_bl_cell( $row['town'] ); ?></td>
 					<td class="lsg-col-event"><?php echo lsg_bl_cell( $row['event'] ); ?></td>
@@ -88,9 +91,12 @@ function lsg_bl_render_gesamtsiege_block( $attributes = array() ) {
 	$instance_id = 'lsg-gesamtsiege-' . substr( md5( wp_json_encode( $attributes ) . wp_rand() ), 0, 8 );
 
 	$html  = '<div class="lsg-block lsg-gesamtsiege" data-lsg-block="gesamtsiege">';
+	$html .= '<h2 class="lsg-title">Gesamtsiege ' . (int) $args['year'] . '</h2>';
 	$html .= lsg_bl_render_gesamtsiege_filters( $args, $instance_id );
 	$html .= '<div id="' . esc_attr( $instance_id ) . '-results" class="lsg-results">';
 	$html .= lsg_bl_render_gesamtsiege_results( $args );
+	$html .= '</div>';
+	$html .= '<p class="lsg-contact">Fragen zu Einträgen an: bestenliste(at)lsg-ka.de</p>';
 	$html .= '</div>';
 
 	return $html;

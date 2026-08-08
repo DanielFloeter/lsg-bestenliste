@@ -69,7 +69,7 @@ add_action(
  * denselben Regeln wie die serverseitigen Blöcke, ohne auf $_GET zurückzugreifen.
  */
 function lsg_bl_validate_common( $gender_raw, $ak_raw, $distance_raw ) {
-	$gender = ( 'f' === $gender_raw ) ? 'f' : 'm';
+	$gender = in_array( $gender_raw, array( 'm', 'f', 'alle' ), true ) ? $gender_raw : 'm';
 
 	$valid_ak = lsg_bl_ak_list_for_gender( $gender );
 	$ak       = ( $ak_raw && in_array( $ak_raw, $valid_ak, true ) ) ? $ak_raw : 'alle';

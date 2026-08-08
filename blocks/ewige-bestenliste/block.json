@@ -9,7 +9,7 @@
 	"keywords": [ "lsg", "ewige bestenliste", "rekord", "lauf" ],
 	"textdomain": "lsg-bestenliste",
 	"attributes": {
-		"defaultGender": { "type": "string", "default": "m" },
+		"defaultGender": { "type": "string", "default": "alle" },
 		"defaultAk": { "type": "string", "default": "alle" },
 		"defaultDistance": { "type": "string", "default": "alle" }
 	},

@@ -10,7 +10,7 @@
 	"textdomain": "lsg-bestenliste",
 	"attributes": {
 		"defaultYear": { "type": "number", "default": 0 },
-		"defaultGender": { "type": "string", "default": "m" },
+		"defaultGender": { "type": "string", "default": "alle" },
 		"defaultAk": { "type": "string", "default": "alle" },
 		"defaultDistance": { "type": "string", "default": "alle" }
 	},

@@ -44,6 +44,7 @@
 							label: __( 'Geschlecht', 'lsg-bestenliste' ),
 							value: attributes.defaultGender,
 							options: [
+								{ label: 'Alle', value: 'alle' },
 								{ label: 'Männer', value: 'm' },
 								{ label: 'Frauen', value: 'f' }
 							],

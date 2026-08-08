@@ -75,14 +75,50 @@ function lsg_bl_eternal_limit( $distance ) {
  * sortierbaren numerischen Wert. Unterstützt sowohl Zeiten (HH:MM:SS, auch
  * mit Anhängseln wie " h") als auch Streckenangaben (z.B. "80,475 km").
  *
+ * Die historischen Daten enthalten bei den Zeiten vereinzelt Tippfehler
+ * (Punkt statt Doppelpunkt als Trenner, z.B. "01:20.24", oder fehlende
+ * Stundenangabe bei kürzeren Distanzen, z.B. "38:57"). Diese werden
+ * toleranter erkannt, damit sie nicht in den ungenauen Zahlen-Fallback
+ * fallen und die Sortierung verfälschen.
+ *
  * @return array{sort:float,better:string,display:string}
  */
 function lsg_bl_parse_performance( $distance, $raw ) {
 	$raw  = trim( (string) $raw );
 	$type = lsg_bl_distance_type( $distance );
 
-	// Zeitformat HH:MM:SS (ggf. mit Anhängsel wie " h" oder führenden Leerzeichen).
-	if ( preg_match( '/(\d{1,3}):([0-5]\d):([0-5]\d)/', $raw, $m ) ) {
+	if ( 'distance' === $type ) {
+		// Streckenangabe, z.B. "80,475 km" oder "228 km".
+		if ( preg_match( '/([\d]+(?:[.,]\d+)?)\s*km/i', $raw, $m ) ) {
+			$num = (float) str_replace( ',', '.', $m[1] );
+			return array(
+				'sort'    => $num,
+				'better'  => 'higher',
+				'display' => $raw,
+			);
+		}
+
+		// Fallback: irgendeine Zahl im String.
+		if ( preg_match( '/([\d]+(?:[.,]\d+)?)/', $raw, $m ) ) {
+			$num = (float) str_replace( ',', '.', $m[1] );
+			return array(
+				'sort'    => $num,
+				'better'  => 'higher',
+				'display' => $raw,
+			);
+		}
+
+		return array(
+			'sort'    => -PHP_INT_MAX,
+			'better'  => 'higher',
+			'display' => $raw,
+		);
+	}
+
+	// Zeitformat HH:MM:SS, auch mit vertauschtem/abweichendem Trenner
+	// (":" oder ".") zwischen den drei Teilen, z.B. "01:20.24" oder
+	// "02.04:12".
+	if ( preg_match( '/(\d{1,3})[:.]([0-5]\d)[:.]([0-5]\d)/', $raw, $m ) ) {
 		$seconds = ( (int) $m[1] ) * 3600 + ( (int) $m[2] ) * 60 + (int) $m[3];
 		return array(
 			'sort'    => (float) $seconds,
@@ -91,12 +127,12 @@ function lsg_bl_parse_performance( $distance, $raw ) {
 		);
 	}
 
-	// Streckenangabe, z.B. "80,475 km" oder "228 km".
-	if ( preg_match( '/([\d]+(?:[.,]\d+)?)\s*km/i', $raw, $m ) ) {
-		$num = (float) str_replace( ',', '.', $m[1] );
+	// Zeitformat MM:SS ohne Stundenangabe, z.B. "38:57".
+	if ( preg_match( '/^(\d{1,3}):([0-5]\d)$/', $raw, $m ) ) {
+		$seconds = ( (int) $m[1] ) * 60 + (int) $m[2];
 		return array(
-			'sort'    => $num,
-			'better'  => 'higher',
+			'sort'    => (float) $seconds,
+			'better'  => 'lower',
 			'display' => $raw,
 		);
 	}
@@ -105,8 +141,8 @@ function lsg_bl_parse_performance( $distance, $raw ) {
 	if ( preg_match( '/([\d]+(?:[.,]\d+)?)/', $raw, $m ) ) {
 		$num = (float) str_replace( ',', '.', $m[1] );
 		return array(
-			'sort'    => 'distance' === $type ? $num : -$num,
-			'better'  => 'distance' === $type ? 'higher' : 'lower',
+			'sort'    => -$num,
+			'better'  => 'lower',
 			'display' => $raw,
 		);
 	}
@@ -120,7 +156,8 @@ function lsg_bl_parse_performance( $distance, $raw ) {
 
 /**
  * Sortiert ein Array von Ergebnis-Zeilen (jede Zeile braucht einen Key
- * '_perf' mit dem Ergebnis von lsg_bl_parse_performance()) nach Leistung.
+ * '_perf' mit dem Ergebnis von lsg_bl_parse_performance()) nach Leistung,
+ * beste Leistung zuerst (kleinste Zeit bzw. größte Strecke).
  */
 function lsg_bl_sort_rows_by_performance( array $rows ) {
 	usort(
@@ -130,10 +167,32 @@ function lsg_bl_sort_rows_by_performance( array $rows ) {
 			if ( $a['_perf']['sort'] === $b['_perf']['sort'] ) {
 				return 0;
 			}
-			return ( $a['_perf']['sort'] < $b['_perf']['sort'] ) ? $dir : -$dir;
+			return ( $a['_perf']['sort'] < $b['_perf']['sort'] ) ? -$dir : $dir;
 		}
 	);
 	return $rows;
+}
+
+/**
+ * Entfernt Duplikate desselben Athleten aus einer bereits nach Leistung
+ * sortierten Zeilenliste und behält jeweils nur die erste (= beste) Zeile.
+ * So taucht z.B. für die Ewige Bestenliste jeder Athlet pro Distanz nur
+ * einmal auf, auch wenn er mehrere Einträge in lsg_best hat.
+ */
+function lsg_bl_dedupe_rows_by_athlete( array $rows ) {
+	$seen   = array();
+	$result = array();
+	foreach ( $rows as $row ) {
+		$athlete_id = isset( $row['athletes_id'] ) ? (int) $row['athletes_id'] : 0;
+		if ( $athlete_id && isset( $seen[ $athlete_id ] ) ) {
+			continue;
+		}
+		if ( $athlete_id ) {
+			$seen[ $athlete_id ] = true;
+		}
+		$result[] = $row;
+	}
+	return $result;
 }
 
 /**
@@ -169,21 +228,35 @@ function lsg_bl_ak_sort_key( $ak ) {
 }
 
 /**
- * Liste der verfügbaren Altersklassen für ein Geschlecht, aus der Tabelle
- * lsg_ak, sortiert (hk, dann aufsteigend).
+ * Liste der verfügbaren Altersklassen für ein Geschlecht ('m'/'f'), oder für
+ * beide zusammen ('alle'), aus der Tabelle lsg_ak. Sortiert nach Hauptklasse
+ * zuerst, dann aufsteigend nach Alter; bei gleichem Alter alphabetisch
+ * (dadurch stehen z.B. 'm45' und 'w45' bei "Alle" direkt nebeneinander).
  *
  * @return string[]
  */
 function lsg_bl_ak_list_for_gender( $gender ) {
 	global $wpdb;
-	$table   = lsg_bl_table( 'lsg_ak' );
-	$pattern = lsg_bl_gender_ak_pattern( $gender );
-	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-	$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT ak FROM {$table} WHERE ak LIKE %s", $pattern ) ); // phpcs:ignore
+	$table = lsg_bl_table( 'lsg_ak' );
+
+	if ( 'alle' === $gender ) {
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_col( "SELECT DISTINCT ak FROM {$table}" );
+	} else {
+		$pattern = lsg_bl_gender_ak_pattern( $gender );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT ak FROM {$table} WHERE ak LIKE %s", $pattern ) ); // phpcs:ignore
+	}
+
 	usort(
 		$rows,
 		function ( $a, $b ) {
-			return lsg_bl_ak_sort_key( $a ) <=> lsg_bl_ak_sort_key( $b );
+			$key_a = lsg_bl_ak_sort_key( $a );
+			$key_b = lsg_bl_ak_sort_key( $b );
+			if ( $key_a === $key_b ) {
+				return strcasecmp( $a, $b );
+			}
+			return ( $key_a <=> $key_b );
 		}
 	);
 	return $rows;
