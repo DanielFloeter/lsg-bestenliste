@@ -696,9 +696,10 @@ if ( preg_match( '/^(\d{1,3}):([0-5]\d):([0-5]\d)[.,](\d+)$/', $raw, $m ) ) {
 darstellbar, und bei `.0` würde ein Rundungsfehler eine Sekunde erfinden.
 Deshalb der Vergleich auf dem Nachkommastring.
 
-**Distanz und Ort** kommen *nicht* aus der Zeile, sondern aus dem Wettbewerb.
-Sie gelten für den gesamten Import und werden über der Tabelle als Felder
-angeboten:
+**Distanz, Datum und Ort** kommen *nicht* aus der Zeile, sondern aus dem
+Wettbewerb. Sie gelten für den gesamten Import (ein Vorgang = eine Liste) und
+werden über der Tabelle als Felder angeboten – jedes davon vorbelegt, wenn es
+sich ermitteln lässt, und in jedem Fall änderbar:
 
 - `distanz` – Select mit den kanonischen Codes aus `lsg_bl_distance_map()`
   (`5km`, `10km`, `HM`, `Marathon`, …), vorbelegt durch eine Heuristik auf
@@ -793,13 +794,72 @@ Lauf-Bestenliste. Vorgeschlagenes Verhalten: enthält der Wettbewerbsname
 Hinweis angezeigt – importieren lässt es sich weiterhin, aber nur mit
 bewusster Auswahl (siehe 8.3).
 
-- `ort` – aus dem Eventnamen abgeleitet, frei überschreibbar
-  (`lsg_best.town`, `varchar(30)` – Länge prüfen).
-- `datum` – Veranstaltungsdatum, als Unix-Timestamp in `lsg_best.date`.
-  Bestimmt das Jahr für P4. Vorbelegt aus den Adapter-Metadaten, änderbar.
+**Der Ort** kommt aus dem Eventnamen und ist frei überschreibbar
+(`lsg_best.town`, `varchar(30)` – bei langen Namen kürzen, nicht abschneiden
+lassen).
 
-Ohne gültige Distanz kein P4 – der Parsen-Button bleibt gesperrt, solange
-diese drei Felder nicht stehen.
+**Das Veranstaltungsdatum** ist der heikelste der drei Werte, weil an ihm mehr
+hängt als die Anzeige: **es bestimmt das Jahr, und das Jahr bestimmt, gegen
+welchen Bestand P4 vergleicht.** Ein Datum im falschen Jahr überschreibt nicht
+die vorhandene Zeit, sondern legt still eine zweite Zeile an – und in der
+Bestenliste steht der Lauf dann im falschen Jahrgang. Deshalb wird das Datum
+genauso behandelt wie die Distanz: erkannt, angezeigt, änderbar, und ohne
+gültigen Wert geht es nicht weiter.
+
+Ermittelt wird es in dieser Reihenfolge:
+
+```
+1. Adapter-Metadaten
+   race result  Datumsfeld aus der config-Antwort
+   Runtix       Veranstaltungsseite /sts/10021/{eventId}
+   → genaues Feld bzw. Auszeichnung am Live-Objekt verifizieren (Abschnitt 8.3)
+
+2. Datum im Event- oder Wettbewerbsnamen
+   „…, 17.05.2026" · „2026-05-17" · „17. Mai 2026"
+
+3. Nur eine Jahreszahl im Namen
+   „17. SWE Halbmarathon Ettlingen 2026"  →  Jahr 2026, Tag und Monat fehlen
+
+4. Nichts gefunden  →  Feld bleibt leer
+```
+
+Woher der Wert stammt, wird mitgeführt (`datum_quelle`: `api` | `name` | `jahr`
+| `manuell`) und am Feld angezeigt – *„aus der Quelle übernommen"*, *„aus dem
+Namen gelesen"*, *„nur das Jahr erkannt – bitte Tag und Monat ergänzen"*, *„von
+Hand eingetragen"*. Im Log steht es ebenfalls (`lsg_import_run`), damit später
+nachvollziehbar ist, wie sicher der Wert war.
+
+⚠ **Ein unvollständiges Datum wird nicht ergänzt.** Kein stiller 1. Januar, kein
+Importdatum als Ersatz. `lsg_best.date` wird in der Bestenliste als TT.MM.JJJJ
+ausgegeben – ein erfundener Tag wäre dort eine sichtbare Falschangabe. Fehlen
+Tag und Monat, bleibt das Feld unvollständig und der Parsen-Button gesperrt.
+
+⚠ **Als Timestamp mit 12:00 Uhr Ortszeit speichern**, nicht mit 00:00:
+`mktime( 12, 0, 0, $m, $d, $y )`. Bei Mitternacht kann die Zeitzonenrechnung
+von `date_i18n()` den Tag um eins verschieben, und dann steht in der
+Bestenliste der Vortag. Der Bestand in `lsg_best.date` ist ein `int`-Timestamp,
+die Uhrzeit wird nirgends ausgegeben – 12:00 kostet nichts und verhindert genau
+diesen Fehler.
+
+Als Eingabefeld ein `<input type="date">` mit Textfeld-Fallback (`TT.MM.JJJJ`),
+damit die Seite ohne JavaScript bedienbar bleibt (6.9). Dazu drei
+Plausibilitätshinweise – Hinweise, keine Sperren:
+
+- Datum in der Zukunft → *„Der Lauf liegt in der Zukunft – stimmt das Datum?"*
+- mehr als zehn Jahre zurück → Nachfrage
+- Jahr weicht von der Jahreszahl im Eventnamen ab → beide Werte anzeigen
+
+**Beide Felder – Datum und Distanz – stehen immer über der Tabelle**, auch wenn
+die Erkennung erfolgreich war. Sie sind Vorbelegungen, keine Feststellungen.
+Und sie sind Pflicht: ohne gültige Distanz *und* vollständiges Datum bleibt der
+Parsen-Button gesperrt, mit einer Meldung, die sagt, welcher der beiden Werte
+fehlt.
+
+⚠ **Wird einer der beiden Werte nach dem Parsen geändert, ist die Vorschau
+ungültig.** Beide gehen in P4 ein: die Distanz in die Suche nach dem Bestand,
+das Datum in das Jahr. Die Oberfläche verwirft die Tabelle dann und schaltet
+zurück auf „Parsen" – lieber ein zweiter Durchlauf als eine Tabelle, deren
+Statusspalte nicht mehr zu den Feldern darüber passt.
 
 #### 6.5.2 P2 – Auf LSG Karlsruhe filtern
 
@@ -1074,6 +1134,17 @@ ist diese Abweichung erwartbar und kein Fehler.
 
 #### 6.5.4 P4 – Gegen `lsg_best` abgleichen
 
+**Der Bezugsrahmen ist immer ein Jahr: `lsg_best` hält Jahresbestleistungen.**
+Eine Zeile dort ist die beste Leistung *eines Athleten* auf *einer Distanz* in
+*einem Kalenderjahr* – nicht ein Wettkampfergebnis. Jeder Vergleich in P4
+findet innerhalb dieses Rahmens statt, und alles Weitere folgt daraus.
+
+„Ein Jahr" heißt **Kalenderjahr**, 1. Januar bis 31. Dezember, nicht die
+letzten 365 Tage. Das ist keine freie Wahl: der Bestand und die
+Frontend-Blöcke rechnen längst so (`YEAR(FROM_UNIXTIME(b.date))` in
+`lsg_bl_get_best_rows()`), und ein rollierendes Fenster würde die Jahres-
+Bestenliste in sich widersprüchlich machen.
+
 Für jede zugeordnete Zeile wird geprüft, ob für **denselben Athleten, dieselbe
 Distanz und dasselbe Jahr** bereits ein Eintrag existiert:
 
@@ -1085,8 +1156,36 @@ SELECT id, time, town, date
    AND YEAR(FROM_UNIXTIME(`date`)) = %d
 ```
 
-Das Jahr kommt aus dem Veranstaltungsdatum (6.5.1), nicht aus `date('Y')` –
-ein im Januar nachgetragener Dezemberlauf gehört ins Vorjahr.
+Das Jahr kommt aus dem **Veranstaltungsdatum** (6.5.1), nicht aus `date('Y')`
+und nicht aus dem Importzeitpunkt – ein im Januar nachgetragener Dezemberlauf
+gehört ins Vorjahr, ein Silvesterlauf am 31.12. in das Jahr, in dem er
+stattgefunden hat.
+
+Was aus dem Jahresbezug folgt – die vier Fälle, die in der Praxis vorkommen:
+
+| Fall | Ergebnis |
+|---|---|
+| Erste Zeit des Athleten auf dieser Distanz in diesem Jahr | neue Zeile (`neu`) |
+| Schneller als die bisherige Jahresbestzeit | dieselbe Zeile wird überschrieben (`schneller`) |
+| Langsamer | nichts passiert; die Jahresbestzeit bleibt (`langsamer`) |
+| Gleiche Distanz, **anderes Jahr** | neue Zeile – das Vorjahr wird nie angefasst |
+
+Der letzte Fall ist der wichtige: **über Jahresgrenzen hinweg wird nichts
+überschrieben.** Läuft jemand 2027 einen schnelleren Halbmarathon als 2026,
+entstehen zwei Zeilen, und die Jahres-Bestenliste 2026 bleibt so, wie sie war.
+Die Ewige Bestenliste sucht sich daraus ohnehin die beste Leistung über alle
+Jahre (`lsg_bl_dedupe_rows_by_athlete()`) – dafür braucht es keine zweite
+Datenhaltung.
+
+Umgekehrt heißt es auch: **`lsg_best` ist keine Wettkampfhistorie.** Wer im
+selben Jahr fünf Halbmarathons läuft, hinterlässt dort eine Zeile. Die anderen
+vier stehen nur im Import-Log (6.8) – so gewollt (8.1, kein Ergebnisarchiv).
+
+⚠ Deshalb hängt so viel am Datumsfeld: Ein Datum, das versehentlich im
+Nachbarjahr liegt, erzeugt keinen sichtbaren Fehler, sondern eine zweite
+Jahresbestzeit in einem Jahr, in dem der Athlet vielleicht gar nicht gelaufen
+ist. Genau darum ist das Feld Pflicht, sichtbar und mit Herkunftsangabe
+versehen (6.5.1).
 
 Verglichen wird über `lsg_bl_parse_performance()`, nicht über `strcmp` – die
 Funktion kennt bereits die Formatvarianten des Bestands und behandelt
@@ -1272,6 +1371,8 @@ CREATE TABLE lsg_import_run (
   event_id      varchar(32)  NOT NULL DEFAULT '',
   event_name    varchar(120) NOT NULL DEFAULT '',
   event_date    int(10) UNSIGNED DEFAULT NULL,         -- = lsg_best.date
+  datum_quelle  varchar(8)   NOT NULL DEFAULT '',      -- api|name|jahr|manuell
+  jahr          smallint(5) UNSIGNED NOT NULL DEFAULT 0, -- Vergleichsjahr aus 6.5.4
   contest_id    varchar(32)  NOT NULL DEFAULT '',      -- String! ("w")
   contest_name  varchar(120) NOT NULL DEFAULT '',
   list_id       varchar(64)  NOT NULL DEFAULT '',
@@ -1527,7 +1628,15 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] P1 Geschlecht aus dem AK-Code der Quelle (`M 30`, `1. M35`) → `m`/`f`
   - [ ] P1 Netto vor Brutto, `zeit_typ` mitführen
   - [ ] P1 Zeit-Normalisierung auf `HH:MM:SS`, DNF/DSQ/DNS verwerfen + zählen
-  - [ ] P1 Felder Distanz / Ort / Datum über der Tabelle, vorbelegt + änderbar
+  - [ ] P1 Felder Distanz / Datum / Ort über der Tabelle, vorbelegt + änderbar
+  - [ ] P1 Datum ermitteln: Adapter-Metadaten → Datum im Namen → Jahr → leer
+  - [ ] P1 `datum_quelle` mitführen und am Feld anzeigen
+  - [ ] P1 Unvollständiges Datum **nicht** ergänzen (kein stiller 1. Januar)
+  - [ ] P1 Timestamp mit 12:00 Uhr Ortszeit speichern (Zeitzonenfalle)
+  - [ ] P1 `<input type="date">` mit Textfeld-Fallback `TT.MM.JJJJ`
+  - [ ] P1 Plausibilität: Zukunft, > 10 Jahre zurück, Jahr ≠ Jahr im Eventnamen
+  - [ ] P1 Parsen erst freigeben, wenn Distanz **und** vollständiges Datum stehen
+  - [ ] Änderung von Datum oder Distanz verwirft die Vorschau (zurück auf „Parsen")
   - [ ] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
   - [ ] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
   - [ ] P1 Walking-Wettbewerbe: keine Distanz vorbelegen
@@ -1548,7 +1657,9 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
   - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
   - [ ] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr, gegen `lsg_ak` prüfen
-  - [ ] P4 Abgleich Athlet + Distanz + Jahr gegen `lsg_best`
+  - [ ] P4 Abgleich Athlet + Distanz + Kalenderjahr gegen `lsg_best`
+  - [ ] P4 Jahr aus dem Veranstaltungsdatum, nie aus `date('Y')`
+  - [ ] P4 Über Jahresgrenzen hinweg wird nie überschrieben
   - [ ] P4 Vergleich über `lsg_bl_parse_performance()` (Zeitläufe: größer ist besser)
   - [ ] P4 Status neu / schneller / langsamer / gleich / offen
 - [ ] Gesamtsieg (Abschnitt 6.5.5) – **nur Erkennung und Markierung**
@@ -1633,6 +1744,13 @@ Zeitmessung Barth; geplant ist keiner davon.
 - [ ] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
       Code nicht in `lsg_ak` → Warnung statt stillem Schreiben
 - [ ] P4 mit Zeitlauf (`6h`): größere Strecke gilt als „schneller"
+- [ ] Datum: `17.05.2026` im Namen wird erkannt; nur `2026` → Feld unvollständig,
+      Parsen gesperrt; gar nichts → Feld leer
+- [ ] Datum 31.12. → Import zählt ins alte Jahr, auch wenn im Januar importiert
+- [ ] Schnellere Zeit im Folgejahr → zweite Zeile, Vorjahr unverändert
+- [ ] Datum nach dem Parsen geändert → Vorschau verworfen, Button zurück auf „Parsen"
+- [ ] Gespeicherter Timestamp wird als der eingegebene Tag ausgegeben
+      (kein Vortag durch Zeitzone)
 - [ ] `38:57` gegen `01:38:57` wird korrekt verglichen (kein String-Vergleich)
 - [ ] Übernahme: `langsamer` angehakt → Bestand unverändert, Log-Eintrag da
 - [ ] Konflikterkennung: Bestand zwischen Parsen und Übernehmen von außen geändert
@@ -1705,6 +1823,11 @@ vorbereitet, damit später keine Migration nötig wird:
 
 ### 8.3 Offen
 
+- [ ] **Datumsfeld der Quellen verifizieren** (6.5.1): Wie genau liefert die
+      race-result-`config` das Veranstaltungsdatum, und wo steht es bei Runtix
+      auf `/sts/10021/{eventId}`? Beides ist im Plan als Weg beschrieben, aber
+      noch nicht am Live-Objekt geprüft – anders als die übrigen Requests in
+      Abschnitt 9.
 - [ ] **Walking-Wettbewerbe** (Runtix `"w"`, „5 KM Interstick-Walk"): gehören
       Walking-Zeiten überhaupt in die Lauf-Bestenliste? Vorschlag im Plan
       (6.5.1): keine Distanz vorbelegen, Hinweis anzeigen, Import nur mit
