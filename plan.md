@@ -381,7 +381,8 @@ die ersten beiden gehören zu diesem Plan, der Rest zu Phase 4 der README:
 |---|---|---|---|
 | Ergebnis-Import | `lsg-bestenliste` | Abschnitt 6 | jetzt |
 | Import-Log | `lsg-bestenliste-log` | Abschnitt 6.8 | jetzt |
-| Sportler | `lsg-bestenliste-athleten` | `lsg_athlete` pflegen, Aliasse (6.5.3) | Phase 4 |
+| Zuordnungen | `lsg-bestenliste-map` | Regeln aus `lsg_athlete_map` (6.5.3) | jetzt |
+| Sportler | `lsg-bestenliste-athleten` | `lsg_athlete` pflegen | Phase 4 |
 | Bestenliste | `lsg-bestenliste-best` | `lsg_best` von Hand korrigieren | Phase 4 |
 | Gesamtsiege | `lsg-bestenliste-win` | `lsg_win` pflegen, später Ziel von 6.5.5 | Phase 4 |
 
@@ -582,6 +583,18 @@ P4  Gegen lsg_best abgleichen    →  Status je Zeile: neu / schneller / langsam
 Erst nach P4 entsteht die Übernahme-Oberfläche (6.6). Bis dahin wird **nichts**
 geschrieben; das Zwischenergebnis liegt im Transient aus 6.4.
 
+An zwei Stellen braucht der Import eine Übersetzung zwischen dem, was die
+Quelle schreibt, und dem, was die Datenbank kennt:
+
+| | Von | Nach | Wo |
+|---|---|---|---|
+| **Mapping 1** | Wettbewerbsbezeichnung („21 KM …") | Distanzcode (`HM`) | 6.5.1, im Code |
+| **Mapping 2** | Teilnehmerzeile (Name + Jahrgang) | `lsg_athlete.id` | 6.5.3, Tabelle `lsg_athlete_map` |
+
+Mapping 1 steht im Code, weil die Zielcodes feststehen (8.1: keine neuen
+Distanzen). Mapping 2 gehört in die Datenbank, weil dort laufend Fälle
+dazukommen, die niemand vorhersehen kann.
+
 **Ein Vorgang betrachtet genau eine Ergebnisliste.** Keine Mehrfachauswahl,
 keine Sammelverarbeitung mehrerer Wettbewerbe eines Events. Wer den 10er und
 den Halbmarathon desselben Laufs importieren will, macht den Ablauf zweimal –
@@ -696,12 +709,90 @@ angeboten:
   **Entschieden: die Liste der Distanzen bleibt geschlossen.** Es kommen keine
   Distanzen dazu, die nicht schon in der Datenbank stehen. Der Import kann
   deshalb gar keine neue Distanz erzeugen – ein Select über die zwölf
-  bekannten Codes, kein Freitextfeld. Läuft die Heuristik ins Leere (z.B. bei
-  einem 10-Meilen-Lauf oder einer 7,5-km-Strecke), bleibt das Feld leer, der
-  Parsen-Button gesperrt, und die Meldung sagt: *„Für diesen Wettbewerb gibt
-  es keine passende Distanz in der Bestenliste."* Wer eine Distanz doch
-  aufnehmen will, erweitert `lsg_bl_distance_map()` bewusst im Code – nicht
-  versehentlich beim Importieren.
+  bekannten Codes, kein Freitextfeld.
+
+**Mapping 1 von 2: Wettbewerbsbezeichnung → Distanzcode.** Die Quellen nennen
+die Strecke, wie es der Veranstalter geschrieben hat; die Datenbank kennt nur
+die Codes aus `lsg_bl_distance_map()`. Dazwischen steht eine Übersetzungsliste
+– bewusst als Code, nicht als Datenbanktabelle, weil sich die Zielcodes nie
+ändern:
+
+```php
+/**
+ * Schreibweisen aus den Quellen → kanonischer Distanzcode.
+ * Schlüssel sind bereits normalisiert (klein, ohne Leer-/Sonderzeichen).
+ */
+function lsg_bl_distance_aliases(): array {
+    return array(
+        // Halbmarathon
+        '21'       => 'HM',
+        '21km'     => 'HM',
+        '211km'    => 'HM',      // "21,1 km"
+        '210975km' => 'HM',      // "21,0975 km"
+        'halbmarathon' => 'HM',
+        'hm'       => 'HM',
+        'halfmarathon' => 'HM',
+        // Marathon
+        '42'       => 'Marathon',
+        '42km'     => 'Marathon',
+        '42195km'  => 'Marathon',
+        'marathon' => 'Marathon',
+        // der Rest ist geradeaus
+        '5'  => '5km',   '5km'  => '5km',
+        '10' => '10km',  '10km' => '10km',
+        '15' => '15km',  '15km' => '15km',
+        '20' => '20km',  '20km' => '20km',
+        '25' => '25km',  '25km' => '25km',
+        '50' => '50km',  '50km' => '50km',
+        '100'=> '100km', '100km'=> '100km',
+        '6h' => '6h',    '6stunden'  => '6h',
+        '12h'=> '12h',   '12stunden' => '12h',
+        '24h'=> '24h',   '24stunden' => '24h',
+    );
+}
+```
+
+Die beiden wichtigen Fälle sind `21` → `HM` und `42` → `Marathon`: die Quellen
+schreiben die Kilometerzahl, die Datenbank den Namen. Ohne diese Übersetzung
+landet ein Halbmarathon nie in der Bestenliste, weil `21km` dort schlicht nicht
+existiert.
+
+Gesucht wird in dieser Reihenfolge:
+
+```
+1. Wettbewerbsname normalisieren
+   „21 KM Sparkasse Kraichgau-Lauf"  →  „21 km sparkasse kraichgau lauf"
+2. Zuerst nach einem Namens-Token suchen: halbmarathon, marathon, hm
+   → trifft „Marathon" vor „42", und verhindert, dass „Marathon-Staffel
+     über 4x10 km" wegen der 10 als 10km durchgeht
+3. Dann nach einer Zahl mit optionalem „km" am Wortanfang
+   → 21, 21km, 21,1km …
+4. Kein Treffer → Feld bleibt leer
+```
+
+⚠ Reihenfolge beachten: Name vor Zahl. Ein „Halbmarathon (21,1 km)" enthält
+beides, und `21` wäre hier zufällig richtig – aber „5. Ettlinger Marathon"
+enthält eine `5`, die nichts mit der Distanz zu tun hat. Deshalb gewinnt immer
+das Distanzwort, und die Zahl greift nur, wenn keines da ist.
+
+⚠ Auch bei einem Treffer bleibt das Feld **sichtbar und änderbar**. Die
+Zuordnung ist eine Vorbelegung, keine Entscheidung – bei einem „Silvesterlauf
+über 8,5 km" liegt sie zwangsläufig daneben.
+
+Läuft die Zuordnung ins Leere (10-Meilen-Lauf, 7,5-km-Strecke), bleibt das Feld
+leer, der Parsen-Button gesperrt, und die Meldung sagt: *„Für diesen Wettbewerb
+gibt es keine passende Distanz in der Bestenliste."* Wer eine Distanz doch
+aufnehmen will, erweitert `lsg_bl_distance_map()` bewusst im Code – nicht
+versehentlich beim Importieren.
+
+⚠ **Sonderfall Walking.** Runtix führt den Wettbewerb `"w"`
+(„5 KM Interstick-Walk") gleichberechtigt neben den Läufen. Rein technisch
+wären das 5 km, inhaltlich gehört ein Walking-Ergebnis aber nicht in eine
+Lauf-Bestenliste. Vorgeschlagenes Verhalten: enthält der Wettbewerbsname
+`walk`, `walking` oder `nordic`, wird **keine** Distanz vorbelegt und ein
+Hinweis angezeigt – importieren lässt es sich weiterhin, aber nur mit
+bewusster Auswahl (siehe 8.3).
+
 - `ort` – aus dem Eventnamen abgeleitet, frei überschreibbar
   (`lsg_best.town`, `varchar(30)` – Länge prüfen).
 - `datum` – Veranstaltungsdatum, als Unix-Timestamp in `lsg_best.date`.
@@ -759,9 +850,10 @@ erster Treffer gewinnt:
 | Stufe | Kriterium | `match_type` |
 |---|---|---|
 | 1 | `name` + `firstname` + `born` exakt (case-insensitive) | `exakt` |
-| 2 | Alias-Tabelle: hinterlegte Schreibweise + `born` | `alias` |
+| 2 | Zuordnungsregel aus `lsg_athlete_map` (s.u.) | `regel` |
 | 3 | normalisierter Name + `born` (Umlaute, Bindestriche, Groß/Klein egal) | `normalisiert` |
-| 4 | normalisierter Name + `born` ± 0, Vorname nur Anfangsbuchstabe | `unsicher` |
+| 4 | normalisierter Name + `born`, Vorname nur Anfangsbuchstabe | `unsicher` |
+| – | mehrere Regeln treffen | `mehrdeutig` |
 | – | kein Treffer | `offen` |
 
 Normalisierung wie beim Verein: `strtolower`, `ä→ae`, `ß→ss`, alles außer
@@ -778,34 +870,115 @@ Treffer der Stufe 4 (`unsicher`) werden **nicht** automatisch übernommen: ihre
 Checkbox ist standardmäßig leer und die Zeile gelb hinterlegt. Bestätigen muss
 der Mensch.
 
-**Alias-Tabelle** – hier landen die abweichenden Schreibweisen dauerhaft, damit
-dieselbe Korrektur nicht jedes Jahr neu von Hand gemacht wird:
+**Mapping 2 von 2: Zuordnungsregeln (`lsg_athlete_map`).** Hier landen die
+Fälle, die kein Namensvergleich löst – dauerhaft, damit dieselbe Korrektur
+nicht jedes Jahr neu von Hand gemacht wird.
+
+Die drei bekannten Fälle zeigen, warum eine reine Alias-Tabelle
+(„Schreibweise X gehört zu Athlet Y") nicht reicht:
+
+| Fall | Regel | Was daran besonders ist |
+|---|---|---|
+| `171` | Vorname `wolfram` **und** Nachname `pfeiffer` **und** Jg. 1961 | der Normalfall: beide Felder gesetzt |
+| `183` | Vorname `harry` **und** Jg. 1943 | **kein Nachname** – der variiert in den Listen |
+| `337` | `gudrun` als Vor- **oder** Nachname **und** Jg. 1955 | Felder sind in der Quelle vertauscht |
+
+Daraus folgt das Tabellenmodell: leeres Feld = beliebig, plus ein Modus für
+den feldunabhängigen Vergleich.
 
 ```sql
-CREATE TABLE lsg_athlete_alias (
+CREATE TABLE lsg_athlete_map (
   id           int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   tstamp       int(10) UNSIGNED NOT NULL DEFAULT 0,
-  athletes_id  int(10) UNSIGNED NOT NULL,            -- Ziel in lsg_athlete
-  name         varchar(30)  NOT NULL DEFAULT '',     -- Nachname, wie in der Quelle
-  firstname    varchar(30)  NOT NULL DEFAULT '',
-  born         year(4)      NOT NULL DEFAULT 0000,
-  name_norm    varchar(64)  NOT NULL DEFAULT '',     -- normalisiert, für den Lookup
-  source       varchar(32)  NOT NULL DEFAULT '',     -- Adapter-Key, woher gesehen
+  athletes_id  int(10) UNSIGNED NOT NULL,             -- Ziel in lsg_athlete
+  born         year(4)      NOT NULL DEFAULT 0000,    -- Pflicht, immer
+  vorname      varchar(30)  NOT NULL DEFAULT '',      -- normalisiert; '' = beliebig
+  nachname     varchar(30)  NOT NULL DEFAULT '',      -- normalisiert; '' = beliebig
+  modus        varchar(8)   NOT NULL DEFAULT 'feld',  -- 'feld' | 'egal'
+  aktiv        tinyint(1)   NOT NULL DEFAULT 1,
+  notiz        varchar(255) NOT NULL DEFAULT '',      -- warum es diese Regel gibt
   user_id      bigint(20) UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY  (id),
-  KEY lookup (name_norm, born),
+  KEY lookup (born, aktiv),
   KEY athlete (athletes_id)
 ) ;
 ```
 
-`name_norm` ist redundant, aber gewollt: der Lookup läuft über einen Index
-statt über eine Funktion auf jeder Zeile.
+Bedeutung der Felder – knapp, weil daran alles hängt:
+
+- **`born` ist immer Pflicht.** Keine Regel ohne Jahrgang, auch keine mit
+  vollem Namen. Das ist dieselbe Regel wie in den übrigen Zuordnungsstufen und
+  der Grund, warum die breite Regel `harry` überhaupt vertretbar ist.
+- **`vorname` / `nachname` beschreiben die Quelle, nicht `lsg_athlete`.** Was in
+  der Ergebnisliste steht, wird zugeordnet; wie der Athlet in der Datenbank
+  heißt, ist Sache von `athletes_id`.
+- **Beide Felder sind normalisiert gespeichert** (klein, `ä→ae`, ohne
+  Sonderzeichen) – der Vergleich läuft nie über Rohstrings.
+- **`modus = 'feld'`**: Vorname gegen Vornamensfeld, Nachname gegen
+  Nachnamensfeld. **`modus = 'egal'`**: jedes gesetzte Token muss in *einem* der
+  beiden Felder vorkommen, egal in welchem. Das deckt vertauschte Spalten und
+  den Fall ab, dass der Splitter aus 6.5.1 danebengegriffen hat.
+- **`aktiv`** statt Löschen: eine Regel, die sich als falsch erweist, wird
+  abgeschaltet und bleibt im Log nachvollziehbar.
+
+Die drei bekannten Regeln als Startdatensatz:
+
+```sql
+INSERT INTO lsg_athlete_map (tstamp, athletes_id, born, vorname, nachname, modus, notiz) VALUES
+  (UNIX_TIMESTAMP(), 171, 1961, 'wolfram', 'pfeiffer', 'feld',
+   'Schreibweise des Nachnamens weicht in den Listen ab'),
+  (UNIX_TIMESTAMP(), 183, 1943, 'harry',   '',         'feld',
+   'Nachname variiert; Vorname + Jahrgang sind im Verein eindeutig'),
+  (UNIX_TIMESTAMP(), 337, 1955, 'gudrun',  '',         'egal',
+   'Vor- und Nachname in der Quelle vertauscht');
+```
+
+Regel `337` braucht `nachname` nicht: im Modus `egal` genügt das eine Token
+`gudrun`, und es darf in beiden Feldern stehen.
+
+Der Lookup in Stufe 2, als Pseudocode:
+
+```
+kandidaten = SELECT * FROM lsg_athlete_map WHERE born = <jahrgang> AND aktiv = 1
+
+treffer = kandidaten filtern auf:
+    modus = 'feld':
+        (vorname  = ''  ODER vorname  = <quelle.vorname_norm>)
+    UND (nachname = ''  ODER nachname = <quelle.nachname_norm>)
+    modus = 'egal':
+        jedes nicht-leere Token ∈ { quelle.vorname_norm, quelle.nachname_norm }
+
+genau 1 Treffer  →  athletes_id übernehmen, match_type = 'regel'
+mehrere Treffer  →  match_type = 'mehrdeutig', Zeile bleibt offen
+kein Treffer     →  weiter mit Stufe 3
+```
+
+⚠ **Zwei Regeln, die dieselbe Zeile treffen, sind ein Fehler, keine
+Auswahlfrage.** Die Zeile bleibt `offen`, die Meldung nennt beide Regel-IDs.
+Sonst entscheidet die Sortierreihenfolge der Datenbank darüber, wem ein
+Ergebnis gutgeschrieben wird – und das fällt niemandem auf.
+
+⚠ Regeln greifen erst **nach** dem exakten Treffer (Stufe 1) und **nach** P2.
+Beides begrenzt den Schaden einer breiten Regel wie `harry` + 1943 erheblich:
+verglichen wird nur gegen die Handvoll LSG-Zeilen einer Liste, und wo der Name
+ohnehin exakt passt, kommt die Regel gar nicht zum Zug.
+
+⚠ Eine Regel ohne Vor- **und** Nachname (nur Jahrgang) wird beim Anlegen
+abgelehnt. Sie würde jeden LSG-Läufer dieses Jahrgangs auf einen Athleten
+ziehen.
+
+Gepflegt werden die Regeln im Untermenü **„Zuordnungen"** (6.2) und direkt aus
+der Übernahme-Tabelle heraus: jede `offen`-Zeile bietet neben der Zuordnung
+eine Checkbox *„als Regel merken"*, die aus den Werten der Zeile eine
+`modus = 'feld'`-Regel mit Vorname, Nachname und Jahrgang erzeugt. Die
+Sonderformen (`egal`, leeres Feld) entstehen durch Nachbearbeiten im Untermenü –
+sie sind selten genug, dass sich dafür keine eigene Bedienlogik lohnt.
 
 In der Oberfläche bekommt jede `offen`- oder `unsicher`-Zeile eine Auswahl:
 
 - **Athlet zuordnen** – Select über `lsg_athlete` (vorgefiltert auf `active=1`,
   Vorschläge nach Namensähnlichkeit oben), plus Checkbox *„Schreibweise merken"*
-  → schreibt einen Alias-Eintrag.
+  → schreibt eine Regel in `lsg_athlete_map`.
 - **Neu anlegen** – legt einen Datensatz in `lsg_athlete` an
   (`name`, `firstname`, `born`, `cat`, `active=1`).
 - **Überspringen** – Zeile fliegt raus, wird aber im Log vermerkt.
@@ -1063,7 +1236,7 @@ CREATE TABLE lsg_import_log (
   tstamp        int(10) UNSIGNED NOT NULL DEFAULT 0,
   athletes_id   int(10) UNSIGNED NOT NULL DEFAULT 0,   -- 0 = nicht zugeordnet
   best_id       int(10) UNSIGNED NOT NULL DEFAULT 0,   -- betroffene Zeile in lsg_best
-  match_type    varchar(16) NOT NULL DEFAULT '',       -- exakt|alias|normalisiert|unsicher|manuell|neu|offen
+  match_type    varchar(16) NOT NULL DEFAULT '',       -- exakt|regel|normalisiert|unsicher|mehrdeutig|manuell|neu|offen
   aktion        varchar(20) NOT NULL DEFAULT '',       -- s.u.
   distance      varchar(15) NOT NULL DEFAULT '',
   ak            varchar(10) NOT NULL DEFAULT '',
@@ -1098,7 +1271,7 @@ skip_gleich        identische Leistung, nichts zu tun
 skip_abgewaehlt    Checkbox war leer
 skip_offen         kein Athlet zugeordnet
 athlet_neu         Athlet in lsg_athlete angelegt
-alias_neu          Schreibweise in lsg_athlete_alias gemerkt
+regel_neu          Zuordnungsregel in lsg_athlete_map gemerkt
 konflikt           Status hatte sich seit dem Parsen geändert
 fehler             DB-Fehler, Details in meldung
 win_insert         Gesamtsieg nach lsg_win geschrieben  ← reserviert (6.5.5)
@@ -1111,7 +1284,7 @@ Nerven.
 
 Warum die Rohfelder mitgespeichert werden, obwohl sie redundant wirken: das Log
 soll auch dann noch verständlich sein, wenn die Quelle offline ist, der Athlet
-umbenannt oder ein Aliasname korrigiert wurde. Ein Log, das nur IDs enthält,
+umbenannt oder eine Zuordnungsregel korrigiert wurde. Ein Log, das nur IDs enthält,
 ist genau dann wertlos, wenn man es braucht.
 
 **Entschieden: kein zusätzliches Ergebnisarchiv.** `lsg_import_run` und
@@ -1256,7 +1429,7 @@ Zeitmessung Barth; geplant ist keiner davon.
 ## 7. Umsetzungsschritte
 
 - [ ] Plugin-Grundgerüst (Header, Autoloader, Activation/Deactivation-Hooks)
-- [ ] Datenmodell: Zusatztabellen `lsg_athlete_alias`, `lsg_import_run`,
+- [ ] Datenmodell: Zusatztabellen `lsg_athlete_map`, `lsg_import_run`,
       `lsg_import_log` per `dbDelta()` in `lsg_bl_activate()`
 - [ ] `ErgebnisQuelle`-Interface + `Ergebnis`-Value-Object
 - [ ] `RaceResultAdapter`
@@ -1292,14 +1465,20 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] P1 Netto vor Brutto, `zeit_typ` mitführen
   - [ ] P1 Zeit-Normalisierung auf `HH:MM:SS`, DNF/DSQ/DNS verwerfen + zählen
   - [ ] P1 Felder Distanz / Ort / Datum über der Tabelle, vorbelegt + änderbar
-  - [ ] P1 Distanz-Heuristik Wettbewerbsname → Code aus `lsg_bl_distance_map()`
+  - [ ] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
+  - [ ] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
+  - [ ] P1 Walking-Wettbewerbe: keine Distanz vorbelegen
   - [ ] P1 Distanz-Select geschlossen: kein Freitext, keine neuen Distanzen
   - [ ] P1 `platz` mitlesen (nur für 6.5.5)
   - [ ] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
   - [ ] P2 Block „nicht übernommene Vereine" + Vereins-Alias-Option
   - [ ] P3 Zuordnungsstufen exakt → alias → normalisiert → unsicher → offen
-  - [ ] P3 Tabelle `lsg_athlete_alias` (+ `name_norm`-Index)
-  - [ ] P3 Zeilenaktionen: zuordnen / neu anlegen / überspringen, Alias merken
+  - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 337)
+  - [ ] P3 Regel-Lookup: Modus `feld`/`egal`, leeres Feld = beliebig
+  - [ ] P3 Mehrfachtreffer → `mehrdeutig`, Zeile bleibt offen
+  - [ ] P3 Regel ohne Vor- und Nachname beim Anlegen ablehnen
+  - [ ] P3 Zeilenaktionen: zuordnen / neu anlegen / überspringen, Regel merken
+  - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
   - [ ] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr, gegen `lsg_ak` prüfen
   - [ ] P4 Abgleich Athlet + Distanz + Jahr gegen `lsg_best`
   - [ ] P4 Vergleich über `lsg_bl_parse_performance()` (Zeitläufe: größer ist besser)
@@ -1365,6 +1544,14 @@ Zeitmessung Barth; geplant ist keiner davon.
       `LG Region Karlsruhe` und ein leeres Vereinsfeld treffen **nicht**
 - [ ] Athletenzuordnung: `Koerner` findet `Körner`, gleicher Name mit anderem
       Jahrgang findet **nicht**
+- [ ] Distanz-Mapping: `21 KM Sparkasse Kraichgau-Lauf` → `HM`,
+      `42,195 km` → `Marathon`, `5. Ettlinger Marathon` → `Marathon` (nicht `5km`),
+      `10 Meilen` → kein Treffer
+- [ ] Regel 171: `Pfeiffer, Wolfram` + 1961 → 171; anderer Jahrgang → kein Treffer
+- [ ] Regel 183: beliebiger Nachname + `Harry` + 1943 → 183
+- [ ] Regel 337: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 337
+- [ ] Zwei passende Regeln → `mehrdeutig`, Zeile bleibt offen, beide IDs genannt
+- [ ] Regel nur mit Jahrgang lässt sich nicht anlegen
 - [ ] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
       Code nicht in `lsg_ak` → Warnung statt stillem Schreiben
 - [ ] P4 mit Zeitlauf (`6h`): größere Strecke gilt als „schneller"
@@ -1440,8 +1627,10 @@ vorbereitet, damit später keine Migration nötig wird:
 
 ### 8.3 Offen
 
-Aktuell keine offenen Punkte. Was hier neu auftaucht, gehört auch wirklich
-entschieden, bevor es in Abschnitt 7 wandert.
+- [ ] **Walking-Wettbewerbe** (Runtix `"w"`, „5 KM Interstick-Walk"): gehören
+      Walking-Zeiten überhaupt in die Lauf-Bestenliste? Vorschlag im Plan
+      (6.5.1): keine Distanz vorbelegen, Hinweis anzeigen, Import nur mit
+      bewusster Auswahl. Bitte bestätigen oder ganz sperren.
 
 ---
 
