@@ -606,7 +606,7 @@ nicht mehr, und aus drei einfachen Feldern würde eine Matrix. Ein Vorgang, eine
 Liste, eine Distanz – dann bleibt auch das Log eindeutig lesbar.
 
 Die Stufenzahlen der Oberfläche zeigen den Trichter:
-`428 gelesen → 9 LSG → 8 zugeordnet, 1 offen → 5 neu, 2 schneller, 1 langsamer`.
+`428 gelesen → 9 LSG → 8 zugeordnet, 1 ohne Zuordnung → 5 neu, 2 schneller, 1 langsamer, 1 offen`.
 Das ist die wichtigste Kontrollanzeige der ganzen Seite: springt „LSG" auf 0,
 stimmt der Vereinsfilter nicht, und man sieht es sofort.
 
@@ -852,9 +852,13 @@ erster Treffer gewinnt:
 | 1 | `name` + `firstname` + `born` exakt (case-insensitive) | `exakt` |
 | 2 | Zuordnungsregel aus `lsg_athlete_map` (s.u.) | `regel` |
 | 3 | normalisierter Name + `born` (Umlaute, Bindestriche, Groß/Klein egal) | `normalisiert` |
-| 4 | normalisierter Name + `born`, Vorname nur Anfangsbuchstabe | `unsicher` |
-| – | mehrere Regeln treffen | `mehrdeutig` |
-| – | kein Treffer | `offen` |
+| – | mehrere Regeln treffen | `mehrdeutig` → nicht importieren |
+| – | kein Treffer | `offen` → nicht importieren |
+
+Eine vierte Stufe „ähnlicher Name, wahrscheinlich dieselbe Person" gibt es
+bewusst **nicht**. Entweder die Zuordnung ist eindeutig – über den Namen, eine
+Regel oder die Normalisierung – oder die Zeile wird nicht importiert. Ein
+„wahrscheinlich" hätte niemand bestätigt, ohne es doch von Hand zu prüfen.
 
 Normalisierung wie beim Verein: `strtolower`, `ä→ae`, `ß→ss`, alles außer
 `a-z0-9` zu Leerzeichen. Damit fallen `Körner`/`Koerner`,
@@ -865,10 +869,6 @@ und gleichem Jahrgang im Verein sind unwahrscheinlich; ein Namensabgleich ohne
 Jahrgang würde dagegen früher oder später Ergebnisse dem Falschen zuschreiben.
 Liefert die Quelle keinen Jahrgang, bleibt die Zeile `offen` – auch wenn der
 Name eindeutig aussieht.
-
-Treffer der Stufe 4 (`unsicher`) werden **nicht** automatisch übernommen: ihre
-Checkbox ist standardmäßig leer und die Zeile gelb hinterlegt. Bestätigen muss
-der Mensch.
 
 **Mapping 2 von 2: Zuordnungsregeln (`lsg_athlete_map`).** Hier landen die
 Fälle, die kein Namensvergleich löst – dauerhaft, damit dieselbe Korrektur
@@ -974,19 +974,77 @@ eine Checkbox *„als Regel merken"*, die aus den Werten der Zeile eine
 Sonderformen (`egal`, leeres Feld) entstehen durch Nachbearbeiten im Untermenü –
 sie sind selten genug, dass sich dafür keine eigene Bedienlogik lohnt.
 
-In der Oberfläche bekommt jede `offen`- oder `unsicher`-Zeile eine Auswahl:
+**Eine nicht zuordenbare Zeile wird nicht importiert – aber angezeigt.** Beides
+gehört zusammen: Es entsteht kein Datensatz, den später niemand erklären kann,
+und trotzdem sieht der Mensch, dass da jemand war.
 
-- **Athlet zuordnen** – Select über `lsg_athlete` (vorgefiltert auf `active=1`,
-  Vorschläge nach Namensähnlichkeit oben), plus Checkbox *„Schreibweise merken"*
-  → schreibt eine Regel in `lsg_athlete_map`.
-- **Neu anlegen** – legt einen Datensatz in `lsg_athlete` an
-  (`name`, `firstname`, `born`, `cat`, `active=1`).
-- **Überspringen** – Zeile fliegt raus, wird aber im Log vermerkt.
+Der Import legt **niemals** einen Athleten an. `lsg_athlete` wird an anderer
+Stelle gepflegt (Phase 4), und die Zuordnungsregeln im Untermenü
+„Zuordnungen". Ein Tippfehler in einer Ergebnisliste kann so keinen
+Doppel-Athleten erzeugen, und ein Import bleibt das, was er ist: das Übernehmen
+von Zeiten für bekannte Personen.
 
-⚠ „Neu anlegen" ist der gefährlichste Knopf der Seite: ein Tippfehler in der
-Quelle erzeugt sonst dauerhaft einen Doppel-Athleten. Deshalb steht darüber
-immer die Liste der ähnlichsten vorhandenen Athleten, und die Aktion ist nie
-vorausgewählt.
+Die Zeile steht **mitten unter den anderen**, nicht in einem abgetrennten
+Block: gleiche Tabelle, gleiche Reihenfolge, nur ohne Checkbox und ohne
+Auswahl. Wer die Liste von oben nach unten durchgeht, kann sie nicht übersehen.
+
+Der Grund steht im Klartext in der Statusspalte – nicht nur die Feststellung:
+
+| Grund | Meldung in der Tabelle |
+|---|---|
+| Name unbekannt | „Keine Zuordnung möglich – kein Athlet mit diesem Namen und Jahrgang" |
+| Jahrgang fehlt in der Quelle | „Keine Zuordnung möglich – die Ergebnisliste nennt keinen Jahrgang" |
+| Mehrere Regeln passen | „Keine Zuordnung möglich – Regeln #12 und #17 treffen beide zu" |
+
+„Keine Zuordnung möglich" ohne Begründung wäre eine Sackgasse; mit Begründung
+weiß der Mensch sofort, ob ein Athlet fehlt, eine Regel gebraucht wird oder die
+Quelle unvollständig ist.
+
+Ausgegeben wird die Zeile mit **allem, was die Quelle geliefert hat** – Platz,
+Startnummer, roher Teilnehmerstring, Vor- und Nachname wie gesplittet,
+Jahrgang, Verein, Zeit. Bei einer nicht zuordenbaren Person ist genau das die
+einzige Information, die überhaupt noch da ist:
+
+```
+[ – ]  Weber, Klaus            1969   —     00:44:12   —
+       roh: „WEBER Klaus" · Stn 218 · Platz 34 · LSG Karlsruhe
+       ⚠ Keine Zuordnung möglich – kein Athlet mit diesem Namen und Jahrgang
+       ähnlich in lsg_athlete: Weber, Claus (1969) · Weber, Klaus (1972)
+```
+
+Die Liste **ähnlicher Athleten** darunter ist reine Lesehilfe, kein
+Auswahlfeld. Sie beantwortet die häufigste Frage von selbst – „gibt es den
+schon, nur anders geschrieben?" – und macht im Beispiel sichtbar, dass
+`Weber, Claus (1969)` und `Weber, Klaus (1972)` beide *nicht* passen, das eine
+im Namen, das andere im Jahrgang.
+
+Über der Tabelle steht die Zahl zusätzlich als eigene Meldung, damit sie bei
+40 Zeilen nicht untergeht: *„2 Teilnehmer ohne Zuordnung – nicht importiert"*,
+mit Link auf den Filter „nur ohne Zuordnung".
+
+**Der Weg aus so einer Zeile heraus** führt bewusst über zwei Schritte, nicht
+über einen Knopf in der Import-Tabelle:
+
+```
+1. Ursache beheben
+   Athlet fehlt      →  Untermenü „Sportler" (Phase 4) bzw. direkt in lsg_athlete
+   Schreibweise      →  Untermenü „Zuordnungen": Regel in lsg_athlete_map
+   Regeln kollidieren→  Untermenü „Zuordnungen": eine der beiden abschalten
+2. Import erneut ausführen
+   Dieselbe URL, derselbe Wettbewerb. Bereits übernommene Zeiten stehen
+   danach auf „gleich" und ändern nichts – nur die reparierte Zeile kommt neu
+   dazu (P4, Idempotenz).
+```
+
+Das kostet einen zweiten Durchlauf, hält aber die Import-Seite frei von
+Stammdatenpflege – und der zweite Durchlauf ist billig, weil er nichts
+doppelt schreibt.
+
+⚠ **Auch eine unzugeordnete Zeile landet im Log** (`aktion = skip_offen`,
+`athletes_id = 0`, Rohfelder gefüllt). Damit ist Monate später noch
+nachvollziehbar, dass diese Person am Lauf teilgenommen hat und warum sie nicht
+in der Bestenliste steht. Ohne diesen Eintrag wäre der Fall nach dem Schließen
+der Seite verloren.
 
 **Altersklasse.** `lsg_best.ak` erwartet Codes wie `m45`, `whk`
 (Geschlechts-Präfix + Alterszahl bzw. `hk` für die Hauptklasse). Die
@@ -1043,7 +1101,8 @@ Daraus ergibt sich der Status je Zeile:
 | `schneller` | neue Leistung besser als der Bestand | „Neue Zeit ist schneller (01:38:12 → 01:36:44)" | ✓ |
 | `langsamer` | neue Leistung schlechter | „Neue Zeit ist langsamer (01:36:44 bleibt)" | ✗ |
 | `gleich` | identische Leistung | „Zeit bereits vorhanden" | ✗ |
-| `offen` | kein Athlet zugeordnet (aus P3) | „Athlet nicht zugeordnet" | ✗ |
+| `offen` | kein Athlet zugeordnet (aus P3) | „Keine Zuordnung möglich – wird nicht importiert" | keine Checkbox |
+| `mehrdeutig` | mehrere Regeln treffen (aus P3) | „Keine Zuordnung möglich – Regeln #… treffen beide zu" | keine Checkbox |
 
 `gleich` ist der Wiederholungsfall: derselbe Import ein zweites Mal ausgeführt
 zeigt lauter `gleich` und schreibt bei „Übernehmen" nichts. Das ist die
@@ -1121,18 +1180,18 @@ Ergebnis von P1–P4 ist eine Tabelle
 [ ✓ ]  Körner, Holger      1993  m30   01:11:55   –           Noch keine Zeit vorhanden  🏆
 [ ✓ ]  Häffner, Anna       1988  w35   01:36:44   01:38:12    Neue Zeit ist schneller
 [   ]  Schmidt, Peter      1975  m50   01:52:03   01:47:30    Neue Zeit ist langsamer
-[   ]  Weber, Klaus        1969  m55   00:44:12   –           Athlet nicht zugeordnet  [zuordnen ▾]
+[ – ]  Weber, Klaus        1969  –     00:44:12   –           Keine Zuordnung möglich – wird nicht importiert
 ```
 
-- **Checkbox je Zeile.** Vorausgewählt sind `neu` und `schneller`; `langsamer`,
-  `gleich`, `offen` und `unsicher` sind leer. Die Vorauswahl ist eine
+- **Checkbox je Zeile** – außer bei `offen`/`mehrdeutig`: dort steht keine,
+  weil es kein Ziel zum Schreiben gibt. Vorausgewählt sind `neu` und
+  `schneller`; `langsamer` und `gleich` sind leer. Die Vorauswahl ist eine
   Bequemlichkeit, keine Sperre – jede Zeile bleibt frei wählbar. Auch eine
   `langsamer`-Zeile darf angehakt werden; sie wird dann bewusst als
   „geprüft, nicht übernommen" protokolliert.
 - **Checkbox „Alle"** im Tabellenkopf, wie in WordPress üblich
-  (`#cb-select-all-1`): schaltet alle *auswählbaren* Zeilen um. Zeilen im
-  Status `offen` bleiben ausgenommen – sie haben kein Ziel, ein Häkchen dort
-  wäre eine Lüge. Ohne JavaScript ist die Kopf-Checkbox schlicht nicht da;
+  (`#cb-select-all-1`): schaltet alle Zeilen um, die überhaupt eine Checkbox
+  haben. `offen` und `mehrdeutig` sind damit automatisch außen vor. Ohne JavaScript ist die Kopf-Checkbox schlicht nicht da;
   die Einzel-Checkboxen funktionieren als normale Formularfelder weiter.
 - **Statusspalte** in Klartext, mit alter und neuer Zeit im Vergleich. Nicht
   nur ein Icon: was gleich passiert, muss lesbar dastehen.
@@ -1140,6 +1199,10 @@ Ergebnis von P1–P4 ist eine Tabelle
   (6.5.5) – vorerst nur als Hinweis, ohne Wirkung auf die Übernahme.
 - **Filter/Sortierung** über der Tabelle nach Status, damit man bei 40 Zeilen
   die drei `offen`-Fälle findet.
+- **Nicht zugeordnete Teilnehmer stehen mit in der Tabelle** (6.5.3) – ohne
+  Checkbox, mit Grund im Klartext und den Rohdaten der Quelle. Sie werden nicht
+  importiert, aber auch nie weggelassen: die Zeilenzahl der Tabelle entspricht
+  immer der LSG-Zahl aus dem Trichter.
 - **Button „Übernehmen"** unter der Tabelle, mit der Anzahl der ausgewählten
   Zeilen im Label: *„3 Ergebnisse übernehmen"*. Bei 0 ausgewählten Zeilen
   deaktiviert.
@@ -1165,7 +1228,8 @@ Status langsamer   →  nichts schreiben. Der Bestand bleibt.
 
 Status gleich      →  nichts schreiben, protokolliert als 'skip_gleich'.
 
-Status offen       →  kann nicht angehakt werden, wird übersprungen.
+Status offen       →  hat keine Checkbox, wird nie geschrieben.
+Status mehrdeutig  →  desgleichen.
 ```
 
 Nicht angehakte Zeilen erzeugen `skip_abgewaehlt` im Log – auch das ist eine
@@ -1236,7 +1300,7 @@ CREATE TABLE lsg_import_log (
   tstamp        int(10) UNSIGNED NOT NULL DEFAULT 0,
   athletes_id   int(10) UNSIGNED NOT NULL DEFAULT 0,   -- 0 = nicht zugeordnet
   best_id       int(10) UNSIGNED NOT NULL DEFAULT 0,   -- betroffene Zeile in lsg_best
-  match_type    varchar(16) NOT NULL DEFAULT '',       -- exakt|regel|normalisiert|unsicher|mehrdeutig|manuell|neu|offen
+  match_type    varchar(16) NOT NULL DEFAULT '',       -- exakt|regel|normalisiert|mehrdeutig|offen
   aktion        varchar(20) NOT NULL DEFAULT '',       -- s.u.
   distance      varchar(15) NOT NULL DEFAULT '',
   ak            varchar(10) NOT NULL DEFAULT '',
@@ -1270,8 +1334,6 @@ skip_langsamer     angehakt, aber Bestand war besser
 skip_gleich        identische Leistung, nichts zu tun
 skip_abgewaehlt    Checkbox war leer
 skip_offen         kein Athlet zugeordnet
-athlet_neu         Athlet in lsg_athlete angelegt
-regel_neu          Zuordnungsregel in lsg_athlete_map gemerkt
 konflikt           Status hatte sich seit dem Parsen geändert
 fehler             DB-Fehler, Details in meldung
 win_insert         Gesamtsieg nach lsg_win geschrieben  ← reserviert (6.5.5)
@@ -1355,13 +1417,15 @@ SSRF-Proxy für nicht angemeldete Besucher.
 | `/import/wettbewerbe` | GET | `adapter`, `eventId` | `{ contests:[{id,name}] }` |
 | `/import/listen` | GET | `adapter`, `eventId`, `contestId` | `{ lists:[{id,name,live}] }` |
 | `/import/parsen` | POST | `adapter`, `eventId`, `contestId`, `listId?`, `distanz`, `ort`, `datum` | `{ token, meta, trichter, zeilen[], warnungen[] }` |
-| `/import/zuordnen` | POST | `token`, `zeile`, `athletes_id\|neu\|skip`, `alias?` | `{ zeile }` neu bewertet (P3+P4) |
 | `/import/uebernehmen` | POST | `token`, `zeilen[]` (angehakte) | `{ run_id, angelegt, aktualisiert, uebersprungen, konflikte, ergebnisse[] }` |
 
 `trichter` ist das Zählwerk aus 6.5: `{ gelesen, lsg, zugeordnet, neu,
-schneller, langsamer, gleich, offen }`. `/import/zuordnen` bewertet nur die
-eine geänderte Zeile neu – die Oberfläche muss dafür nicht den ganzen Import
-wiederholen.
+schneller, langsamer, gleich, offen }`.
+
+Eine Route zum Zuordnen einzelner Zeilen gibt es nicht: der Import legt keine
+Athleten an und schreibt keine Regeln (6.5.3). Wer eine offene Zeile auflösen
+will, pflegt Athlet oder Regel im jeweiligen Untermenü und führt den Import
+erneut aus.
 
 Die Formular-Handler an `admin-post.php` rufen dieselben Funktionen auf – die
 REST-Schicht ist nur ein zweiter Eingang, keine zweite Implementierung.
@@ -1390,7 +1454,6 @@ erkannt         Adapter steht, Wettbewerbe laden → Spinner am Select
 bereit          Wettbewerb gewählt               → Parsen-Button aktiv
 parse           Request läuft                    → Button disabled + .spinner.is-active
 vorschau        P1–P4 durch                      → Trichter + Checkbox-Tabelle
-zuordnung       offene Athleten in der Tabelle    → Zeile gelb, Select „zuordnen"
 uebernahme      Schreibvorgang läuft             → Button disabled + .spinner.is-active
 gespeichert     Übernahme fertig                 → Bilanz + Link ins Log
 teilfehler      einzelne Zeilen mit Konflikt     → Bilanz + markierte Zeilen
@@ -1472,12 +1535,17 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] P1 `platz` mitlesen (nur für 6.5.5)
   - [ ] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
   - [ ] P2 Block „nicht übernommene Vereine" + Vereins-Alias-Option
-  - [ ] P3 Zuordnungsstufen exakt → alias → normalisiert → unsicher → offen
+  - [ ] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
   - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 337)
   - [ ] P3 Regel-Lookup: Modus `feld`/`egal`, leeres Feld = beliebig
   - [ ] P3 Mehrfachtreffer → `mehrdeutig`, Zeile bleibt offen
   - [ ] P3 Regel ohne Vor- und Nachname beim Anlegen ablehnen
-  - [ ] P3 Zeilenaktionen: zuordnen / neu anlegen / überspringen, Regel merken
+  - [ ] P3 Nicht zugeordnete Teilnehmer anzeigen, aber **nicht** importieren
+  - [ ] P3 Keine Checkbox an `offen`/`mehrdeutig`-Zeilen
+  - [ ] P3 Grund im Klartext (drei Fälle), Rohdaten der Quelle an der Zeile
+  - [ ] P3 Vorschlagsliste ähnlicher Athleten mit Jahrgang (nur Lesehilfe)
+  - [ ] P3 Meldung über der Tabelle: „N Teilnehmer ohne Zuordnung"
+  - [ ] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
   - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
   - [ ] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr, gegen `lsg_ak` prüfen
   - [ ] P4 Abgleich Athlet + Distanz + Jahr gegen `lsg_best`
@@ -1552,6 +1620,16 @@ Zeitmessung Barth; geplant ist keiner davon.
 - [ ] Regel 337: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 337
 - [ ] Zwei passende Regeln → `mehrdeutig`, Zeile bleibt offen, beide IDs genannt
 - [ ] Regel nur mit Jahrgang lässt sich nicht anlegen
+- [ ] Invariante: Zeilenzahl der Tabelle == LSG-Zahl aus P2, bei jedem Import
+- [ ] Unbekannter Teilnehmer erscheint in der Tabelle, nicht nur in den Zahlen
+- [ ] Unbekannter Teilnehmer hat keine Checkbox und wird auch von „Alle" nicht
+      angehakt; nach dem Übernehmen steht kein neuer `lsg_athlete`-Datensatz da
+- [ ] Nach dem Anlegen einer Regel und erneutem Import: die vorher offene Zeile
+      ist zugeordnet, die übrigen stehen auf `gleich`
+- [ ] Jeder `offen`-Grund erzeugt seinen eigenen Meldungstext (drei Fälle)
+- [ ] Zeile ohne Jahrgang in der Quelle → „nennt keinen Jahrgang", nicht
+      „kein Athlet gefunden"
+- [ ] `skip_offen` steht mit Rohdaten im Log, auch wenn nichts geschrieben wurde
 - [ ] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
       Code nicht in `lsg_ak` → Warnung statt stillem Schreiben
 - [ ] P4 mit Zeitlauf (`6h`): größere Strecke gilt als „schneller"
