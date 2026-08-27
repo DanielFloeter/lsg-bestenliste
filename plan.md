@@ -786,13 +786,29 @@ gibt es keine passende Distanz in der Bestenliste."* Wer eine Distanz doch
 aufnehmen will, erweitert `lsg_bl_distance_map()` bewusst im Code – nicht
 versehentlich beim Importieren.
 
-⚠ **Sonderfall Walking.** Runtix führt den Wettbewerb `"w"`
-(„5 KM Interstick-Walk") gleichberechtigt neben den Läufen. Rein technisch
-wären das 5 km, inhaltlich gehört ein Walking-Ergebnis aber nicht in eine
-Lauf-Bestenliste. Vorgeschlagenes Verhalten: enthält der Wettbewerbsname
-`walk`, `walking` oder `nordic`, wird **keine** Distanz vorbelegt und ein
-Hinweis angezeigt – importieren lässt es sich weiterhin, aber nur mit
-bewusster Auswahl (siehe 8.3).
+**Wettbewerbsauswahl und Distanz sind zwei getrennte Entscheidungen.** Das ist
+die Arbeitsteilung zwischen Schritt 2 und Schritt 3:
+
+```
+contests (Schritt 2)   →  WELCHE Ergebnisliste geparst wird
+Distanz-Control        →  UNTER WELCHER Distanz sie in lsg_best landet
+```
+
+Der Wettbewerb bestimmt also nur die Datenquelle. Ob und unter welchem Code die
+Zeiten gespeichert werden, entscheidet allein das Distanz-Dropdown – vorbelegt,
+wenn die Zuordnung eindeutig ist, sonst leer und von Hand zu wählen.
+
+Deshalb braucht es für einzelne Wettbewerbsarten keine Sonderregeln. Ein
+Walking-Wettbewerb („5 KM Interstick-Walk" bei Runtix, „Walking 21,1km" bei
+race result), eine Staffel oder ein Bambinilauf sind aus Sicht des Imports
+nichts Besonderes: Sie erscheinen in der Wettbewerbsauswahl wie jeder andere
+Eintrag, und wer sie parst, sieht die vorgeschlagene Distanz und entscheidet.
+
+⚠ Das heißt aber auch: Die Vorbelegung liest nur die Streckenangabe im Namen.
+„Walking 21,1km" bekommt `HM` vorgeschlagen, weil `21,1km` darin steht. Wer
+einen solchen Wettbewerb nicht in der Lauf-Bestenliste haben will, ändert das
+Feld oder bricht ab – das Dropdown steht sichtbar über der Tabelle, damit genau
+diese Entscheidung nicht übersprungen wird.
 
 **Der Ort** kommt aus dem Eventnamen und ist frei überschreibbar
 (`lsg_best.town`, `varchar(30)` – bei langen Namen kürzen, nicht abschneiden
@@ -810,9 +826,8 @@ Ermittelt wird es in dieser Reihenfolge:
 
 ```
 1. Adapter-Metadaten
+   Runtix       Veranstaltungsübersicht bzw. Ausschreibung – Details unten
    race result  Datumsfeld aus der config-Antwort
-   Runtix       Veranstaltungsseite /sts/10021/{eventId}
-   → genaues Feld bzw. Auszeichnung am Live-Objekt verifizieren (Abschnitt 8.3)
 
 2. Datum im Event- oder Wettbewerbsnamen
    „…, 17.05.2026" · „2026-05-17" · „17. Mai 2026"
@@ -823,11 +838,162 @@ Ermittelt wird es in dieser Reihenfolge:
 4. Nichts gefunden  →  Feld bleibt leer
 ```
 
-Woher der Wert stammt, wird mitgeführt (`datum_quelle`: `api` | `name` | `jahr`
-| `manuell`) und am Feld angezeigt – *„aus der Quelle übernommen"*, *„aus dem
-Namen gelesen"*, *„nur das Jahr erkannt – bitte Tag und Monat ergänzen"*, *„von
-Hand eingetragen"*. Im Log steht es ebenfalls (`lsg_import_run`), damit später
-nachvollziehbar ist, wie sicher der Wert war.
+**Runtix im Detail – geprüft am 2026-08-27.** Die Ergebnisliste selbst enthält
+**kein Datum**. Nachgesehen und ohne jede Veranstaltungsangabe:
+
+```
+/sts/10050/{id}/{contest}/{rlt}   Ergebnisliste   → kein Datum
+/sts/10051/{id}/{contest}/{stnr}  Einzelergebnis  → kein Datum
+/sts/10080/{id}                   Statistik       → kein Datum
+```
+
+Alle drei zeigen im Kopf nur den Veranstaltungsnamen („19. Hambrücker
+Lußhardtlauf") und in der Fußzeile „Copyright © CODERESEARCH 2001 - 2026" –
+eine Jahreszahl, die nichts mit dem Lauf zu tun hat und die ein zu gieriger
+Parser prompt als Veranstaltungsjahr missverstehen würde.
+
+Es gibt zwei Stellen, an denen das Datum steht:
+
+**1. Veranstaltungsübersicht `/sts/10020/{jahr}` – strukturiert, bevorzugt**
+
+Ein Eintrag je Veranstaltung, jeweils mit vorangestelltem Datum:
+
+```
+[16.08.2026]  19. Hambrücker Lußhardtlauf   Anmelden · Teilnehmer · Ergebnisse
+[04.01.2026]  Dolgesheimer Neujahrslauf     Anmelden · Teilnehmer · Ergebnisse
+[22.02.2026]  38. Oggersheimer Berglauf     Anmelden · Teilnehmer · Ergebnisse
+```
+
+Der „Ergebnisse"-Link zeigt auf `/sts/10050/{eventId}`. **Darüber wird der
+Eintrag gefunden – über die ID, niemals über den Namen.** Namen wiederholen
+sich („Silvesterlauf"), IDs nicht.
+
+Die Seite ist nach Jahr gegliedert: Auswahl 2008–2027, Standard ist das
+laufende Jahr, und `/sts/10020/2025` liefert verifiziert das Jahr 2025
+(01.01.2025 bis 31.12.2025). Ein Monatsfilter existiert, wird hier nicht
+gebraucht. Rund 200–220 Einträge pro Jahr – ein Request, der sich zu cachen
+lohnt (Transient je Jahr, 15 min, wie die übrige Discovery in 6.4).
+
+**2. Veranstaltungsseite `/sts/10021/{eventId}` – Fließtext, Notnagel**
+
+Dort steht die Ausschreibung des Veranstalters, das Datum als Überschrift:
+
+```
+Sonntag, den 16. August 2026
+```
+
+Frei formuliert, also ohne Formatgarantie – der nächste Veranstalter schreibt
+„16.8.26" oder „So., 16. Aug." Als alleinige Quelle taugt das nicht, als
+Einstieg schon.
+
+**Das Henne-Ei-Problem:** Die Übersichtsseite ist die verlässliche Quelle,
+braucht aber ein Jahr, das man erst kennt, wenn man das Datum hat. Deshalb
+dieser Ablauf:
+
+```
+1. /sts/10021/{eventId} holen, Datum aus dem Text lesen
+   Muster: „16. August 2026" · „16.08.2026" · „16.8.26"
+   → ergibt meist ein vollständiges Datum, mindestens aber ein Jahr
+
+2. Mit diesem Jahr /sts/10020/{jahr} holen und den Eintrag suchen,
+   dessen Link /sts/10050/{eventId} enthält
+   → dessen [TT.MM.JJJJ] ist der maßgebliche Wert (datum_quelle = 'liste')
+
+3. Liefert Schritt 1 nichts: /sts/10020/{laufendes Jahr} probieren,
+   dann das Vorjahr. Danach abbrechen und das Feld leer lassen.
+   Zwei Fehlversuche sind vertretbar, ein Durchsuchen von 2008 bis 2027
+   nicht – 20 Requests für ein Datum, das der Mensch in fünf Sekunden
+   eintippt.
+```
+
+Schritt 2 ist auch dann sinnvoll, wenn Schritt 1 bereits ein vollständiges
+Datum geliefert hat: stimmen beide überein, ist der Wert bestätigt; weichen
+sie ab, gewinnt die Übersichtsliste und der Unterschied wird angezeigt.
+
+⚠ Bei mehrtägigen Veranstaltungen nennt die Übersicht nur einen Tag. Für die
+Bestenliste genügt das – dort steht ohnehin ein einzelnes Datum. Fällt eine
+solche Veranstaltung über einen Jahreswechsel, entscheidet das angezeigte
+Datum, und der Mensch kann korrigieren.
+
+**race result im Detail – geprüft am 2026-08-27.** Ergebnis vorweg: **die
+`config`-Antwort enthält kein Veranstaltungsdatum.** Die Schlüssel auf oberster
+Ebene sind (Event 375768, Ettlingen):
+
+```
+key · contests · splits · eventname · TimerLogo · TimerURL
+EventOver · Time · server · BrandColorDark · ListCommentsEnabled
+Tab · TabConfig · ContestColors
+```
+
+Kein `EventDate`, kein `Datum`, kein `Date`. Was auf den ersten Blick danach
+aussieht, ist es nicht:
+
+- `Tab` / `TabConfig` führen `ActiveFrom: 2022-04-09T00:00:00+02:00` und
+  `ActiveUntil: 2100-12-31T23:59:59+01:00` – das ist die Gültigkeit der
+  Ergebnis-Ansicht, nicht der Lauf. Ein Parser, der `ActiveFrom` nimmt, trägt
+  2022 ein.
+- `Time: 69537` ist ein Zählwert der Zeitmessung, kein Zeitstempel.
+- `EventOver: true` sagt nur, dass die Veranstaltung vorbei ist.
+- `contests` ist eine flache Zuordnung `ID → Name`, ohne Datum:
+  `{"1":"Walking 21,1km", "2":"Hauptlauf 21,1km", "8":"Bambini 500m (<2019)", …}`
+- `eventname: "17. SWE Halbmarathon Ettlingen"` enthält **keine** Jahreszahl.
+
+Damit greift für race result keine der Stufen 1 bis 3: **das Datumsfeld bleibt
+leer und wird von Hand ausgefüllt.** Das ist kein Fehler, sondern der Normalfall
+dieser Quelle – die Oberfläche sagt es entsprechend: *„Die Quelle nennt kein
+Datum – bitte eintragen."*
+
+Zwei Nebenbefunde aus derselben Prüfung, die in den Adapter gehören:
+
+- `server` lieferte hier `my-us-1.raceresult.com`, im früheren Test
+  `my4.raceresult.com`. Der Wert wechselt tatsächlich – er **muss** aus
+  `config.server` kommen (4.2), eine feste Annahme bricht.
+- `contests` zeigt „Walking 21,1km" neben „Hauptlauf 21,1km" – zwei Einträge,
+  die beide auf `HM` abgebildet würden. Ein weiterer Beleg dafür, dass die
+  Wettbewerbsauswahl die eigentliche Entscheidung ist und das Distanz-Dropdown
+  sichtbar bleiben muss: Am Distanzwert allein sind die beiden nicht zu
+  unterscheiden.
+
+⚠ **`/results/list` ist in der `robots.txt` von my.raceresult.com für Crawler
+gesperrt** (u.a. `/*/*/list`, `/RRPublish`; für Yandex die ganze Domain). Der
+Abruf der `config` ist davon nicht betroffen. Für das Plugin ändert das nichts
+an der Funktion – es ist kein Crawler, ruft eine Adresse ab, die der Nutzer
+selbst eingegeben hat, und tut das einmal pro Import (8.1, gleiche Haltung wie
+bei Runtix). Festgehalten wird es hier, weil es beim Testen mit fremden
+Werkzeugen erklärt, warum ein Abruf ohne Vorwarnung abgelehnt wird.
+
+**Im Zweifel bleibt das Feld leer – für beide Controls.** Weder das Datum noch
+die Distanz werden geraten:
+
+| Lage | Datum | Distanz |
+|---|---|---|
+| eindeutig erkannt | vorbelegt, änderbar | vorbelegt, änderbar |
+| mehrdeutig oder unvollständig | **leer** | **leer** |
+| gar nicht gefunden | **leer** | **leer** |
+
+„Mehrdeutig" heißt beim Datum: zwei Quellen nennen verschiedene Tage, oder es
+steht nur eine Jahreszahl fest. Bei der Distanz: der Wettbewerbsname enthält
+mehrere Streckenangaben („Marathon-Staffel 4x10 km") oder eine, die
+`lsg_bl_distance_map()` nicht kennt.
+
+Ein leeres Feld ist ehrlicher als ein falsch geratenes: Es hält den
+Parsen-Button gesperrt und verlangt eine Entscheidung, statt eine falsche
+Vorbelegung durchzuwinken, die niemand mehr prüft.
+
+**Woher der Wert stammt, wird mitgeführt** (`datum_quelle`), am Feld angezeigt
+und in `lsg_import_run` protokolliert – damit später nachvollziehbar ist, wie
+sicher er war:
+
+| Wert | Herkunft | Anzeige am Feld |
+|---|---|---|
+| `liste` | Runtix, `/sts/10020/{jahr}` | „aus der Veranstaltungsübersicht" |
+| `ausschreibung` | Runtix, `/sts/10021/{eventId}` | „aus der Ausschreibung gelesen" |
+| `api` | race result, `config`-Antwort | „aus der Quelle übernommen" |
+| `name` | Datum im Event-/Wettbewerbsnamen | „aus dem Namen gelesen" |
+| `jahr` | nur die Jahreszahl erkannt | „nur das Jahr erkannt – Tag und Monat ergänzen" |
+| `manuell` | von Hand eingetragen | – |
+
+
 
 ⚠ **Ein unvollständiges Datum wird nicht ergänzt.** Kein stiller 1. Januar, kein
 Importdatum als Ersatz. `lsg_best.date` wird in der Bestenliste als TT.MM.JJJJ
@@ -1371,7 +1537,7 @@ CREATE TABLE lsg_import_run (
   event_id      varchar(32)  NOT NULL DEFAULT '',
   event_name    varchar(120) NOT NULL DEFAULT '',
   event_date    int(10) UNSIGNED DEFAULT NULL,         -- = lsg_best.date
-  datum_quelle  varchar(8)   NOT NULL DEFAULT '',      -- api|name|jahr|manuell
+  datum_quelle  varchar(16)  NOT NULL DEFAULT '',      -- liste|ausschreibung|api|name|jahr|manuell
   jahr          smallint(5) UNSIGNED NOT NULL DEFAULT 0, -- Vergleichsjahr aus 6.5.4
   contest_id    varchar(32)  NOT NULL DEFAULT '',      -- String! ("w")
   contest_name  varchar(120) NOT NULL DEFAULT '',
@@ -1630,6 +1796,14 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] P1 Zeit-Normalisierung auf `HH:MM:SS`, DNF/DSQ/DNS verwerfen + zählen
   - [ ] P1 Felder Distanz / Datum / Ort über der Tabelle, vorbelegt + änderbar
   - [ ] P1 Datum ermitteln: Adapter-Metadaten → Datum im Namen → Jahr → leer
+  - [ ] P1 Runtix: `/sts/10021/{id}` für den Einstieg, `/sts/10020/{jahr}` als
+        maßgebliche Quelle, Eintrag über den Link `/sts/10050/{id}` finden
+  - [ ] P1 Runtix: höchstens zwei Jahres-Versuche, dann Feld leer lassen
+  - [ ] P1 Runtix: Jahreszahl der Fußzeile (`Copyright … 2001 - 2026`) ignorieren
+  - [ ] P1 Veranstaltungsübersicht je Jahr cachen (Transient, 15 min)
+  - [ ] P1 race result: kein Datum in `config` – Feld leer lassen, Hinweis zeigen
+  - [ ] P1 race result: `Tab.ActiveFrom` **nicht** als Veranstaltungsdatum lesen
+  - [ ] P1 Beide Controls leer lassen, sobald der Wert mehrdeutig ist
   - [ ] P1 `datum_quelle` mitführen und am Feld anzeigen
   - [ ] P1 Unvollständiges Datum **nicht** ergänzen (kein stiller 1. Januar)
   - [ ] P1 Timestamp mit 12:00 Uhr Ortszeit speichern (Zeitzonenfalle)
@@ -1639,7 +1813,6 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] Änderung von Datum oder Distanz verwirft die Vorschau (zurück auf „Parsen")
   - [ ] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
   - [ ] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
-  - [ ] P1 Walking-Wettbewerbe: keine Distanz vorbelegen
   - [ ] P1 Distanz-Select geschlossen: kein Freitext, keine neuen Distanzen
   - [ ] P1 `platz` mitlesen (nur für 6.5.5)
   - [ ] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
@@ -1746,6 +1919,10 @@ Zeitmessung Barth; geplant ist keiner davon.
 - [ ] P4 mit Zeitlauf (`6h`): größere Strecke gilt als „schneller"
 - [ ] Datum: `17.05.2026` im Namen wird erkannt; nur `2026` → Feld unvollständig,
       Parsen gesperrt; gar nichts → Feld leer
+- [ ] race result Ettlingen: Datumsfeld bleibt leer, Hinweistext erscheint,
+      `ActiveFrom` (2022) taucht nirgends auf
+- [ ] Beide Wettbewerbe „Walking 21,1km" und „Hauptlauf 21,1km" schlagen `HM`
+      vor; das Dropdown ist in beiden Fällen sichtbar und änderbar
 - [ ] Datum 31.12. → Import zählt ins alte Jahr, auch wenn im Januar importiert
 - [ ] Schnellere Zeit im Folgejahr → zweite Zeile, Vorjahr unverändert
 - [ ] Datum nach dem Parsen geändert → Vorschau verworfen, Button zurück auf „Parsen"
@@ -1800,6 +1977,14 @@ zuständigen Stelle eingearbeitet, hier nur als Nachweis:
       bestehen, weil sie in dieser Form nichts kostet (6.12).
 - [x] **Ein Vorgang = eine Ergebnisliste.** Mehrere Wettbewerbe eines Events
       werden nacheinander importiert, jeder mit eigenem `lsg_import_run` (6.5).
+- [x] **Keine Sonderregeln für einzelne Wettbewerbsarten.** Die
+      Wettbewerbsauswahl bestimmt, welche Liste geparst wird; das
+      Distanz-Dropdown bestimmt, unter welcher Distanz sie gespeichert wird –
+      vorbelegt oder von Hand gewählt. Walking, Staffeln und Bambiniläufe
+      brauchen darüber hinaus nichts (6.5.1).
+- [x] **Datum und Distanz bleiben leer, wenn sie nicht eindeutig sind.** Kein
+      Raten, kein stiller Ersatzwert – der Parsen-Button bleibt gesperrt, bis
+      beide Felder stehen (6.5.1).
 - [x] **Weitere Untermenüs** unter `lsg-bestenliste`: Import-Log jetzt,
       Sportler-/Bestenlisten-/Gesamtsieger-Pflege in Phase 4 (6.2).
 
@@ -1823,15 +2008,8 @@ vorbereitet, damit später keine Migration nötig wird:
 
 ### 8.3 Offen
 
-- [ ] **Datumsfeld der Quellen verifizieren** (6.5.1): Wie genau liefert die
-      race-result-`config` das Veranstaltungsdatum, und wo steht es bei Runtix
-      auf `/sts/10021/{eventId}`? Beides ist im Plan als Weg beschrieben, aber
-      noch nicht am Live-Objekt geprüft – anders als die übrigen Requests in
-      Abschnitt 9.
-- [ ] **Walking-Wettbewerbe** (Runtix `"w"`, „5 KM Interstick-Walk"): gehören
-      Walking-Zeiten überhaupt in die Lauf-Bestenliste? Vorschlag im Plan
-      (6.5.1): keine Distanz vorbelegen, Hinweis anzeigen, Import nur mit
-      bewusster Auswahl. Bitte bestätigen oder ganz sperren.
+Aktuell keine offenen Punkte. Was hier neu auftaucht, gehört auch wirklich
+entschieden, bevor es in Abschnitt 7 wandert.
 
 ---
 
@@ -1844,8 +2022,23 @@ https://runtix.com/sts/10050/3152/21/total
 # Runtix – Einzelergebnis
 https://runtix.com/sts/10051/3152/21/1126
 
-# race result – Config
+# Runtix – Veranstaltungsübersicht mit Datum je Lauf (Jahr im Pfad)
+https://runtix.com/sts/10020            # laufendes Jahr
+https://runtix.com/sts/10020/2025       # verifiziert: 01.01.2025 – 31.12.2025
+
+# Runtix – Veranstaltungsseite, Datum im Ausschreibungstext
+https://runtix.com/sts/10021/3152       # „Sonntag, den 16. August 2026"
+
+# race result – Config (enthält KEIN Veranstaltungsdatum, geprüft 2026-08-27)
 https://my.raceresult.com/375768/results/config?lang=de&noVisitor=1&sanitize=true
+#   Schlüssel: key, contests, splits, eventname, TimerLogo, TimerURL,
+#              EventOver, Time, server, BrandColorDark, ListCommentsEnabled,
+#              Tab, TabConfig, ContestColors
+#   server lieferte diesmal my-us-1.raceresult.com (früher my4) – Wert wechselt
+#   Tab.ActiveFrom/ActiveUntil = Gültigkeit der Ansicht, NICHT der Lauf
+
+# race result – robots.txt sperrt /results/list für Crawler
+https://my.raceresult.com/robots.txt
 
 # race result – Liste (658 Zeilen)
 https://my4.raceresult.com/375768/results/list?key={KEY}
