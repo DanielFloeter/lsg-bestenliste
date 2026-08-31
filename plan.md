@@ -1,9 +1,12 @@
 # Plan: WordPress-Plugin "LSG Bestenliste" – Ergebnisimport
 
-> Arbeitsdokument. Abschnitt 7 ist die abarbeitbare Checkliste, Abschnitt 8
+> Arbeitsdokument. Abschnitt 8 ist die abarbeitbare Checkliste, Abschnitt 9
 > hält die getroffenen Entscheidungen und die vorgemerkten Ausbaustufen fest.
 >
 > Stand der Recherche: 2026-08-26 (live gegen beide Systeme verifiziert)
+>
+> Stand der Prüfung gegen den Bestand: 2026-08-31 – Distanzen, Altersklassen
+> und die Athleten-IDs der Startregeln sind gegen `assets/*.sql` gegengelesen.
 
 ---
 
@@ -163,8 +166,9 @@ User-agent: GPTBot          Disallow: /
 User-agent: Google-Extended Disallow: /
 ```
 
-Nur AI-Trainings-Crawler gesperrt, **kein generelles Disallow**. Höflicher
-Abruf (1× pro Lauf pro Tag, eigener User-Agent) ist damit nicht ausgeschlossen.
+Nur AI-Trainings-Crawler gesperrt, **kein generelles Disallow**. Ein höflicher
+Abruf (eigener User-Agent, nur auf Anstoß eines angemeldeten Benutzers) ist
+damit nicht ausgeschlossen.
 
 **Entschieden:** keine Anfrage bei Runtix/CodeResearch. Die Ergebnislisten sind
 öffentlich, die Bestenliste des Vereins ist es auch, und es bleibt beim
@@ -172,12 +176,15 @@ bisherigen Vorgehen. Die technischen Rücksichtsmaßnahmen bleiben trotzdem
 verbindlich, weil sie den Abruf überhaupt erst unauffällig machen:
 
 - eigener User-Agent mit Kontakt-URL, keine Browser-Tarnung
-- ein Abruf pro Lauf und Tag, nicht bei jedem Seitenaufruf (5.2)
+- **Abruf nur, wenn jemand aktiv importiert** – kein Hintergrundabruf, kein
+  WP-Cron, und nichts, was bei einem Seitenaufruf im Frontend passiert (5.2)
 - Rate-Limit von 30 Abrufen / 10 min pro Benutzer (6.10)
-- Ergebnisse kommen aus dem Cache, nicht aus wiederholten Requests
+- innerhalb eines Vorgangs Transients, damit das Durchklicken der Auswahl
+  keine weiteren Requests erzeugt (6.4, 6.5)
 
 Damit erzeugt das Plugin pro Import ein bis zwei Requests – weniger als ein
-einzelner Besucher, der sich die Liste im Browser ansieht.
+einzelner Besucher, der sich die Liste im Browser ansieht. Das Frontend liest
+ausschließlich aus der Datenbank und berührt die Quelle nie (5.2).
 
 ---
 
@@ -277,7 +284,7 @@ liste, zeitmessung (brutto|netto), quelle (URL), abgerufen (Datum), anzahl
 ### 5.2 Kein Dauerabruf – der Import ist ein einmaliger Vorgang
 
 Ein früherer Entwurf sah WP-Cron, eine Event-Liste und regelmäßige Abrufe vor.
-Das ist mit den Festlegungen aus 8.1 hinfällig, und zwar aus einem
+Das ist mit den Festlegungen aus 9.1 hinfällig, und zwar aus einem
 einzigen Grund: **Läufe werden immer über die URL übergeben.** Es gibt keine
 gespeicherte Liste von Events, also gibt es auch nichts, was ein Cron-Job
 regelmäßig abrufen könnte.
@@ -375,15 +382,15 @@ add_action( 'admin_menu', function () {
 ```
 
 **Entschieden: das Menü bekommt weitere Untermenüs.** Geplante Reihenfolge –
-die ersten beiden gehören zu diesem Plan, der Rest zu Phase 4 der README:
+die ersten vier gehören zu diesem Plan, der Rest zu Phase 4 der README:
 
 | Untermenü | Slug | Inhalt | Wann |
 |---|---|---|---|
 | Ergebnis-Import | `lsg-bestenliste` | Abschnitt 6 | jetzt |
 | Import-Log | `lsg-bestenliste-log` | Abschnitt 6.8 | jetzt |
 | Zuordnungen | `lsg-bestenliste-map` | Regeln aus `lsg_athlete_map` (6.5.3) | jetzt |
+| Bestenliste | `lsg-bestenliste-best` | `lsg_best` von Hand erfassen und korrigieren – Abschnitt 7 | jetzt |
 | Sportler | `lsg-bestenliste-athleten` | `lsg_athlete` pflegen | Phase 4 |
-| Bestenliste | `lsg-bestenliste-best` | `lsg_best` von Hand korrigieren | Phase 4 |
 | Gesamtsiege | `lsg-bestenliste-win` | `lsg_win` pflegen, später Ziel von 6.5.5 | Phase 4 |
 
 Zwei Dinge, die dabei jetzt schon festgelegt sein sollten, weil sie später
@@ -392,11 +399,12 @@ teuer nachzurüsten sind:
 - **Ein Callback pro Seite, eine Datei pro Callback**
   (`includes/admin/page-import.php`, `page-log.php`, …). Nicht alles in eine
   wachsende `admin.php`.
-- **`LSG_BL_CAP` gilt nicht überall.** Importieren darf jeder Angemeldete;
-  Athleten- und Bestenlisten-Pflege sind Eingriffe in den Datenbestand und
-  bekommen in Phase 4 eine eigene, engere Konstante. Die Menüpunkte dafür
-  jetzt schon mit einem eigenen Capability-Platzhalter registrieren, statt
-  später alle Aufrufe zu suchen.
+- **Eine Capability, nicht mehrere.** Import (Abschnitt 6) und manuelle
+  Erfassung (Abschnitt 7) laufen beide über `LSG_BL_CAP`: derselbe Kreis von
+  Leuten, dieselbe Konstante. Ob die Athletenpflege aus Phase 4 eine eigene,
+  engere Konstante braucht, wird dann entschieden – vorgesehen ist sie nicht
+  mehr, weil zwei Konstanten für dieselbe Personengruppe nur die Frage
+  aufwerfen, welche denn nun gilt.
 
 **Entschieden: jeder angemeldete WordPress-Benutzer darf importieren.** Die
 passende Capability dafür ist `read` – sie hat jede Rolle bis hinunter zum
@@ -412,6 +420,12 @@ if ( ! defined( 'LSG_BL_CAP' ) ) {
 Als Konstante, nicht hart verdrahtet: falls der Kreis später doch enger werden
 soll, genügt eine Zeile in der `wp-config.php` (`edit_posts` für Redakteure
 aufwärts, `manage_options` nur für Administratoren).
+
+⚠ **`LSG_BL_CAP` ist die einzige Stelle, an der die Capability steht.** In
+`add_menu_page()`, in jedem `current_user_can()` und in jedem
+`permission_callback` steht die Konstante, nie `'read'` und nie `'edit_posts'`
+ausgeschrieben. Sonst hängt die Zugriffsregel an drei Orten, und die Zeile in
+der `wp-config.php` verschiebt nur einen davon.
 
 ⚠ Zwei Dinge, die aus dieser Entscheidung folgen und im Code stehen müssen:
 
@@ -591,7 +605,7 @@ Quelle schreibt, und dem, was die Datenbank kennt:
 | **Mapping 1** | Wettbewerbsbezeichnung („21 KM …") | Distanzcode (`HM`) | 6.5.1, im Code |
 | **Mapping 2** | Teilnehmerzeile (Name + Jahrgang) | `lsg_athlete.id` | 6.5.3, Tabelle `lsg_athlete_map` |
 
-Mapping 1 steht im Code, weil die Zielcodes feststehen (8.1: keine neuen
+Mapping 1 steht im Code, weil die Zielcodes feststehen (9.1: keine neuen
 Distanzen). Mapping 2 gehört in die Datenbank, weil dort laufend Fälle
 dazukommen, die niemand vorhersehen kann.
 
@@ -709,8 +723,31 @@ sich ermitteln lässt, und in jedem Fall änderbar:
 
   **Entschieden: die Liste der Distanzen bleibt geschlossen.** Es kommen keine
   Distanzen dazu, die nicht schon in der Datenbank stehen. Der Import kann
-  deshalb gar keine neue Distanz erzeugen – ein Select über die zwölf
-  bekannten Codes, kein Freitextfeld.
+  deshalb gar keine neue Distanz erzeugen – ein Select über die bekannten
+  Codes, kein Freitextfeld.
+
+  ⚠ **Entschieden: Zeitläufe (`6h`, `12h`, `24h`) sind vom Import
+  ausgenommen.** Das Select bietet nur die neun Streckendistanzen an
+  (`5km`, `10km`, `15km`, `20km`, `25km`, `HM`, `Marathon`, `50km`, `100km`).
+
+  Der Grund steht in der Datenbank: Bei den Zeitläufen hält `lsg_best.time`
+  **keine Zeit, sondern eine Strecke** – im Bestand stehen dort Werte wie
+  `112,737 km` (6h 63, 12h 33, 24h 103 Zeilen). Genau dafür kennt
+  `lsg_bl_distance_map()` den Typ `distance`, und `lsg_bl_parse_performance()`
+  liefert `better => 'higher'`.
+
+  Die Parse-Pipeline erzeugt aber ausschließlich Zeiten: P1 normalisiert jede
+  Zeile auf `HH:MM:SS` (6.5.1). Stünde `6h` im Select, würde eine Zeit in ein
+  Streckenfeld geschrieben und P4 vergliche sie anschließend als Zahl gegen
+  `112,737` – ein stiller Fehler ohne Fehlermeldung.
+
+  Beide Portale kennen diese Wettbewerbsform ohnehin nicht, deshalb kostet der
+  Ausschluss nichts. Die drei Codes bleiben in `lsg_bl_distance_map()` und in
+  der Frontend-Ausgabe unverändert; sie werden weiterhin von Hand gepflegt.
+  Wählt jemand einen Zeitlauf-Wettbewerb, sagt die Meldung: *„Zeitläufe werden
+  nicht importiert – dort steht eine Strecke, keine Zeit. Bitte unter
+  ‚Bestenliste' von Hand erfassen."* Diese Seite gibt es (Abschnitt 7), der
+  Hinweis führt also irgendwohin und ist keine Sackgasse.
 
 **Mapping 1 von 2: Wettbewerbsbezeichnung → Distanzcode.** Die Quellen nennen
 die Strecke, wie es der Veranstalter geschrieben hat; die Datenbank kennt nur
@@ -746,9 +783,8 @@ function lsg_bl_distance_aliases(): array {
         '25' => '25km',  '25km' => '25km',
         '50' => '50km',  '50km' => '50km',
         '100'=> '100km', '100km'=> '100km',
-        '6h' => '6h',    '6stunden'  => '6h',
-        '12h'=> '12h',   '12stunden' => '12h',
-        '24h'=> '24h',   '24stunden' => '24h',
+        // 6h / 12h / 24h fehlen bewusst: Zeitläufe werden nicht importiert
+        // (s.o.) – dort hält lsg_best.time eine Strecke, keine Zeit.
     );
 }
 ```
@@ -958,7 +994,7 @@ Zwei Nebenbefunde aus derselben Prüfung, die in den Adapter gehören:
 gesperrt** (u.a. `/*/*/list`, `/RRPublish`; für Yandex die ganze Domain). Der
 Abruf der `config` ist davon nicht betroffen. Für das Plugin ändert das nichts
 an der Funktion – es ist kein Crawler, ruft eine Adresse ab, die der Nutzer
-selbst eingegeben hat, und tut das einmal pro Import (8.1, gleiche Haltung wie
+selbst eingegeben hat, und tut das einmal pro Import (9.1, gleiche Haltung wie
 bei Runtix). Festgehalten wird es hier, weil es beim Testen mit fremden
 Werkzeugen erklärt, warum ein Abruf ohne Vorwarnung abgelehnt wird.
 
@@ -1103,11 +1139,18 @@ nicht jedes Jahr neu von Hand gemacht wird.
 Die drei bekannten Fälle zeigen, warum eine reine Alias-Tabelle
 („Schreibweise X gehört zu Athlet Y") nicht reicht:
 
-| Fall | Regel | Was daran besonders ist |
-|---|---|---|
-| `171` | Vorname `wolfram` **und** Nachname `pfeiffer` **und** Jg. 1961 | der Normalfall: beide Felder gesetzt |
-| `183` | Vorname `harry` **und** Jg. 1943 | **kein Nachname** – der variiert in den Listen |
-| `337` | `gudrun` als Vor- **oder** Nachname **und** Jg. 1955 | Felder sind in der Quelle vertauscht |
+| Fall | Athlet in `lsg_athlete` | Regel | Was daran besonders ist |
+|---|---|---|---|
+| `171` | `Dr. Pfeiffer`, Wolfram, 1961 | Vorname `wolfram` **und** Nachname `pfeiffer` **und** Jg. 1961 | der Normalfall: beide Felder gesetzt – die Quelle schreibt „Pfeiffer", die Datenbank „Dr. Pfeiffer" |
+| `183` | `van Wees`, Harry, 1943 | Vorname `harry` **und** Jg. 1943 | **kein Nachname** – der variiert in den Listen |
+| `377` | `Schlippe-Schrieber`, Gudrun, 1955 | `gudrun` als Vor- **oder** Nachname **und** Jg. 1955 | Felder sind in der Quelle vertauscht |
+
+⚠ Die IDs sind gegen `assets/lsg_athlete.sql` geprüft (2026-08-31). Ein
+früherer Entwurf nannte hier `337` – das ist *Österle, Hans-Jörg, 1967, m* und
+damit eine völlig andere Person. Beim Anlegen der Startdatensätze deshalb
+jede `athletes_id` einmal gegen Name und Jahrgang gegenlesen: Eine Regel, die
+auf den Falschen zeigt, schreibt Zeiten still einem Fremden gut, und in der
+Bestenliste sieht man dem Eintrag nichts an.
 
 Daraus folgt das Tabellenmodell: leeres Feld = beliebig, plus ein Modus für
 den feldunabhängigen Vergleich.
@@ -1155,11 +1198,11 @@ INSERT INTO lsg_athlete_map (tstamp, athletes_id, born, vorname, nachname, modus
    'Schreibweise des Nachnamens weicht in den Listen ab'),
   (UNIX_TIMESTAMP(), 183, 1943, 'harry',   '',         'feld',
    'Nachname variiert; Vorname + Jahrgang sind im Verein eindeutig'),
-  (UNIX_TIMESTAMP(), 337, 1955, 'gudrun',  '',         'egal',
+  (UNIX_TIMESTAMP(), 377, 1955, 'gudrun',  '',         'egal',
    'Vor- und Nachname in der Quelle vertauscht');
 ```
 
-Regel `337` braucht `nachname` nicht: im Modus `egal` genügt das eine Token
+Regel `377` braucht `nachname` nicht: im Modus `egal` genügt das eine Token
 `gudrun`, und es darf in beiden Feldern stehen.
 
 Der Lookup in Stufe 2, als Pseudocode:
@@ -1345,7 +1388,7 @@ Datenhaltung.
 
 Umgekehrt heißt es auch: **`lsg_best` ist keine Wettkampfhistorie.** Wer im
 selben Jahr fünf Halbmarathons läuft, hinterlässt dort eine Zeile. Die anderen
-vier stehen nur im Import-Log (6.8) – so gewollt (8.1, kein Ergebnisarchiv).
+vier stehen nur im Import-Log (6.8) – so gewollt (9.1, kein Ergebnisarchiv).
 
 ⚠ Deshalb hängt so viel am Datumsfeld: Ein Datum, das versehentlich im
 Nachbarjahr liegt, erzeugt keinen sichtbaren Fehler, sondern eine zweite
@@ -1354,9 +1397,15 @@ ist. Genau darum ist das Feld Pflicht, sichtbar und mit Herkunftsangabe
 versehen (6.5.1).
 
 Verglichen wird über `lsg_bl_parse_performance()`, nicht über `strcmp` – die
-Funktion kennt bereits die Formatvarianten des Bestands und behandelt
-Zeitläufe (`6h`, `12h`, `24h`) richtig, wo **größer** besser ist. Ein
-String-Vergleich würde bei `38:57` gegen `01:38:57` falsch liegen.
+Funktion kennt bereits die Formatvarianten des Bestands, auch die
+Tippfehler-Schreibweisen (`01:20.24`) und die fehlende Stundenangabe
+(`38:57`). Ein String-Vergleich würde bei `38:57` gegen `01:38:57` falsch
+liegen.
+
+Der Zweig für Zeitläufe (`better => 'higher'`) wird dabei nie erreicht: Die
+Distanzen `6h`, `12h` und `24h` stehen gar nicht erst im Import-Select
+(6.5.1). Alles, was P4 zu sehen bekommt, ist eine Zeit, bei der kleiner besser
+ist.
 
 Daraus ergibt sich der Status je Zeile:
 
@@ -1371,7 +1420,7 @@ Daraus ergibt sich der Status je Zeile:
 
 `gleich` ist der Wiederholungsfall: derselbe Import ein zweites Mal ausgeführt
 zeigt lauter `gleich` und schreibt bei „Übernehmen" nichts. Das ist die
-Idempotenz aus Abschnitt 7 – sichtbar gemacht, statt nur behauptet.
+Idempotenz aus Abschnitt 8 – sichtbar gemacht, statt nur behauptet.
 
 Bei mehreren Zeilen desselben Athleten auf derselben Distanz im selben Import
 (kommt vor: Staffel plus Einzellauf, oder zwei Listen nacheinander) gewinnt die
@@ -1603,8 +1652,12 @@ skip_abgewaehlt    Checkbox war leer
 skip_offen         kein Athlet zugeordnet
 konflikt           Status hatte sich seit dem Parsen geändert
 fehler             DB-Fehler, Details in meldung
+delete             Zeile aus lsg_best entfernt          ← manuelle Seite (7.5)
 win_insert         Gesamtsieg nach lsg_win geschrieben  ← reserviert (6.5.5)
 ```
+
+`match_type` kennt zusätzlich `manuell`: Der Athlet wurde im Formular gewählt,
+nicht über Name, Regel oder Normalisierung zugeordnet (7.5).
 
 `roh_platz`, `gesamtsieg` und `win_insert` werden **jetzt schon angelegt**,
 obwohl der Gesamtsieg-Teil noch nicht umgesetzt wird. Eine leere Spalte kostet
@@ -1642,13 +1695,15 @@ billiger.
 - Zwei Ebenen: Übersicht der Vorgänge (`lsg_import_run`) → Klick öffnet die
   Zeilen dieses Vorgangs. Direkter Einstieg in die Zeilensuche über das Suchfeld.
 - Spalte „Ergebnis" verlinkt bei `insert`/`update` auf den betroffenen
-  `lsg_best`-Datensatz, sobald es dafür eine Bearbeitungsansicht gibt (Phase 4).
+  `lsg_best`-Datensatz – die Bearbeitungsansicht dafür ist die Seite aus
+  Abschnitt 7 (`&action=edit&id=`). Bei `delete` gibt es kein Ziel mehr; dort
+  steht der protokollierte Datensatz selbst.
 - Aufbewahrung: unbegrenzt. Bei wenigen hundert Zeilen pro Jahr ist Aufräumen
   unnötiger Aufwand; falls doch, ein `Löschen älter als …`-Knopf statt eines
   automatischen Cron-Jobs, der unbemerkt Historie wegwirft.
 
 Ein **Rückgängig** ist damit prinzipiell möglich (`time_alt` steht ja da), aber
-bewusst nicht Teil des ersten Wurfs – siehe 8.2.
+bewusst nicht Teil des ersten Wurfs – siehe 9.2.
 
 ### 6.9 Seitenzustand, Formular und Sicherheit
 
@@ -1741,13 +1796,13 @@ Berührungspunkte hat:
 
 1. Klasse anlegen, `ErgebnisQuelle` implementieren.
 2. In `lsg_bl_adapter_registry()` eintragen (oder per Filter von außen).
-3. Fixture + Contract-Test ergänzen (Abschnitt 7, Verifikation).
+3. Fixture + Contract-Test ergänzen (Abschnitt 8, Verifikation).
 
 An der Oberfläche ist **nichts** zu ändern: Adapterauswahl, Wettbewerbs- und
 Listen-Select sind generisch. Liefert ein Adapter für `listen()` ein leeres
 Array, blendet die Seite das zweite Feld von selbst aus.
 
-**Eine dritte Quelle ist derzeit nicht angedacht** (8.1). Die Registry
+**Eine dritte Quelle ist derzeit nicht angedacht** (9.1). Die Registry
 bleibt trotzdem so, wie sie ist: sie kostet in dieser Form nichts – ein Array
 und ein Filter – und erspart, falls doch einmal ein Portal dazukommt, das
 Aufbrechen einer `if/else`-Kette, die sich quer durch Erkennung, Discovery und
@@ -1756,7 +1811,310 @@ Zeitmessung Barth; geplant ist keiner davon.
 
 ---
 
-## 7. Umsetzungsschritte
+## 7. Backend-Oberfläche: Ergebnisse von Hand erfassen
+
+Der Import deckt ab, was die Portale in einer parsebaren Liste liefern. Daneben
+bleiben drei Fälle, die es nie in diese Oberfläche schaffen:
+
+- **Zeitläufe** (`6h`, `12h`, `24h`) – vom Import ausgenommen, weil dort eine
+  Strecke und keine Zeit gespeichert wird (6.5.1).
+- **Läufe ohne brauchbare Quelle** – ein Veranstalter, der nur ein PDF
+  veröffentlicht, ein Lauf im Ausland, eine Urkunde als einziger Beleg.
+- **Korrekturen** – ein Tippfehler im Bestand, eine falsch zugeordnete Zeile,
+  ein Eintrag, der gar nicht hätte entstehen dürfen.
+
+Dafür bekommt das Plugin eine zweite Admin-Seite. **Sie beschränkt sich nicht
+auf die Zeitläufe, sondern erfasst alle Distanzen** – die Felder sind dieselben,
+das Ziel ist dieselbe Tabelle, und eine Korrektur an einer importierten Zeile
+ist derselbe Vorgang wie eine Neueingabe. Eine eigene Oberfläche nur für drei
+Distanzen wäre eine zweite Bedienlogik für dasselbe Formular.
+
+Damit entsteht der Menüpunkt **„Bestenliste"**, der in 6.2 noch für Phase 4
+vorgemerkt war, schon jetzt. Der Anlass ist der Zeitlauf; der Nutzen ist
+größer.
+
+```
+Ergebnis-Import   URL → parsen → Vorschau → übernehmen     (Abschnitt 6)
+Bestenliste       Formular → prüfen → speichern            (Abschnitt 7)
+                  ↓                                  ↓
+                        lsg_best + dasselbe Log
+```
+
+### 7.1 Menü, Capability und Seitenaufbau
+
+Untermenü `lsg-bestenliste-best` unter dem Top-Level-Menü aus 6.2, Callback in
+`includes/admin/page-best.php` – ein Callback pro Seite, eine Datei pro
+Callback, wie dort festgelegt.
+
+**Entschieden: dieselbe Capability wie der Import**, `LSG_BL_CAP` (= `read`,
+also jeder angemeldete Benutzer). Der Kreis der Leute ist derselbe, und zwei
+Konstanten für dieselbe Personengruppe wären eine Unterscheidung, die niemand
+pflegt.
+
+⚠ Das ist trotzdem nicht dasselbe Risiko wie beim Import. Dort steht zwischen
+Eingabe und Datenbank der ganze Trichter aus P1–P4 mit einer Vorschau, hier
+schreibt ein Formular direkt in den Bestand. Was diese Seite deshalb zwingend
+mitbringt:
+
+- **Jeder Schreibvorgang wird protokolliert** – dieselben Tabellen wie der
+  Import (7.5). Ohne das Log wäre die Seite ein anonymer Direktzugriff auf
+  `lsg_best`.
+- **Kein Löschen ohne Rückfrage**, und der gelöschte Datensatz steht vollständig
+  im Log (7.4).
+- Capability-Prüfung, Nonce und `check_admin_referer()` in *jedem* Handler,
+  nicht nur beim Rendern – gleiche Regel wie 6.9.
+
+Die Seite hat zwei Ansichten, die sich über `?action=` unterscheiden:
+
+```
+?page=lsg-bestenliste-best                 Liste (7.4)
+?page=lsg-bestenliste-best&action=new      Formular, leer
+?page=lsg-bestenliste-best&action=edit&id= Formular, vorbelegt
+```
+
+Kein Modal, kein Inline-Edit in der Tabelle: Die Jahresbestzeit-Prüfung aus 7.3
+braucht Platz für einen Vergleich, und ein Formular mit sechs Feldern ist
+nichts, wofür man eine Zeile aufklappt.
+
+### 7.2 Das Formular
+
+| Feld | Steuerelement | Pflicht | Regel |
+|---|---|---|---|
+| Athlet | Select über `lsg_athlete` | ja | Wert = `athletes_id` |
+| Datum | `<input type="date">` + Textfallback | ja | Veranstaltungsdatum, nicht Erfassungsdatum |
+| Distanz | Select über `lsg_bl_distance_map()` | ja | **alle zwölf Codes**, inkl. `6h`/`12h`/`24h` |
+| Leistung | Textfeld | ja | Label und Prüfung folgen der Distanz, s.u. |
+| Ort | Textfeld, max. 30 Zeichen | ja | `lsg_best.town` |
+| Altersklasse | Anzeige, kein Eingabefeld | – | berechnet, s.u. |
+
+**Athlet-Dropdown.** Rund 430 Datensätze, davon etwa 260 aktiv – zu viele für
+eine ungeordnete Liste, zu wenige für eine Suche mit Autocomplete. Deshalb ein
+gewöhnliches `<select>`:
+
+```
+Anzeige     „Nachname, Vorname (Jahrgang)"   →  „Schlippe-Schrieber, Gudrun (1955)"
+Sortierung  name, firstname
+Gruppen     <optgroup> „Aktiv"  /  <optgroup> „Ehemalige"   (lsg_athlete.active)
+```
+
+Der Jahrgang gehört sichtbar in den Eintrag, nicht nur in den Wert: Er
+unterscheidet gleiche Namen, und er ist die Größe, aus der gleich die
+Altersklasse gerechnet wird – wer sie im Dropdown sieht, erkennt eine
+Fehlauswahl sofort.
+
+Ehemalige werden mit angeboten, aber getrennt: Ein Ergebnis aus 2019 kann zu
+jemandem gehören, der inzwischen ausgetreten ist. Sie zu verstecken würde
+genau die Nachträge verhindern, für die es diese Seite gibt.
+
+⚠ **Das Formular legt keinen Athleten an.** Gleiche Regel wie beim Import
+(6.5.3): Wer fehlt, wird im Untermenü „Sportler" (Phase 4) angelegt. Solange
+das nicht existiert, steht unter dem Dropdown der Hinweis, wo Athleten gepflegt
+werden – nicht ein Feld, das still einen zweiten „Müller, Peter" erzeugt.
+
+**Das Leistungsfeld wechselt mit der Distanz.** Das ist der eigentliche Grund,
+warum diese Seite die Zeitläufe kann und der Import nicht:
+
+| `lsg_bl_distance_type()` | Distanzen | Label | Eingabe | Beispiel |
+|---|---|---|---|---|
+| `time` | `5km` … `100km`, `HM`, `Marathon` | „Zeit" | `HH:MM:SS` | `01:36:44` |
+| `distance` | `6h`, `12h`, `24h` | „Strecke" | `NNN,NNN km` | `112,737 km` |
+
+Beides landet in derselben Spalte `lsg_best.time` – so ist der Bestand
+aufgebaut, und `lsg_bl_parse_performance()` liest beides bereits richtig. Das
+Formular muss nur dafür sorgen, dass in der Spalte das steht, was zur Distanz
+gehört.
+
+Regeln für das Feld:
+
+- **Label, Platzhalter und Prüfmuster folgen `lsg_bl_distance_type()`.** Wechselt
+  jemand die Distanz von `HM` auf `12h`, ändert sich das Label von „Zeit" auf
+  „Strecke" und das Feld wird geleert – ein stehengebliebenes `01:36:44` unter
+  „Strecke" wäre die naheliegendste Fehleingabe überhaupt.
+- **Zeiten** werden wie beim Import normalisiert (6.5.1): `1:13:08` → `01:13:08`,
+  `38:57` → `00:38:57`, Zehntel nach World-Athletics-Regel aufgerundet. Dieselbe
+  Funktion, nicht eine zweite Implementierung.
+- **Strecken** werden in der Schreibweise des Bestands gespeichert: drei
+  Vorkommastellen mit führenden Nullen, Komma, drei Nachkommastellen, Leerzeichen,
+  `km` – also `096,723 km`, nicht `96,723 km`. Der Bestand ist durchgehend so
+  geschrieben, und eine einzelne abweichende Zeile fällt in der Tabellenspalte
+  sofort auf. Für die Sortierung ist es unerheblich:
+  `lsg_bl_parse_performance()` liest die Zahl, nicht den String.
+- **Abgelehnt wird alles, was der Parser nur über den Zahlen-Fallback
+  einfangen würde.** Dieser Fallback existiert für die historischen Tippfehler im
+  Bestand; über das Formular darf kein neuer dazukommen.
+
+**Die Altersklasse wird gerechnet, nicht eingegeben.** Dieselbe Formel wie in
+P3 (6.5.3), nur mit den Daten aus dem Formular statt aus der Ergebnisliste:
+
+```
+alter = Jahr(Datum) − lsg_athlete.born
+alter < 30      →  'hk'
+sonst           →  floor(alter/5)*5
+Code            =  ('f' === lsg_athlete.cat ? 'w' : 'm') . stufe
+```
+
+Angezeigt wird der Code unmittelbar unter dem Datumsfeld, sobald Athlet und
+Datum stehen – als Text, nicht als Feld: *„Altersklasse: m50 (Jahrgang 1976,
+Lauf 2026)"*. Man soll sehen, was gespeichert wird, ohne es ändern zu können;
+änderbar wäre es nur um den Preis, dass `lsg_best.ak` und
+`lsg_best.athletes_id` auseinanderlaufen.
+
+⚠ **Nicht jeder gerechnete Code steht in `lsg_ak`.** Die Tabelle kennt
+`mhk`/`whk` und `m30`–`m75` bzw. `w30`–`w70`. Ein Athlet des Jahrgangs 1943
+ergibt bei einem Lauf 2026 `m80` – das ist kein Randfall, sondern ein aktiver
+Datensatz. Verhalten wie beim Import: **Warnung, keine Sperre.** Das Formular
+zeigt *„Die Altersklasse m80 steht nicht in `lsg_ak` – bitte dort ergänzen"*,
+speichert aber auf ausdrückliche Bestätigung. Ein Ergebnis zu verlieren, weil
+eine Stammdatentabelle nicht nachgezogen wurde, wäre die schlechtere Antwort.
+
+### 7.3 Jahresbestzeit-Prüfung – warnend, nicht sperrend
+
+`lsg_best` hält Jahresbestleistungen: eine Zeile je Athlet, Distanz und
+Kalenderjahr (6.5.4). Das gilt unabhängig davon, ob eine Zeile importiert oder
+getippt wurde – ein Formular, das diese Regel nicht kennt, erzeugt genau die
+Doppelzeilen, die P4 beim Import sorgfältig vermeidet.
+
+Sobald Athlet, Distanz und Datum stehen, sucht die Seite deshalb mit derselben
+Abfrage wie P4:
+
+```sql
+SELECT id, time, town, date
+  FROM lsg_best
+ WHERE athletes_id = %d
+   AND distance    = %s
+   AND YEAR(FROM_UNIXTIME(`date`)) = %d
+```
+
+**Entschieden: geprüft und gewarnt wird, gesperrt nicht.** Der Mensch am
+Formular weiß Dinge, die die Datenbank nicht weiß – etwa dass der vorhandene
+Eintrag falsch ist. Was er nicht wissen kann, ist, dass es ihn überhaupt gibt.
+Genau das liefert die Prüfung:
+
+| Lage | Anzeige | Vorbelegung |
+|---|---|---|
+| keine Zeile | *„Noch keine Leistung für 2026 auf dieser Distanz."* | anlegen |
+| neue Leistung besser | Bestand mit Ort und Datum, *„Die neue Leistung ist schneller (01:38:12 → 01:36:44)"* | **Bestand überschreiben** |
+| neue Leistung schlechter | Bestand, *„Die neue Leistung ist langsamer (01:36:44 bleibt)"* | **nichts tun** – Überschreiben nur nach ausdrücklichem Haken *„Der vorhandene Eintrag ist falsch, ersetzen"* |
+| identisch | *„Diese Leistung steht bereits so in der Datenbank."* | Speichern deaktiviert |
+
+⚠ **Es gibt keine Option „zusätzlich anlegen".** Eine zweite Zeile für
+denselben Athleten, dieselbe Distanz und dasselbe Jahr ist kein Sonderfall,
+sondern ein kaputter Bestand: Die Bestenliste zeigt dann beide, die Ewige
+Bestenliste dedupliziert eine davon weg, und keine der beiden Ansichten ist
+mehr erklärbar. Wer eine zweite Leistung desselben Jahres festhalten will, hat
+dafür das Log – `lsg_best` ist keine Wettkampfhistorie (6.8).
+
+„Besser" heißt bei Zeitläufen **größer**. Das entscheidet
+`lsg_bl_parse_performance()` über `better`; hier wird der Zweig `'higher'`
+tatsächlich erreicht, anders als im Import (6.5.4). Für `12h` ist
+`112,737 km` besser als `096,723 km`, und der Vergleichstext heißt dann
+*„weiter"* statt *„schneller"*.
+
+⚠ Das Jahr kommt aus dem **eingegebenen Veranstaltungsdatum**, nie aus
+`date('Y')` – ein im Januar nachgetragener Dezemberlauf gehört ins Vorjahr.
+Gespeichert wird der Timestamp mit **12:00 Uhr Ortszeit** (`mktime(12,0,0,…)`),
+aus demselben Grund wie in 6.5.1: Bei Mitternacht kann `date_i18n()` den Tag um
+eins verschieben.
+
+### 7.4 Liste, Bearbeiten, Löschen
+
+Die Einstiegsansicht ist eine `WP_List_Table` über `lsg_best`, mit Join auf
+`lsg_athlete`:
+
+- **Spalten:** Athlet (Nachname, Vorname), Jahrgang, Jahr, Distanz, Leistung,
+  AK, Ort, Datum, Aktionen.
+- **Filter:** Jahr, Distanz, Geschlecht, Athlet (Suchfeld über Name und
+  Vorname).
+- **Standardsortierung:** Jahr absteigend, dann Distanz in der Reihenfolge von
+  `lsg_bl_distance_map()` (nicht alphabetisch – `100km` vor `10km` wäre die
+  Folge), dann Leistung über `lsg_bl_sort_rows_by_performance()`.
+- **Paginierung**, weil der Bestand rund 6 000 Zeilen hat.
+
+**Bearbeiten** öffnet dasselbe Formular, vorbelegt aus der Zeile.
+
+⚠ Ändert die Bearbeitung **Athlet, Distanz oder das Jahr des Datums**, läuft
+die Prüfung aus 7.3 erneut – und zwar gegen die *neue* Kombination. Sonst wäre
+das Bearbeiten die Hintertür, durch die genau die Doppelzeile entsteht, die das
+Anlegen verhindert: Man legt eine Zeile für 2025 an und schiebt sie anschließend
+auf 2026, wo schon eine steht.
+
+**Löschen** ist einzeln, mit Rückfrage, und die Aktions-URL trägt eine Nonce
+(`wp_nonce_url()`) – ein Löschlink, den ein Crawler oder ein Prefetch anfassen
+kann, ist keiner. Kein Bulk-Delete im ersten Wurf.
+
+⚠ Löschen ist die einzige Aktion ohne Wiederherstellung in der Oberfläche.
+Deshalb schreibt sie den **vollständigen Datensatz** ins Log (7.5), nicht nur
+die ID: Distanz, Leistung, Ort, Datum, Athlet. Wer versehentlich löscht, kann
+die Zeile aus dem Log heraus neu tippen.
+
+**Die AK-Spalte wird bei jedem Speichern neu gerechnet**, nie aus der alten
+Zeile übernommen. Korrigiert später jemand den Jahrgang eines Athleten, stimmen
+dessen bereits gespeicherte AK-Werte allerdings nicht mehr – ein Nachrechnen
+des gesamten Bestands ist **nicht** Teil dieser Seite. Das wäre eine Migration
+über tausende Zeilen, kein Formularvorgang; vorgemerkt in 9.2.
+
+### 7.5 Protokollierung – dasselbe Log wie der Import
+
+Manuelle Änderungen laufen in `lsg_import_run` und `lsg_import_log` (6.8), nicht
+in eine dritte Tabelle. Der Grund ist die Frage, die das Log beantworten soll:
+*„warum steht bei X diese Zeit"*. Ein Log, das nur die importierte Hälfte des
+Bestands kennt, beantwortet sie in genau den Fällen nicht, in denen jemand von
+Hand eingegriffen hat – also in den interessanten.
+
+Ein Datensatz in `lsg_import_run` je Formularaktion, mit den Feldern, die es
+gibt:
+
+```
+adapter       'manuell'
+source_url    ''
+event_id      ''        contest_id ''      list_id ''
+event_name    ''        contest_name ''    list_name ''
+event_date    Veranstaltungsdatum aus dem Formular
+datum_quelle  'manuell'                    (Wert existiert bereits, 6.5.1)
+jahr          Jahr des Veranstaltungsdatums
+distance      gewählter Code
+town          eingegebener Ort
+zeit_typ      ''        (die Quelle ist ein Mensch, nicht netto/brutto)
+cnt_gelesen   0   cnt_lsg 0   cnt_zugeordnet 0
+cnt_angelegt / cnt_aktualisiert / cnt_fehler   je 0 oder 1
+user_id       aktueller Benutzer
+```
+
+Dazu genau eine Zeile in `lsg_import_log` mit `match_type = 'manuell'` und den
+Rohfeldern gefüllt aus dem, was im Formular stand (`roh_teilnehmer` = angezeigter
+Athletenname, `roh_jahrgang`, `roh_zeit` = die Eingabe vor der Normalisierung).
+
+Zwei Ergänzungen am Wertebereich aus 6.8, beide klein:
+
+```
+aktion:      delete      Zeile aus lsg_best entfernt (Rohfelder = der Zustand
+                         vor dem Löschen, time_alt = die gelöschte Leistung)
+match_type:  manuell     Athlet wurde von Hand gewählt, nicht zugeordnet
+```
+
+Die Log-Ansicht bekommt entsprechend einen Filter **„von Hand erfasst"**
+(`adapter = 'manuell'`), damit sich beide Wege getrennt betrachten lassen.
+
+⚠ `cnt_gelesen`, `cnt_lsg` und `cnt_zugeordnet` bleiben bewusst auf 0 statt auf
+1: Der Trichter aus 6.5 hat hier keine Entsprechung, und eine 1 würde in der
+Vorgangsübersicht so aussehen, als wäre etwas gelesen und gefiltert worden.
+
+### 7.6 Was diese Seite ausdrücklich nicht tut
+
+- **Keine Athleten anlegen** – Untermenü „Sportler", Phase 4 (7.2).
+- **Nicht nach `lsg_win` schreiben.** Gesamtsiege bleiben vorerst Handarbeit,
+  wie in 6.5.5 entschieden. Wenn dieser Ausbaustand kommt, bekommt er ein
+  eigenes Formular auf derselben Seite – die Felder sind fast dieselben, aber
+  `lsg_win` hat mit `event` eine Spalte mehr.
+- **Keinen Bestand nachrechnen** – weder AK-Massenkorrektur noch das Auflösen
+  vorhandener Doppelzeilen (9.2).
+- **Kein CSV-Upload.** Für Massen gibt es den Import; für alles andere ist ein
+  Formular pro Ergebnis ehrlicher als eine Datei, deren Spalten niemand prüft.
+
+---
+
+
+## 8. Umsetzungsschritte
 
 - [ ] Plugin-Grundgerüst (Header, Autoloader, Activation/Deactivation-Hooks)
 - [ ] Datenmodell: Zusatztabellen `lsg_athlete_map`, `lsg_import_run`,
@@ -1814,11 +2172,15 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
   - [ ] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
   - [ ] P1 Distanz-Select geschlossen: kein Freitext, keine neuen Distanzen
+  - [ ] P1 Distanz-Select **ohne** `6h`/`12h`/`24h` – Zeitläufe halten in
+        `lsg_best.time` eine Strecke, keine Zeit (6.5.1)
   - [ ] P1 `platz` mitlesen (nur für 6.5.5)
   - [ ] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
   - [ ] P2 Block „nicht übernommene Vereine" + Vereins-Alias-Option
   - [ ] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
-  - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 337)
+  - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 377)
+  - [ ] P3 Jede `athletes_id` des Startdatensatzes gegen Name und Jahrgang
+        in `lsg_athlete` gegenlesen, bevor sie geschrieben wird
   - [ ] P3 Regel-Lookup: Modus `feld`/`egal`, leeres Feld = beliebig
   - [ ] P3 Mehrfachtreffer → `mehrdeutig`, Zeile bleibt offen
   - [ ] P3 Regel ohne Vor- und Nachname beim Anlegen ablehnen
@@ -1833,7 +2195,7 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] P4 Abgleich Athlet + Distanz + Kalenderjahr gegen `lsg_best`
   - [ ] P4 Jahr aus dem Veranstaltungsdatum, nie aus `date('Y')`
   - [ ] P4 Über Jahresgrenzen hinweg wird nie überschrieben
-  - [ ] P4 Vergleich über `lsg_bl_parse_performance()` (Zeitläufe: größer ist besser)
+  - [ ] P4 Vergleich über `lsg_bl_parse_performance()`, nicht per String-Vergleich
   - [ ] P4 Status neu / schneller / langsamer / gleich / offen
 - [ ] Gesamtsieg (Abschnitt 6.5.5) – **nur Erkennung und Markierung**
   - [ ] Platz 1 erkennen, aber ausschließlich in der Gesamtwertung
@@ -1853,14 +2215,42 @@ Zeitmessung Barth; geplant ist keiner davon.
   - [ ] Tabellen `lsg_import_run` + `lsg_import_log` in `lsg_bl_activate()`
   - [ ] Auch die Nicht-Aktionen protokollieren (`skip_*`, `konflikt`)
   - [ ] Log-Ansicht als `WP_List_Table`: Suche, Filter, zwei Ebenen
-- [ ] REST-Routen `lsg/v1/import/*` mit `current_user_can('edit_posts')`
+- [ ] REST-Routen `lsg/v1/import/*` mit
+      `permission_callback => fn() => current_user_can( LSG_BL_CAP )` –
+      **nie** eine hart notierte Capability und **nie** `__return_true` (6.10)
   - [ ] `wp_safe_remote_get()`, Host-Allowlist aus der Registry, Redirect-Prüfung
   - [ ] Rate-Limit pro Benutzer (Transient-Zähler)
   - [ ] Discovery-Cache (Transient, 15 min) – **ohne** den rotierenden `key`
   - [ ] Parse-Ergebnis in Transient (1 h), Persistenz erst bei „Übernehmen"
   - [ ] Formular-Handler und REST-Route rufen dieselbe Funktion (keine Doppel-Logik)
-- [ ] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log zuerst,
-      Sportler-/Bestenlisten-/Gesamtsieger-Pflege aus Phase 4 danach
+- [ ] Admin-Seite „Bestenliste": von Hand erfassen (Abschnitt 7)
+  - [ ] Untermenü `lsg-bestenliste-best`, Callback in `includes/admin/page-best.php`
+  - [ ] Capability `LSG_BL_CAP`, Nonce + `check_admin_referer()` in jedem Handler
+  - [ ] Athlet-Select: „Nachname, Vorname (Jahrgang)", sortiert, `<optgroup>`
+        Aktiv / Ehemalige – legt **keinen** Athleten an
+  - [ ] Distanz-Select über **alle zwölf** Codes, inkl. `6h`/`12h`/`24h`
+  - [ ] Leistungsfeld wechselt mit `lsg_bl_distance_type()`: Label, Platzhalter,
+        Prüfmuster – und wird beim Wechsel geleert
+  - [ ] Zeiten über dieselbe Normalisierung wie P1 (keine zweite Implementierung)
+  - [ ] Strecken in der Schreibweise des Bestands (`096,723 km`, drei Stellen)
+  - [ ] Eingaben ablehnen, die `lsg_bl_parse_performance()` nur über den
+        Zahlen-Fallback einfangen würde
+  - [ ] AK berechnen und **nur anzeigen**, nie als Eingabefeld
+  - [ ] AK nicht in `lsg_ak` (z.B. `m80`) → Warnung, Speichern nach Bestätigung
+  - [ ] Datum als Timestamp mit 12:00 Uhr Ortszeit
+  - [ ] Jahresbestzeit-Prüfung wie P4, aber warnend: überschreiben oder abbrechen
+  - [ ] **Keine** Option „zusätzlich anlegen" – nie zwei Zeilen je Athlet/Distanz/Jahr
+  - [ ] Zeitläufe: `better => 'higher'`, Vergleichstext „weiter" statt „schneller"
+  - [ ] Liste als `WP_List_Table`: Filter Jahr/Distanz/Geschlecht/Athlet,
+        Distanz-Sortierung nach `lsg_bl_distance_map()`, Paginierung
+  - [ ] Bearbeiten: Prüfung aus 7.3 erneut, sobald Athlet, Distanz oder Jahr wechselt
+  - [ ] Löschen einzeln, mit Rückfrage und `wp_nonce_url()`, kein Bulk-Delete
+  - [ ] Jeder Schreibvorgang ins Log: `adapter='manuell'`, `match_type='manuell'`,
+        `aktion` insert/update/**delete**, Rohfelder aus dem Formular
+  - [ ] Beim Löschen den vollständigen Datensatz protokollieren, nicht nur die ID
+  - [ ] Log-Ansicht: Filter „von Hand erfasst"
+- [ ] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log und
+      „Bestenliste" jetzt, Sportler- und Gesamtsieger-Pflege aus Phase 4 danach
 - [ ] **Keine** Event-Verwaltung: Läufe kommen ausschließlich über die URL
 - [x] ~~Frontend: Shortcode und/oder Block für die Bestenliste~~ – erledigt,
       die drei Blöcke stehen (Phase 3 der README)
@@ -1878,7 +2268,10 @@ Zeitmessung Barth; geplant ist keiner davon.
 - [ ] Zeit-Parser: DNF / DSQ / DNS / leere Zeit werden verworfen und gezählt
 - [ ] Manueller Abgleich: Top 10 einer Liste gegen die Website
 - [ ] Test mit leerer / noch nicht veröffentlichter Ergebnisliste
-- [ ] Test mit deaktiviertem Netzwerk (Cache-Fallback greift?)
+- [ ] Test mit deaktiviertem Netzwerk: Klartext-Fehlermeldung und Zustand
+      `fehler` (6.11) – **kein** Rückfall auf alte Daten. Einen
+      stale-while-error-Pfad gibt es nicht (5.2), und ein halb gefüllter
+      Import wäre schlimmer als ein sichtbarer Abbruch
 - [ ] Erkennung: Tabelle aus 6.2 als Testfälle, inkl. URL mit/ohne trailing slash,
       `#2_B45FAB`-Fragment, `runtix.com`-URL ohne `/sts/`
 - [ ] Erkennung: unbekannter Host → kein Adapter, saubere Meldung statt Fehler
@@ -1901,7 +2294,8 @@ Zeitmessung Barth; geplant ist keiner davon.
       `10 Meilen` → kein Treffer
 - [ ] Regel 171: `Pfeiffer, Wolfram` + 1961 → 171; anderer Jahrgang → kein Treffer
 - [ ] Regel 183: beliebiger Nachname + `Harry` + 1943 → 183
-- [ ] Regel 337: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 337
+- [ ] Regel 377: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 377
+      (= Schlippe-Schrieber, Gudrun; **nicht** 337 = Österle, Hans-Jörg, 1967)
 - [ ] Zwei passende Regeln → `mehrdeutig`, Zeile bleibt offen, beide IDs genannt
 - [ ] Regel nur mit Jahrgang lässt sich nicht anlegen
 - [ ] Invariante: Zeilenzahl der Tabelle == LSG-Zahl aus P2, bei jedem Import
@@ -1916,7 +2310,8 @@ Zeitmessung Barth; geplant ist keiner davon.
 - [ ] `skip_offen` steht mit Rohdaten im Log, auch wenn nichts geschrieben wurde
 - [ ] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
       Code nicht in `lsg_ak` → Warnung statt stillem Schreiben
-- [ ] P4 mit Zeitlauf (`6h`): größere Strecke gilt als „schneller"
+- [ ] Distanz-Select bietet `6h`/`12h`/`24h` **nicht** an; ein Zeitlauf-Wettbewerb
+      erzeugt die Meldung statt eines Imports
 - [ ] Datum: `17.05.2026` im Namen wird erkannt; nur `2026` → Feld unvollständig,
       Parsen gesperrt; gar nichts → Feld leer
 - [ ] race result Ettlingen: Datumsfeld bleibt leer, Hinweistext erscheint,
@@ -1933,11 +2328,35 @@ Zeitmessung Barth; geplant ist keiner davon.
 - [ ] Konflikterkennung: Bestand zwischen Parsen und Übernehmen von außen geändert
 - [ ] Log-Suche findet einen Athleten über die Rohschreibweise der Quelle
 
+Manuelle Erfassung (Abschnitt 7):
+
+- [ ] Distanz `12h` gewählt → Feld heißt „Strecke", nimmt `112,737 km` an und
+      lehnt `01:36:44` ab; bei `HM` genau umgekehrt
+- [ ] Distanzwechsel leert das Leistungsfeld (kein stehengebliebener Wert)
+- [ ] `96,723 km` wird als `096,723 km` gespeichert
+- [ ] AK aus Jahrgang 1976 bei Lauf 2026 → `m50`, angezeigt und nicht editierbar
+- [ ] Jahrgang 1943 bei Lauf 2026 → `m80`, Warnung „nicht in lsg_ak", Speichern
+      nach Bestätigung möglich
+- [ ] Athlet mit `cat = 'f'` → Code beginnt mit `w`, nicht mit `f`
+- [ ] Zweiter Eintrag für Athlet + Distanz + Jahr: Vergleich erscheint, es gibt
+      **keine** Möglichkeit, eine zweite Zeile anzulegen
+- [ ] Langsamere Leistung: Speichern erst nach ausdrücklichem Haken
+- [ ] Identische Leistung: Speichern deaktiviert
+- [ ] `12h`: `112,737 km` gegen `096,723 km` gilt als besser (nicht als kürzer)
+- [ ] Bearbeiten und dabei das Jahr ändern → Prüfung läuft gegen das neue Jahr
+- [ ] Löschen ohne gültige Nonce → abgelehnt
+- [ ] Gelöschter Datensatz steht vollständig im Log und lässt sich daraus
+      neu eintippen
+- [ ] Jede Formularaktion erzeugt genau einen `lsg_import_run` mit
+      `adapter = 'manuell'` und genau eine `lsg_import_log`-Zeile
+- [ ] Ehemalige Athleten (`active = '0'`) sind wählbar, aber getrennt gruppiert
+- [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler verweigern
+
 ---
 
-## 8. Entscheidungen und Ausbaustufen
+## 9. Entscheidungen und Ausbaustufen
 
-### 8.1 Entschieden
+### 9.1 Entschieden
 
 Festlegungen aus der Abstimmung vom 2026-08-27 – im Text jeweils an der
 zuständigen Stelle eingearbeitet, hier nur als Nachweis:
@@ -1961,6 +2380,27 @@ zuständigen Stelle eingearbeitet, hier nur als Nachweis:
       Rate-Limit, Cache) bleiben verbindlich (3.5).
 - [x] **Keine neuen Distanzen.** `lsg_bl_distance_map()` bleibt geschlossen;
       passt nichts, wird der Import abgelehnt statt die Karte erweitert (6.5.1).
+- [x] **Zeitläufe (`6h`, `12h`, `24h`) werden nicht importiert.** Dort hält
+      `lsg_best.time` eine Strecke (`112,737 km`), die Parse-Pipeline erzeugt
+      aber immer eine Zeit. Das Import-Select bietet nur die neun
+      Streckendistanzen an; erfasst werden sie über die Seite aus Abschnitt 7,
+      das Frontend zeigt sie unverändert (6.5.1).
+- [x] **Eine zweite Admin-Seite „Bestenliste" für die manuelle Erfassung**, und
+      zwar für **alle** Distanzen, nicht nur die Zeitläufe. Sie kann Anlegen,
+      Bearbeiten und Löschen; der Menüpunkt aus Phase 4 wird damit vorgezogen
+      (Abschnitt 7).
+- [x] **Manuelle Erfassung nutzt dieselbe Capability wie der Import**
+      (`LSG_BL_CAP`). Der Ausgleich für den fehlenden Trichter ist die
+      Protokollierung, nicht eine engere Rolle (7.1).
+- [x] **Die Jahresbestzeit-Regel gilt auch im Formular, aber warnend.** Es gibt
+      keine Option, eine zweite Zeile für Athlet + Distanz + Jahr anzulegen;
+      wohl aber, den vorhandenen Eintrag nach einem Vergleich zu überschreiben –
+      auch mit einer langsameren Leistung, wenn der Bestand falsch war (7.3).
+- [x] **Die Altersklasse wird immer gerechnet, nie eingegeben** – im Import wie
+      im Formular, aus Jahrgang, Veranstaltungsjahr und `cat` (6.5.3, 7.2).
+- [x] **Manuelle Aktionen laufen in dasselbe Log** (`adapter = 'manuell'`),
+      nicht in eine dritte Tabelle. Neu im Wertebereich: `aktion = 'delete'`
+      und `match_type = 'manuell'` (7.5).
 - [x] **Gesamtsieg wird erkannt und markiert, aber noch nicht geschrieben.**
       `lsg_win` bleibt vorerst Handarbeit; Log-Spalten sind schon da (6.5.5).
 - [x] **DSGVO**: keine zusätzliche Maßnahme im Plugin, die Datenschutzerklärung
@@ -1985,10 +2425,11 @@ zuständigen Stelle eingearbeitet, hier nur als Nachweis:
 - [x] **Datum und Distanz bleiben leer, wenn sie nicht eindeutig sind.** Kein
       Raten, kein stiller Ersatzwert – der Parsen-Button bleibt gesperrt, bis
       beide Felder stehen (6.5.1).
-- [x] **Weitere Untermenüs** unter `lsg-bestenliste`: Import-Log jetzt,
-      Sportler-/Bestenlisten-/Gesamtsieger-Pflege in Phase 4 (6.2).
+- [x] **Weitere Untermenüs** unter `lsg-bestenliste`: Import-Log,
+      „Zuordnungen" und „Bestenliste" jetzt, Sportler- und Gesamtsieger-Pflege
+      in Phase 4 (6.2).
 
-### 8.2 Später vorgemerkt
+### 9.2 Später vorgemerkt
 
 Bewusst nicht im ersten Wurf – die Datenstruktur ist aber jeweils schon darauf
 vorbereitet, damit später keine Migration nötig wird:
@@ -2003,17 +2444,24 @@ vorbereitet, damit später keine Migration nötig wird:
 - [ ] **Gesamtsieg nach `lsg_win` schreiben** (6.5.5). Erkennung und Markierung
       kommen jetzt, das Schreiben später. Spalten `roh_platz`, `gesamtsieg` und
       die Log-Aktion `win_insert` sind bereits vorgesehen.
-- [ ] **Phase 4 der README**: Pflege-Oberflächen für Sportler, Bestenliste und
-      Gesamtsiege, mit eigener, engerer Capability (6.2).
+- [ ] **Bestand nachrechnen.** Ändert sich der Jahrgang eines Athleten, sind
+      dessen gespeicherte `lsg_best.ak`-Werte falsch. Das Formular rechnet nur
+      die Zeile neu, die es speichert (7.4). Ein Durchlauf über den ganzen
+      Bestand – AK neu berechnen, vorhandene Doppelzeilen je Athlet/Distanz/Jahr
+      auflisten – ist ein eigener Wartungsvorgang mit Vorschau, kein
+      Formularknopf.
+- [ ] **Phase 4 der README**: Pflege-Oberflächen für Sportler und Gesamtsiege.
+      Die Bestenlisten-Pflege ist mit Abschnitt 7 vorgezogen und damit
+      erledigt.
 
-### 8.3 Offen
+### 9.3 Offen
 
 Aktuell keine offenen Punkte. Was hier neu auftaucht, gehört auch wirklich
-entschieden, bevor es in Abschnitt 7 wandert.
+entschieden, bevor es in Abschnitt 8 wandert.
 
 ---
 
-## 9. Anhang: verifizierte Requests
+## 10. Anhang: verifizierte Requests
 
 ```
 # Runtix – Ergebnisliste (HTML, 200)
