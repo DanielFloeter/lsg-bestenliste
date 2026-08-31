@@ -265,6 +265,25 @@ Das Interface trennt bewusst **Discovery** (`erkennt`, `eventLesen`,
 Abschnitt 6 arbeitet ausschließlich gegen die Discovery-Methoden und muss
 deshalb keinen einzigen Adapter namentlich kennen.
 
+Dateiablage – eine Datei je Klasse, wie bei den Admin-Seiten (6.2):
+
+```
+includes/adapters/interface-ergebnis-quelle.php
+includes/adapters/class-event-ref.php          EventRef, Wettbewerb, Liste, Ergebnis
+includes/adapters/class-raceresult-adapter.php
+includes/adapters/class-runtix-adapter.php
+includes/admin/page-import.php                 Abschnitt 6
+includes/admin/page-log.php                    6.8
+includes/admin/page-map.php                    6.5.3
+includes/admin/page-best.php                   Abschnitt 7
+```
+
+⚠ **Der Abruf gehört nicht in den Parser.** Die Adapter bekommen den fertigen
+HTML- bzw. JSON-String und geben normalisierte Zeilen zurück; `wp_safe_remote_get()`
+steht davor, in einer eigenen Funktion. Nur so lassen sich die Adapter später
+gegen eine Fixture prüfen, ohne WordPress und ohne Netz (Abschnitt 8,
+Verifikation).
+
 ### 5.1 Zielformat (Normalisierung)
 
 Angelehnt an die bereits verwendete `zieleinlauf.json` – als kanonisches
@@ -438,6 +457,13 @@ der `wp-config.php` verschiebt nur einen davon.
   in `lsg_import_run`, das Log (6.8) hält jede Aktion fest, und
   `lsg_best`-Einträge lassen sich darüber zurückverfolgen.
 
+⚠ **Diese Entscheidung hängt an der Installation, nicht am Code.** `read` hat
+jedes Konto, auch eines aus einer offenen Registrierung. Sie trägt, solange
+Konten von Hand angelegt werden – bei dieser Installation ist das so. Wird die
+Registrierung je geöffnet, ist die eine Zeile in der `wp-config.php` die
+Antwort, und sie greift für Import *und* manuelle Erfassung gleichzeitig. Genau
+dafür gibt es nur eine Konstante.
+
 ### 6.3 Schritt 1: URL → Adapter-Erkennung
 
 Ein Textfeld nimmt die URL entgegen. Serverseitig entscheidet **nicht** eine
@@ -595,7 +621,9 @@ P4  Gegen lsg_best abgleichen    →  Status je Zeile: neu / schneller / langsam
 ```
 
 Erst nach P4 entsteht die Übernahme-Oberfläche (6.6). Bis dahin wird **nichts**
-geschrieben; das Zwischenergebnis liegt im Transient aus 6.4.
+geschrieben; das Zwischenergebnis liegt im **Parse-Transient** (1 h, 6.10) –
+nicht im Discovery-Cache aus 6.4, der nur die Wettbewerbs- und Listennamen hält.
+Zwei getrennte Caches mit zwei Lebensdauern, nicht einer.
 
 An zwei Stellen braucht der Import eine Übersetzung zwischen dem, was die
 Quelle schreibt, und dem, was die Datenbank kennt:
@@ -673,6 +701,13 @@ Altersklasse: Runtix `col-ageclass` = `M 30` / `W 45`, race result
 Klassen-Codes → `m` / `w`, gemappt auf die Plugin-Konvention `m` / `f`
 (`lsg_athlete.cat`). Fehlt die Klasse: leer lassen, in P3 aus dem gefundenen
 Athletendatensatz übernehmen.
+
+⚠ Für die Altersklasse ist dieses Feld **nicht** maßgeblich – die rechnet sich
+in jedem Fall aus `lsg_athlete.cat` (6.5.3). Einen Zweck hat es trotzdem:
+Weicht das Geschlecht der Quelle vom zugeordneten Athleten ab, ist das ein
+starker Hinweis auf eine Fehlzuordnung – „die Quelle sagt W, der zugeordnete
+Athlet ist m" trifft man selten zufällig. Die Zeile wird deshalb nicht
+abgelehnt, aber in der Vorschau markiert.
 
 **Zeit** – Nettozeit hat Vorrang. race result führt sie je nach Liste als
 eigenes Feld (`Netto`, `Nettozeit`, `Net`, `Chip`); der Adapter sucht diese
@@ -1550,12 +1585,31 @@ Nicht angehakte Zeilen erzeugen `skip_abgewaehlt` im Log – auch das ist eine
 Information: man sieht später, dass ein Ergebnis gesehen und bewusst nicht
 übernommen wurde, statt zu rätseln, ob es je da war.
 
+⚠ Eine angehakte `langsamer`-Zeile schreibt hier **nichts** – anders als im
+Formular aus 7.3, wo sich ein falscher Bestand nach ausdrücklicher Bestätigung
+auch mit einer langsameren Leistung ersetzen lässt. Der Unterschied ist
+gewollt: Im Import stehen vierzig Zeilen zur Auswahl, und ein versehentlich
+gesetzter Haken darf keine Bestzeit verschlechtern. Wer einen falschen Bestand
+korrigieren will, tut das dort, wo eine Leistung einzeln vor Augen steht – die
+Meldung an der Zeile sagt das auch so: *„Der Bestand bleibt. Korrektur unter
+‚Bestenliste'."*
+
 Umsetzungsdetails:
 
 - Der Statusvergleich aus P4 wird **unmittelbar vor dem Schreiben wiederholt**.
   Zwischen Parsen und Übernehmen liegt eine Benutzerentscheidung, in der eine
   zweite Person denselben Import gemacht haben kann. Weicht der Status ab, wird
   die Zeile nicht geschrieben, sondern als `konflikt` gemeldet.
+
+  ⚠ „Abweichung" heißt: von **außen** geändert. Innerhalb eines Vorgangs ändert
+  sich der Status planmäßig – hakt jemand zwei Zeilen desselben Athleten auf
+  derselben Distanz an (6.5.4, Staffel plus Einzellauf), steht die zweite nach
+  dem Schreiben der ersten zwangsläufig auf `langsamer` oder `gleich`. Das ist
+  kein Konflikt, sondern das erwartete Ergebnis, und wird als `skip_langsamer`
+  bzw. `skip_gleich` protokolliert. Verglichen wird deshalb gegen den Stand zu
+  Beginn des Schreibvorgangs **plus die eigenen Schreibvorgänge**, nicht gegen
+  die Datenbank von vorhin. Ohne diese Unterscheidung meldet der erste Import
+  mit einer Staffel einen Konflikt, den es nicht gibt.
 - Alle Schreibvorgänge eines Klicks laufen in **einer Transaktion**
   (`START TRANSACTION` / `COMMIT`), damit ein Fehler in der Mitte keinen halben
   Import hinterlässt. Voraussetzung InnoDB – bei MyISAM greift das nicht, dann
@@ -1640,6 +1694,41 @@ CREATE TABLE lsg_import_log (
   KEY suche (roh_name, roh_vorname)
 ) ;
 ```
+
+⚠ **Diese Tabellen entstehen nicht durch die Aktivierung.** `lsg_bl_activate()`
+hängt an `register_activation_hook()` und läuft auf einer Installation, auf der
+das Plugin bereits aktiv ist, kein zweites Mal. Die drei neuen Tabellen kämen
+dort also nie an – und der Fehler zeigt sich erst beim ersten Import, als
+„Table doesn't exist". Es braucht eine Schema-Version:
+
+```php
+define( 'LSG_BL_DB_VERSION', 2 );
+
+add_action( 'admin_init', function () {
+    if ( (int) get_option( 'lsg_bl_db_version' ) === LSG_BL_DB_VERSION ) {
+        return;
+    }
+    lsg_bl_install_schema();          // dieselbe Funktion wie bei der Aktivierung
+    update_option( 'lsg_bl_db_version', LSG_BL_DB_VERSION );
+} );
+```
+
+Der Aktivierungs-Hook ruft dieselbe `lsg_bl_install_schema()` auf: eine
+Definition der Tabellen, zwei Einstiegspunkte. `dbDelta()` ist idempotent, ein
+überflüssiger Durchlauf kostet nichts.
+
+⚠ Zwei `dbDelta()`-Eigenheiten, die in den `CREATE TABLE`s oben noch stecken:
+
+- **Anzeigebreiten weglassen.** `int(10) UNSIGNED` und `year(4)` gibt MariaDB
+  10.11 noch so zurück, MySQL 8.0.19+ normalisiert sie zu `int unsigned` bzw.
+  `year`. `dbDelta()` vergleicht Strings – die Tabelle gilt dann bei *jedem*
+  Aufruf als geändert und bekommt endlos `ALTER TABLE`s. Für die drei neuen
+  Tabellen also `int UNSIGNED` und `year` schreiben. Der Bestand aus den
+  phpMyAdmin-Dumps bleibt davon unberührt; er wird nicht durch `dbDelta()`
+  verwaltet.
+- **Zwei Leerzeichen nach `PRIMARY KEY`**, ein `KEY` je Zeile, Feldtypen klein.
+  Die Formatvorgaben von `dbDelta()` sind wörtlich zu nehmen, sonst legt es
+  Indizes bei jedem Lauf neu an.
 
 Wertebereich `aktion` – bewusst auch die Nicht-Aktionen:
 
@@ -1739,7 +1828,7 @@ SSRF-Proxy für nicht angemeldete Besucher.
 | `/import/wettbewerbe` | GET | `adapter`, `eventId` | `{ contests:[{id,name}] }` |
 | `/import/listen` | GET | `adapter`, `eventId`, `contestId` | `{ lists:[{id,name,live}] }` |
 | `/import/parsen` | POST | `adapter`, `eventId`, `contestId`, `listId?`, `distanz`, `ort`, `datum` | `{ token, meta, trichter, zeilen[], warnungen[] }` |
-| `/import/uebernehmen` | POST | `token`, `zeilen[]` (angehakte) | `{ run_id, angelegt, aktualisiert, uebersprungen, konflikte, ergebnisse[] }` |
+| `/import/uebernehmen` | POST | `token`, `zeilen[]` (Indizes der angehakten) | `{ run_id, angelegt, aktualisiert, uebersprungen, konflikte, ergebnisse[] }` |
 
 `trichter` ist das Zählwerk aus 6.5: `{ gelesen, lsg, zugeordnet, neu,
 schneller, langsamer, gleich, offen }`.
@@ -1751,6 +1840,18 @@ erneut aus.
 
 Die Formular-Handler an `admin-post.php` rufen dieselben Funktionen auf – die
 REST-Schicht ist nur ein zweiter Eingang, keine zweite Implementierung.
+
+**Was der Client nicht bestimmt** (ebenso wenig optional): `/import/uebernehmen`
+bekommt `token` und die Auswahl – und zwar als **Zeilenindizes**, nicht als
+Daten. Athlet, Zeit, Distanz, Datum und Status kommen ausschließlich aus dem
+Parse-Transient, den der Server selbst geschrieben hat. Sonst wäre die Route
+mit einer Capability, die jeder angemeldete Benutzer hat, ein freier
+Schreibzugriff auf `lsg_best`: Man schickt eine beliebige `athletes_id` mit
+einer beliebigen Zeit, ohne dass je eine Ergebnisliste im Spiel war.
+
+Dazu gehört, dass **das `token` an die `user_id` gebunden** und beim Übernehmen
+gegengeprüft wird. Ein Transient-Schlüssel, den ein zweiter Benutzer erraten
+oder mitlesen kann, öffnet dieselbe Lücke wieder.
 
 **SSRF-Absicherung** (nicht optional):
 
@@ -2116,9 +2217,33 @@ Vorgangsübersicht so aussehen, als wäre etwas gelesen und gefiltert worden.
 
 ## 8. Umsetzungsschritte
 
+Geschnitten nach Meilensteinen. Jeder endet mit etwas, das man ausprobieren
+kann – das ist der Zweck der Aufteilung, sonst liegen 150 Häkchen nebeneinander
+und nichts läuft, bis alle abgehakt sind:
+
+| M | Inhalt | Fertig, wenn |
+|---|---|---|
+| M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures | eine Ettlingen-Liste kommt normalisiert aus dem Adapter |
+| M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | die Vorschau zeigt den Trichter – geschrieben wird noch nichts |
+| M3 | P3, P4, Übernahme, Log + Log-Ansicht | ein Import landet nachvollziehbar in `lsg_best`, zweimal ausgeführt ändert nichts |
+| M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | derselbe Ablauf mit einer Runtix-URL |
+| M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | Zeitläufe und Korrekturen sind erfassbar |
+| M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | derselbe Ablauf ohne Reload |
+
+⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
+Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
+REST-Schicht parallel baut, hat zwei halbfertige Eingänge in dieselbe Logik und
+prüft am Ende keinen von beiden.
+
 - [ ] Plugin-Grundgerüst (Header, Autoloader, Activation/Deactivation-Hooks)
 - [ ] Datenmodell: Zusatztabellen `lsg_athlete_map`, `lsg_import_run`,
-      `lsg_import_log` per `dbDelta()` in `lsg_bl_activate()`
+      `lsg_import_log` per `dbDelta()` in `lsg_bl_install_schema()`
+  - [ ] Schema-Version `lsg_bl_db_version` + Upgrade auf `admin_init` – der
+        Activation-Hook läuft auf der bestehenden Installation nicht noch
+        einmal, sonst fehlen die Tabellen schlicht (6.8)
+  - [ ] Aktivierung und Upgrade rufen dieselbe Funktion
+  - [ ] Keine Anzeigebreiten (`int UNSIGNED`, `year`) – sonst wiederholte
+        `ALTER TABLE`s durch `dbDelta()` auf MySQL 8 (6.8)
 - [ ] `ErgebnisQuelle`-Interface + `Ergebnis`-Value-Object
 - [ ] `RaceResultAdapter`
   - [ ] `config` abrufen, `key` + `server` extrahieren
@@ -2260,6 +2385,22 @@ Vorgangsübersicht so aussehen, als wäre etwas gelesen und gefiltert worden.
 
 ### Verifikation
 
+⚠ **Womit geprüft wird, ist noch nicht entschieden.** Das Projekt hat bewusst
+keine Composer-Abhängigkeit und damit kein PHPUnit; die Referenzdateien liegen
+außerdem nicht mehr im Ordner (Abschnitt 10). Beides gehört geklärt, bevor die
+erste Zeile Adapter-Code entsteht – sonst bleibt diese Liste eine
+Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
+
+- [ ] Fixtures beschaffen und unter `tests/fixtures/` ins Repository legen
+      (Abschnitt 10) – sie sind der einzige Weg, die Adapter zu prüfen, ohne
+      die Portale zu treffen
+- [ ] Testrahmen festlegen: WordPress-Testsuite mit PHPUnit als reine
+      Entwicklungsabhängigkeit (nicht im Auslieferungspaket – das Plugin bleibt
+      Composer-frei), oder ein schlankes eigenes Prüfskript unter `tests/`
+- [ ] Parser so schneiden, dass sie einen String entgegennehmen und keine
+      WordPress-Funktion brauchen (5) – dann laufen die Adapter-Tests ohne
+      WordPress und ohne Netz
+
 - [ ] Unit-Test `RaceResultAdapter` gegen Referenz-Fixture (658 Zeilen Ettlingen)
 - [ ] Unit-Test `RuntixAdapter` gegen gespeicherte HTML-Fixture
 - [ ] Beide Adapter → identisches Zielschema (Contract-Test)
@@ -2376,8 +2517,10 @@ zuständigen Stelle eingearbeitet, hier nur als Nachweis:
       mitgeführt und protokolliert (6.5.1).
 - [x] **Keine Anfrage bei Runtix/CodeResearch.** Ergebnislisten und Bestenliste
       sind beide öffentlich, es bleibt beim bisherigen Vorgehen. Die
-      technischen Rücksichtsmaßnahmen (eigener User-Agent, 1 Abruf/Tag,
-      Rate-Limit, Cache) bleiben verbindlich (3.5).
+      technischen Rücksichtsmaßnahmen (eigener User-Agent, Abruf nur auf
+      Anstoß, Rate-Limit 30 / 10 min, Transient-Cache) bleiben verbindlich
+      (3.5). Die frühere Angabe „1 Abruf/Tag" stammt aus dem Cron-Entwurf und
+      ist mit 5.2 hinfällig.
 - [x] **Keine neuen Distanzen.** `lsg_bl_distance_map()` bleibt geschlossen;
       passt nichts, wird der Import abgelehnt statt die Karte erweitert (6.5.1).
 - [x] **Zeitläufe (`6h`, `12h`, `24h`) werden nicht importiert.** Dort hält
@@ -2498,4 +2641,17 @@ https://my4.raceresult.com/375768/results/list?key={KEY}
 
 Die früher hier liegenden Referenzdateien `zieleinlauf.csv` / `zieleinlauf.json`
 (658 Datensätze, Ettlingen 2026) sind aktuell nicht mehr im Projektordner.
-→ Für die Contract-Tests neu erzeugen oder wieder einlegen.
+→ Für die Contract-Tests neu erzeugen oder wieder einlegen. **Das ist Vorarbeit
+für M1**, keine Aufgabe am Ende.
+
+Gebraucht werden zwei Rohantworten unter `tests/fixtures/`:
+
+```
+raceresult-375768-contest2.json   Antwort von /results/list, r=all&l=0 (658 Zeilen)
+runtix-3152-21-total.html         Antwort von /sts/10050/3152/21/total
+```
+
+Dazu je eine erwartete Ausgabe im Zielformat aus 5.1, damit der Contract-Test
+nicht nur durchläuft, sondern etwas vergleicht. Für den Runtix-Datumsweg
+zusätzlich `/sts/10020/2026` und `/sts/10021/3152` mitschneiden – sonst ist
+genau der Teil ungetestet, der zwei Fremdrequests auslöst.
