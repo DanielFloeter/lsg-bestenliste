@@ -5,8 +5,17 @@
 >
 > Stand der Recherche: 2026-08-26 (live gegen beide Systeme verifiziert)
 >
-> Stand der Prüfung gegen den Bestand: 2026-08-31 – Distanzen, Altersklassen
+> Stand der Prüfung gegen den Bestand: 2026-09-01 – Distanzen, Altersklassen
 > und die Athleten-IDs der Startregeln sind gegen `assets/*.sql` gegengelesen.
+> Dabei sind Datenfehler im Bestand aufgefallen (Doppelzeilen, uneinheitliche
+> Schreibweisen, Lücken in `lsg_ak`). Sie sind als Vorarbeiten V1/V2 in
+> Abschnitt 8 aufgenommen und im Skript
+> `maintenance/2026-09-01-bestand-bereinigung.sql` ausformuliert.
+>
+> Stand der Bereinigung: 2026-09-01 – V1 und der Pflichtteil von V2 sind von
+> Hand ausgeführt. Die Dumps in `assets/*.sql` bleiben absichtlich auf dem
+> Stand **davor**: sie sind der Ausgangszustand, gegen den dieser Plan geprüft
+> wurde. Maßgeblich für weitere Auswertungen ist die Datenbank.
 
 ---
 
@@ -716,14 +725,23 @@ Bruttozeit. Runtix liefert nur eine Zeit. Welche es war, wird in `zeit_typ`
 mitgeführt und im Log festgehalten – sonst vergleicht man später Netto gegen
 Brutto, ohne es zu merken.
 
-Normalisierung auf das Format von `lsg_best.time` (`varchar(15)`, `HH:MM:SS`):
+Normalisierung auf das Format von `lsg_best.time` (`varchar(15)`, `HH:MM:SS`).
+Die Quellen liefern **vier** Schreibweisen, nicht zwei – die Stundenangabe
+fehlt bei kurzen Distanzen, und Zehntel können an beiden Formen hängen:
 
 ```
-1:13:08      →  01:13:08
-01:11:54.9   →  01:11:55     Zehntel aufgerundet (World-Athletics-Regel)
-38:57        →  00:38:57
+1:13:08      →  01:13:08     HH:MM:SS, führende Null ergänzen
+01:11:54.9   →  01:11:55     HH:MM:SS.t, Zehntel aufgerundet
+38:57        →  00:38:57     MM:SS
+18:57,3      →  00:18:58     MM:SS.t – Komma als Dezimaltrenner kommt vor
 DNF/DSQ/DNS  →  Zeile verwerfen, in P1-Warnungen zählen
 ```
+
+⚠ **`MM:SS.t` ist der Fall, der leicht durchrutscht.** Ein 5-km-Lauf wird oft
+ohne Stundenangabe, aber mit Zehntel ausgegeben. Wer nur `HH:MM:SS.t` und
+`MM:SS` getrennt behandelt, verliert diese Zeit oder speichert sie ungerundet.
+Deshalb: **eine** Funktion, alle vier Formen, und die Zehntel werden
+abgetrennt, *bevor* über HH:MM:SS oder MM:SS entschieden wird.
 
 **Entschieden:** Zehntel werden nach der World-Athletics-Regel **aufgerundet**
 (`01:11:54.1` → `01:11:55`), nicht abgeschnitten. In `lsg_best.time` landet
@@ -732,18 +750,59 @@ Originalzeit inklusive Zehntel bleibt im Log (`roh_zeit`) erhalten, falls
 später doch einmal jemand nachrechnen will.
 
 ```php
-// Aufrunden auf volle Sekunden, ohne Float-Rundungsfehler
-if ( preg_match( '/^(\d{1,3}):([0-5]\d):([0-5]\d)[.,](\d+)$/', $raw, $m ) ) {
-    $sek = (int) $m[1] * 3600 + (int) $m[2] * 60 + (int) $m[3];
-    if ( (int) $m[4] > 0 ) {          // jede Zehntelstelle > 0 rundet auf
-        $sek++;
+/**
+ * Roh-Zeit einer Quelle → 'HH:MM:SS', oder '' wenn nicht verwertbar.
+ * Dieselbe Funktion benutzt das Formular aus Abschnitt 7 (7.2).
+ */
+function lsg_bl_zeit_normalisieren( string $raw ): string {
+    $raw = trim( $raw );
+
+    // DNF / DSQ / DNS / leer → keine Zeit. Der Aufrufer zählt sie.
+    if ( '' === $raw || preg_match( '/^(dnf|dsq|dns|--?)$/i', $raw ) ) {
+        return '';
     }
+
+    // 1. Zehntel abtrennen – vor jeder weiteren Entscheidung.
+    $auf = 0;
+    if ( preg_match( '/^(.*?)[.,](\d+)$/', $raw, $m ) ) {
+        $raw = $m[1];
+        if ( '' !== ltrim( $m[2], '0' ) ) {   // jede Stelle > 0 rundet auf
+            $auf = 1;
+        }
+    }
+
+    // 2. HH:MM:SS oder MM:SS – beide Formen, danach identische Rechnung.
+    if ( preg_match( '/^(\d{1,3}):([0-5]\d):([0-5]\d)$/', $raw, $m ) ) {
+        $sek = (int) $m[1] * 3600 + (int) $m[2] * 60 + (int) $m[3];
+    } elseif ( preg_match( '/^(\d{1,3}):([0-5]\d)$/', $raw, $m ) ) {
+        $sek = (int) $m[1] * 60 + (int) $m[2];
+    } else {
+        return '';
+    }
+
+    $sek += $auf;
+
+    return sprintf( '%02d:%02d:%02d',
+        intdiv( $sek, 3600 ), intdiv( $sek % 3600, 60 ), $sek % 60 );
 }
 ```
 
 ⚠ `ceil()` auf einem Float wäre hier falsch: `(float) '54.9'` ist nicht exakt
 darstellbar, und bei `.0` würde ein Rundungsfehler eine Sekunde erfinden.
-Deshalb der Vergleich auf dem Nachkommastring.
+Deshalb der Vergleich auf dem Nachkommastring – und deshalb prüft
+`ltrim( $m[2], '0' )` auf den String, nicht `(int) $m[2] > 0`: bei `.000`
+ist beides gleich, bei einer Quelle mit Millisekunden (`.004`) nicht.
+
+⚠ Das Aufrunden über die Minuten- und Stundengrenze fällt durch die Rechnung
+in Sekunden von selbst richtig aus: `01:11:59.9` wird zu `01:12:00`, nicht zu
+`01:11:60`. Ein Zusammensetzen aus den Einzelgruppen täte das nicht.
+
+⚠ **Kein Rückfall auf den Zahlen-Fallback.** Was diese Funktion nicht erkennt,
+liefert `''` und die Zeile wird verworfen und gezählt – sie wird nicht
+irgendwie interpretiert. Der tolerante Zweig in `lsg_bl_parse_performance()`
+ist für die historischen Tippfehler im Bestand da (und nach Vorarbeit V1,
+Abschnitt 8, auch dort nicht mehr nötig); über den Import darf kein neuer
+dazukommen.
 
 **Distanz, Datum und Ort** kommen *nicht* aus der Zeile, sondern aus dem
 Wettbewerb. Sie gelten für den gesamten Import (ein Vorgang = eine Liste) und
@@ -1071,12 +1130,24 @@ Importdatum als Ersatz. `lsg_best.date` wird in der Bestenliste als TT.MM.JJJJ
 ausgegeben – ein erfundener Tag wäre dort eine sichtbare Falschangabe. Fehlen
 Tag und Monat, bleibt das Feld unvollständig und der Parsen-Button gesperrt.
 
-⚠ **Als Timestamp mit 12:00 Uhr Ortszeit speichern**, nicht mit 00:00:
-`mktime( 12, 0, 0, $m, $d, $y )`. Bei Mitternacht kann die Zeitzonenrechnung
-von `date_i18n()` den Tag um eins verschieben, und dann steht in der
-Bestenliste der Vortag. Der Bestand in `lsg_best.date` ist ein `int`-Timestamp,
-die Uhrzeit wird nirgends ausgegeben – 12:00 kostet nichts und verhindert genau
-diesen Fehler.
+⚠ **Als Timestamp mit 12:00 Uhr Ortszeit speichern**, nicht mit 00:00 – und
+zwar über `wp_timezone()`, nicht über `mktime()`:
+
+```php
+$ts = ( new DateTimeImmutable(
+    sprintf( '%04d-%02d-%02d 12:00:00', $y, $m, $d ), wp_timezone()
+) )->getTimestamp();
+```
+
+Zwei Fehler stecken hier übereinander. Der erste: Bei Mitternacht kann die
+Zeitzonenrechnung den Tag um eins verschieben, und dann steht in der
+Bestenliste der Vortag – genau so liegen sechs Altfälle im Bestand (6.5.4).
+Der zweite: WordPress setzt die PHP-Zeitzone auf UTC, `mktime( 12, 0, 0, … )`
+liefert also 12:00 **UTC**. In Mitteleuropa ist das derselbe Tag, der Wert
+wäre damit brauchbar – aber er ist nicht das, was hier steht, und auf einer
+Installation mit anderer Zeitzone bricht die Annahme. Der Bestand in
+`lsg_best.date` ist ein `int`-Timestamp, die Uhrzeit wird nirgends ausgegeben –
+12:00 Ortszeit kostet nichts und verhindert beides.
 
 Als Eingabefeld ein `<input type="date">` mit Textfeld-Fallback (`TT.MM.JJJJ`),
 damit die Seite ohne JavaScript bedienbar bleibt (6.9). Dazu drei
@@ -1190,23 +1261,31 @@ Bestenliste sieht man dem Eintrag nichts an.
 Daraus folgt das Tabellenmodell: leeres Feld = beliebig, plus ein Modus für
 den feldunabhängigen Vergleich.
 
-```sql
-CREATE TABLE lsg_athlete_map (
-  id           int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  tstamp       int(10) UNSIGNED NOT NULL DEFAULT 0,
-  athletes_id  int(10) UNSIGNED NOT NULL,             -- Ziel in lsg_athlete
-  born         year(4)      NOT NULL DEFAULT 0000,    -- Pflicht, immer
+```php
+$sql = "CREATE TABLE {$t_map} (
+  id           int UNSIGNED NOT NULL AUTO_INCREMENT,
+  tstamp       int UNSIGNED NOT NULL DEFAULT 0,
+  athletes_id  int UNSIGNED NOT NULL,                 -- Ziel in lsg_athlete
+  born         year         NOT NULL,                 -- Pflicht, immer
   vorname      varchar(30)  NOT NULL DEFAULT '',      -- normalisiert; '' = beliebig
   nachname     varchar(30)  NOT NULL DEFAULT '',      -- normalisiert; '' = beliebig
   modus        varchar(8)   NOT NULL DEFAULT 'feld',  -- 'feld' | 'egal'
   aktiv        tinyint(1)   NOT NULL DEFAULT 1,
   notiz        varchar(255) NOT NULL DEFAULT '',      -- warum es diese Regel gibt
-  user_id      bigint(20) UNSIGNED NOT NULL DEFAULT 0,
+  user_id      bigint UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY  (id),
   KEY lookup (born, aktiv),
   KEY athlete (athletes_id)
-) ;
+) {$charset_collate};";
 ```
+
+⚠ Die Blöcke hier und in 6.8 sind bereits so geschrieben, wie `dbDelta()` sie
+braucht – siehe die Regeln am Ende von 6.8. Wer sie kopiert, kopiert also
+keine Fallstricke mit: `$t_map` kommt aus `lsg_bl_table( 'lsg_athlete_map' )`,
+`$charset_collate` aus `$wpdb->get_charset_collate()`, und die Feldtypen
+tragen keine Anzeigebreiten. `born` bekommt bewusst **kein**
+`DEFAULT 0000` – der Jahrgang ist Pflicht, ein Vorgabewert lädt nur dazu ein,
+ihn wegzulassen.
 
 Bedeutung der Felder – knapp, weil daran alles hängt:
 
@@ -1370,11 +1449,34 @@ ohnehin nur ein `year(4)`.
 
 Grund für die Eigenberechnung: die Quellen benutzen eigene Klassenschemata
 (`M 30`, `1. M35`, teils Jahrgangsklassen wie `MJU20`), und der Bestand in
-`lsg_best` muss in sich konsistent bleiben. Der berechnete Code wird gegen
-`lsg_ak` validiert; existiert er dort nicht, gibt es eine Warnung statt eines
-stillen Schreibvorgangs. Weicht die berechnete Klasse von der Quelle ab, wird
-das als Hinweis angezeigt – bei einem Veranstalter, der nach Stichtag wertet,
-ist diese Abweichung erwartbar und kein Fehler.
+`lsg_best` muss in sich konsistent bleiben. Weicht die berechnete Klasse von
+der Quelle ab, wird das als Hinweis angezeigt – bei einem Veranstalter, der
+nach Stichtag wertet, ist diese Abweichung erwartbar und kein Fehler.
+
+⚠ **`lsg_ak` ist eine Anzeigeliste, keine Prüfinstanz.** Ein früherer Entwurf
+sah vor, den berechneten Code gegen `lsg_ak` zu validieren und im Zweifel zu
+warnen. Das trägt nicht: Die Tabelle kennt nur `mhk`/`whk`, `m30`–`m75` und
+`w30`–`w70`, im Bestand stehen aber längst 32 Zeilen mit `m80`, `w75`, `w80`,
+`w85` und `w90` (geprüft 2026-09-01). Eine Prüfung dagegen schlüge bei korrekt
+gerechneten Codes dauerhaft an und sagte niemandem etwas.
+
+Wozu `lsg_ak` tatsächlich dient: `lsg_bl_ak_list_for_gender()` baut daraus das
+AK-Dropdown der Frontend-Blöcke. Fehlt ein Code dort, ist die Altersklasse im
+Filter nicht auswählbar – genau das ist heute für die 32 Zeilen oben der Fall,
+ganz ohne Import.
+
+Daraus folgt das Verhalten, im Import wie im Formular (7.2):
+
+- Der berechnete Code wird **immer geschrieben**, ohne Vorbehalt und ohne
+  Bestätigungsschritt.
+- Fehlt er in `lsg_ak`, steht daneben der Hinweis *„Die Altersklasse m80 fehlt
+  in `lsg_ak` – bis sie ergänzt ist, lässt sich im Frontend nicht danach
+  filtern."* Das ist ein Hinweis auf eine Lücke in den Stammdaten, keine
+  Warnung vor dem eigenen Ergebnis.
+- Die Lücke ist am 2026-09-01 für die fünf tatsächlich vorkommenden Codes
+  geschlossen (Vorarbeit **V2**, Abschnitt 8). Offen bleibt, `lsg_ak`
+  großzügig bis `m95`/`w95` durchzuschreiben – sonst läuft die Tabelle dem
+  Bestand in ein paar Jahren wieder hinterher.
 
 #### 6.5.4 P4 – Gegen `lsg_best` abgleichen
 
@@ -1385,9 +1487,9 @@ findet innerhalb dieses Rahmens statt, und alles Weitere folgt daraus.
 
 „Ein Jahr" heißt **Kalenderjahr**, 1. Januar bis 31. Dezember, nicht die
 letzten 365 Tage. Das ist keine freie Wahl: der Bestand und die
-Frontend-Blöcke rechnen längst so (`YEAR(FROM_UNIXTIME(b.date))` in
-`lsg_bl_get_best_rows()`), und ein rollierendes Fenster würde die Jahres-
-Bestenliste in sich widersprüchlich machen.
+Frontend-Blöcke rechnen längst so (`lsg_bl_get_best_rows()` filtert nach
+Kalenderjahr – nur eben zeitzonenabhängig, siehe unten), und ein rollierendes
+Fenster würde die Jahres-Bestenliste in sich widersprüchlich machen.
 
 Für jede zugeordnete Zeile wird geprüft, ob für **denselben Athleten, dieselbe
 Distanz und dasselbe Jahr** bereits ein Eintrag existiert:
@@ -1397,13 +1499,100 @@ SELECT id, time, town, date
   FROM lsg_best
  WHERE athletes_id = %d
    AND distance    = %s
-   AND YEAR(FROM_UNIXTIME(`date`)) = %d
+   AND `date`     >= %d          -- 1. Januar 00:00 Ortszeit
+   AND `date`      < %d          -- 1. Januar 00:00 Ortszeit des Folgejahrs
 ```
 
 Das Jahr kommt aus dem **Veranstaltungsdatum** (6.5.1), nicht aus `date('Y')`
 und nicht aus dem Importzeitpunkt – ein im Januar nachgetragener Dezemberlauf
 gehört ins Vorjahr, ein Silvesterlauf am 31.12. in das Jahr, in dem er
 stattgefunden hat.
+
+⚠ **Entschieden: das Jahr wird in PHP zu einer Zeitspanne aufgelöst, nicht in
+SQL aus dem Timestamp gerechnet.** Ein früherer Entwurf schrieb hier
+`YEAR(FROM_UNIXTIME(\`date\`)) = %d`, wie es die Frontend-Abfragen heute noch
+tun. Das ist zeitzonenabhängig: `FROM_UNIXTIME()` rechnet mit der
+MySQL-Session-Zeitzone, und die ist nicht die Zeitzone der WordPress-
+Installation. Der Bestand speichert `date` als **00:00 Ortszeit** des
+Wettkampftags (5 949 von 5 951 Zeilen, geprüft 2026-09-01) – steht die
+Session auf UTC, wird daraus der Vortag, und bei einem Lauf am 1. Januar das
+**Vorjahr**.
+
+Im Bestand liegen genau sechs solche Zeilen: ids 1073, 1532, 1535, 3356, 3396,
+3972 – alle Neujahrsläufe. Die 52 Silvesterläufe am 31.12. sind unkritisch,
+dort bleibt die Verschiebung innerhalb des Jahres. `lsg_win` ist nicht
+betroffen, dort gibt es keinen Lauf am 1. Januar (Stand 2026-09-01) – die
+Abfrage wird trotzdem mit umgestellt, weil sonst dieselbe Falle offen bleibt.
+
+Die Grenzen kommen aus einer einzigen Funktion:
+
+```php
+/**
+ * Kalenderjahr → Zeitspanne [von, bis) in Unix-Timestamps, in der Zeitzone
+ * der Installation. Für jede Jahresabfrage auf lsg_best und lsg_win.
+ */
+function lsg_bl_jahr_grenzen( int $jahr ): array {
+    $tz = wp_timezone();
+    return array(
+        ( new DateTimeImmutable( sprintf( '%04d-01-01 00:00:00', $jahr ),     $tz ) )->getTimestamp(),
+        ( new DateTimeImmutable( sprintf( '%04d-01-01 00:00:00', $jahr + 1 ), $tz ) )->getTimestamp(),
+    );
+}
+```
+
+⚠ **Nicht `mktime()`.** WordPress setzt die PHP-Zeitzone auf UTC
+(`date_default_timezone_set( 'UTC' )` im Core), also liefert `mktime( 0, 0, 0,
+1, 1, $jahr )` den 1. Januar 00:00 **UTC** – und eine Zeile, die auf 00:00
+Ortszeit liegt, fällt davor. Genau der Fehler, den die Umstellung beheben soll,
+wäre damit nur von SQL nach PHP verschoben. `wp_timezone()` liefert die
+Zeitzone der Installation, `DateTimeImmutable` rechnet damit.
+
+⚠ Dieselbe Korrektur betrifft das **Speichern** in 6.5.1 und 7.3: Auch dort ist
+`mktime( 12, 0, 0, … )` unter WordPress 12:00 UTC, nicht 12:00 Ortszeit. Der
+Wert ist zwar harmlos – 12:00 UTC liegt in Mitteleuropa am selben Tag –, aber
+er ist nicht das, was dort steht. Also auch beim Schreiben
+`new DateTimeImmutable( 'JJJJ-MM-TT 12:00:00', wp_timezone() )`.
+
+⚠ **Die fünf Frontend-Abfragen werden mit umgestellt**, nicht nur die des
+Imports: `lsg_bl_get_best_years()`, `lsg_bl_get_win_years()`,
+`lsg_bl_get_best_rows()`, `lsg_bl_get_distances_present()` und
+`lsg_bl_get_win_rows()` benutzen alle `YEAR(FROM_UNIXTIME())`. Bliebe eines
+davon stehen, könnte die Bestenliste einen Lauf in einem anderen Jahr zeigen,
+als der Import ihn verglichen hat – ein Widerspruch, den niemand aufklären
+kann. Die beiden `SELECT DISTINCT YEAR(...)`-Abfragen für die Jahres-Dropdowns
+lesen nur einen Timestamp und dürfen ihn in PHP über
+`lsg_bl_year_from_timestamp()` in ein Jahr umrechnen – die Funktion gibt es
+schon und benutzt `date_i18n()`, also die richtige Zeitzone.
+
+Nebenbei ist die Zeitspanne auch die schnellere Form: `YEAR(FROM_UNIXTIME(x))`
+ist ein Funktionsaufruf auf der Spalte und schließt jeden Index aus, ein
+`BETWEEN`-Vergleich nicht.
+
+⚠ **Die Abfrage darf genau eine oder keine Zeile liefern – aber sie kann
+mehr.** Der Bestand hielt sich an diese Regel nicht durchgehend: am 2026-09-01
+gab es 26 Kombinationen aus Athlet, Distanz und Jahr mit zwei Zeilen, davon
+elf aus 2024 bis 2026. Das sind Erfassungsfehler und keine zweite Lesart der
+Tabelle; sie sind am 2026-09-01 bereinigt (Vorarbeit **V1**, Abschnitt 8).
+
+Trotzdem braucht P4 eine Regel für den Fall, sonst entscheidet die
+Sortierreihenfolge der Datenbank, welche Zeile überschrieben wird – und das
+fällt niemandem auf:
+
+```
+1 Zeile   → Normalfall, wie unten beschrieben
+0 Zeilen  → Status 'neu'
+> 1 Zeile → Bezug ist die beste der gefundenen Zeilen (lsg_bl_parse_performance()).
+            Der Status wird dagegen gebildet, geschrieben wird ausschließlich
+            in diese eine Zeile, die übrigen bleiben unangetastet.
+            Zusätzlich: Statusspalte bekommt den Zusatz
+            „Doppelzeile im Bestand (ids #…) – bitte bereinigen",
+            und der Vorgang zählt sie in lsg_import_run.note mit.
+```
+
+Kein stilles `LIMIT 1`, kein automatisches Aufräumen im Import: Der Import
+meldet den kaputten Bestand, er repariert ihn nicht. Nach V1 sollte dieser
+Zweig nie mehr greifen – genau deshalb ist er die Stelle, an der man es merken
+will, wenn er es doch tut. Dieselbe Regel gilt im Formular (7.3).
 
 Was aus dem Jahresbezug folgt – die vier Fälle, die in der Praxis vorkommen:
 
@@ -1629,19 +1818,19 @@ Einzelzeilen sind unterschiedliche Dinge; in einer Tabelle würde man die
 Vorgangs-Metadaten (URL, Event, Distanz, Benutzer) auf jeder der 40 Zeilen
 wiederholen.
 
-```sql
--- Der Vorgang: ein Datensatz je Klick auf „Übernehmen"
-CREATE TABLE lsg_import_run (
-  id            int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  tstamp        int(10) UNSIGNED NOT NULL DEFAULT 0,   -- Konvention wie lsg_best
-  user_id       bigint(20) UNSIGNED NOT NULL DEFAULT 0,
+```php
+// Der Vorgang: ein Datensatz je Klick auf „Übernehmen"
+$sql = "CREATE TABLE {$t_run} (
+  id            int UNSIGNED NOT NULL AUTO_INCREMENT,
+  tstamp        int UNSIGNED NOT NULL DEFAULT 0,       -- Konvention wie lsg_best
+  user_id       bigint UNSIGNED NOT NULL DEFAULT 0,
   adapter       varchar(32)  NOT NULL DEFAULT '',      -- 'raceresult' | 'runtix'
   source_url    varchar(255) NOT NULL DEFAULT '',
   event_id      varchar(32)  NOT NULL DEFAULT '',
   event_name    varchar(120) NOT NULL DEFAULT '',
-  event_date    int(10) UNSIGNED DEFAULT NULL,         -- = lsg_best.date
+  event_date    int UNSIGNED DEFAULT NULL,             -- = lsg_best.date
   datum_quelle  varchar(16)  NOT NULL DEFAULT '',      -- liste|ausschreibung|api|name|jahr|manuell
-  jahr          smallint(5) UNSIGNED NOT NULL DEFAULT 0, -- Vergleichsjahr aus 6.5.4
+  jahr          smallint UNSIGNED NOT NULL DEFAULT 0,  -- Vergleichsjahr aus 6.5.4
   contest_id    varchar(32)  NOT NULL DEFAULT '',      -- String! ("w")
   contest_name  varchar(120) NOT NULL DEFAULT '',
   list_id       varchar(64)  NOT NULL DEFAULT '',
@@ -1649,27 +1838,27 @@ CREATE TABLE lsg_import_run (
   distance      varchar(15)  NOT NULL DEFAULT '',      -- kanonischer Code
   town          varchar(30)  NOT NULL DEFAULT '',
   zeit_typ      varchar(8)   NOT NULL DEFAULT '',      -- 'netto' | 'brutto'
-  cnt_gelesen   int(10) UNSIGNED NOT NULL DEFAULT 0,   -- P1
-  cnt_lsg       int(10) UNSIGNED NOT NULL DEFAULT 0,   -- P2
-  cnt_zugeordnet int(10) UNSIGNED NOT NULL DEFAULT 0,  -- P3
-  cnt_angelegt  int(10) UNSIGNED NOT NULL DEFAULT 0,
-  cnt_aktualisiert int(10) UNSIGNED NOT NULL DEFAULT 0,
-  cnt_uebersprungen int(10) UNSIGNED NOT NULL DEFAULT 0,
-  cnt_fehler    int(10) UNSIGNED NOT NULL DEFAULT 0,
+  cnt_gelesen   int UNSIGNED NOT NULL DEFAULT 0,       -- P1
+  cnt_lsg       int UNSIGNED NOT NULL DEFAULT 0,       -- P2
+  cnt_zugeordnet int UNSIGNED NOT NULL DEFAULT 0,      -- P3
+  cnt_angelegt  int UNSIGNED NOT NULL DEFAULT 0,
+  cnt_aktualisiert int UNSIGNED NOT NULL DEFAULT 0,
+  cnt_uebersprungen int UNSIGNED NOT NULL DEFAULT 0,
+  cnt_fehler    int UNSIGNED NOT NULL DEFAULT 0,
   status        varchar(16)  NOT NULL DEFAULT '',      -- 'uebernommen'|'fehler'|'abgebrochen'
   note          text         NULL,
   PRIMARY KEY  (id),
   KEY zeit (tstamp),
   KEY event (event_id, contest_id)
-) ;
+) {$charset_collate};";
 
--- Die Zeilen: ein Datensatz je Ergebnis, auch für nicht geschriebene
-CREATE TABLE lsg_import_log (
-  id            int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  run_id        int(10) UNSIGNED NOT NULL,
-  tstamp        int(10) UNSIGNED NOT NULL DEFAULT 0,
-  athletes_id   int(10) UNSIGNED NOT NULL DEFAULT 0,   -- 0 = nicht zugeordnet
-  best_id       int(10) UNSIGNED NOT NULL DEFAULT 0,   -- betroffene Zeile in lsg_best
+// Die Zeilen: ein Datensatz je Ergebnis, auch für nicht geschriebene
+$sql .= "CREATE TABLE {$t_log} (
+  id            int UNSIGNED NOT NULL AUTO_INCREMENT,
+  run_id        int UNSIGNED NOT NULL,
+  tstamp        int UNSIGNED NOT NULL DEFAULT 0,
+  athletes_id   int UNSIGNED NOT NULL DEFAULT 0,       -- 0 = nicht zugeordnet
+  best_id       int UNSIGNED NOT NULL DEFAULT 0,       -- betroffene Zeile in lsg_best
   match_type    varchar(16) NOT NULL DEFAULT '',       -- exakt|regel|normalisiert|mehrdeutig|offen
   aktion        varchar(20) NOT NULL DEFAULT '',       -- s.u.
   distance      varchar(15) NOT NULL DEFAULT '',
@@ -1681,7 +1870,7 @@ CREATE TABLE lsg_import_log (
   roh_name      varchar(30) NOT NULL DEFAULT '',
   roh_vorname   varchar(30) NOT NULL DEFAULT '',
   roh_verein    varchar(60) NOT NULL DEFAULT '',
-  roh_jahrgang  year(4)     NOT NULL DEFAULT 0000,
+  roh_jahrgang  year        NULL DEFAULT NULL,
   roh_zeit      varchar(20) NOT NULL DEFAULT '',
   roh_startnr   varchar(16) NOT NULL DEFAULT '',
   roh_platz     varchar(8)  NOT NULL DEFAULT '',       -- Gesamtplatz, für 6.5.5
@@ -1692,8 +1881,17 @@ CREATE TABLE lsg_import_log (
   KEY athlet (athletes_id, distance),
   KEY aktion (aktion),
   KEY suche (roh_name, roh_vorname)
-) ;
+) {$charset_collate};";
 ```
+
+⚠ Kein `FOREIGN KEY` von `run_id` auf `lsg_import_run`: Der Bestand liegt auf
+MyISAM-Tabellen aus phpMyAdmin-Dumps, `dbDelta()` verwaltet keine Constraints,
+und ein Log, das beim Aufräumen an einem Fremdschlüssel scheitert, hilft
+niemandem. Der `KEY run (run_id)` reicht für den Join.
+
+⚠ `roh_jahrgang` ist `NULL`, nicht `0000`: „die Quelle nannte keinen Jahrgang"
+ist einer der drei `offen`-Gründe aus 6.5.3 und muss im Log von „Jahrgang 0"
+unterscheidbar bleiben.
 
 ⚠ **Diese Tabellen entstehen nicht durch die Aktivierung.** `lsg_bl_activate()`
 hängt an `register_activation_hook()` und läuft auf einer Installation, auf der
@@ -1717,18 +1915,44 @@ Der Aktivierungs-Hook ruft dieselbe `lsg_bl_install_schema()` auf: eine
 Definition der Tabellen, zwei Einstiegspunkte. `dbDelta()` ist idempotent, ein
 überflüssiger Durchlauf kostet nichts.
 
-⚠ Zwei `dbDelta()`-Eigenheiten, die in den `CREATE TABLE`s oben noch stecken:
+⚠ **`lsg_bl_install_schema()` enthält nur die drei neuen Tabellen** –
+`lsg_athlete_map`, `lsg_import_run`, `lsg_import_log`. Die vier Bestands-
+tabellen bleiben, wo sie sind: in `lsg_bl_activate()`, das nur bei einer
+frischen Installation etwas tut. Der Grund steht im nächsten Absatz: Ihre
+Definitionen in `lsg-bestenliste.php` schreiben `int(10) UNSIGNED`,
+`year(4)`, `varchar(1)`. Liefe das ab jetzt bei jedem Versionssprung durch
+`dbDelta()`, bekämen vier Tabellen mit 6 000 Zeilen Vereinsgeschichte bei
+jedem Durchlauf überflüssige `ALTER TABLE`s. Zwei Funktionen also, nicht eine:
+
+```php
+function lsg_bl_activate() {
+    lsg_bl_install_schema();          // die drei neuen Tabellen
+    lsg_bl_install_legacy_schema();   // die vier Bestandstabellen, nur hier
+    update_option( 'lsg_bl_db_version', LSG_BL_DB_VERSION );
+}
+```
+
+Wer die alten Definitionen später doch mitverwalten will, zieht sie vorher auf
+dieselbe Schreibweise nach (`int UNSIGNED`, `year`) – dann, und erst dann,
+dürfen sie in `lsg_bl_install_schema()`.
+
+⚠ Zwei `dbDelta()`-Eigenheiten, die in den `CREATE TABLE`s oben bereits
+berücksichtigt sind und beim Erweitern berücksichtigt bleiben müssen:
 
 - **Anzeigebreiten weglassen.** `int(10) UNSIGNED` und `year(4)` gibt MariaDB
   10.11 noch so zurück, MySQL 8.0.19+ normalisiert sie zu `int unsigned` bzw.
   `year`. `dbDelta()` vergleicht Strings – die Tabelle gilt dann bei *jedem*
-  Aufruf als geändert und bekommt endlos `ALTER TABLE`s. Für die drei neuen
-  Tabellen also `int UNSIGNED` und `year` schreiben. Der Bestand aus den
-  phpMyAdmin-Dumps bleibt davon unberührt; er wird nicht durch `dbDelta()`
-  verwaltet.
+  Aufruf als geändert und bekommt endlos `ALTER TABLE`s. Deshalb überall
+  `int UNSIGNED`, `bigint UNSIGNED`, `smallint UNSIGNED`, `year`. Einzige
+  Ausnahme: `tinyint(1)`, das MySQL als eigenen Typ führt und nicht
+  normalisiert – die Breite bleibt dort stehen.
 - **Zwei Leerzeichen nach `PRIMARY KEY`**, ein `KEY` je Zeile, Feldtypen klein.
   Die Formatvorgaben von `dbDelta()` sind wörtlich zu nehmen, sonst legt es
   Indizes bei jedem Lauf neu an.
+- Tabellennamen immer über `lsg_bl_table()`, Kollation immer über
+  `$wpdb->get_charset_collate()` – sonst legt das Plugin auf einer Installation
+  mit WordPress-Präfix (`LSG_BL_USE_WP_PREFIX`) Tabellen an, die kein anderer
+  Teil des Plugins findet.
 
 Wertebereich `aktion` – bewusst auch die Nicht-Aktionen:
 
@@ -1863,6 +2087,60 @@ oder mitlesen kann, öffnet dieselbe Lücke wieder.
 - Redirects auf nicht beanspruchte Hosts abbrechen (`redirection` begrenzen
   und Ziel-Host erneut prüfen).
 - Rate-Limit pro Benutzer: max. 30 Abrufe / 10 min (Transient-Zähler).
+
+⚠ **Die Allowlist gilt für jede abgerufene Adresse, nicht nur für die
+eingegebene.** Das ist bei race result kein Nebensatz, sondern die einzige
+Stelle, an der die Absicherung sonst ins Leere liefe: Der zweite Request geht
+nach 4.1 an den Host aus **`config.server`** – ein Wert, der aus der Antwort
+eines Fremdservers stammt und laut 4.2 tatsächlich wechselt (`my4`,
+`my-us-1`, …). Wer nur die Eingabe-URL prüft, hat eine Allowlist, die genau
+den Request nicht abdeckt, der die Daten holt.
+
+Deshalb: **jede** URL läuft durch dieselbe Funktion, bevor sie abgerufen wird –
+die eingegebene, die aus `config.server` gebaute, und das Ziel jedes
+Redirects. Der Adapter liefert dafür die Hosts, die er beansprucht:
+
+```php
+/** Hosts, die dieser Adapter abrufen darf. Wildcard nur als Suffix. */
+public static function hosts(): array;   // z.B. array( '*.raceresult.com', 'raceresult.com' )
+
+/**
+ * Zentrale Torwächter-Funktion. Jeder Abruf im Plugin geht hier durch,
+ * ohne Ausnahme – auch der zweite Request eines Adapters.
+ */
+function lsg_bl_url_erlaubt( string $url, string $adapter_cls ): bool {
+    $teile = wp_parse_url( $url );
+    if ( empty( $teile['scheme'] ) || ! in_array( $teile['scheme'], array( 'http', 'https' ), true ) ) {
+        return false;
+    }
+    if ( empty( $teile['host'] ) ) {
+        return false;
+    }
+    $host = strtolower( $teile['host'] );
+    foreach ( $adapter_cls::hosts() as $muster ) {
+        $muster = strtolower( $muster );
+        if ( 0 === strpos( $muster, '*.' ) ) {
+            $suffix = substr( $muster, 1 );            // '.raceresult.com'
+            if ( substr( $host, -strlen( $suffix ) ) === $suffix ) {
+                return true;
+            }
+        } elseif ( $host === $muster ) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+⚠ Das Suffix-Muster muss mit dem Punkt beginnen (`.raceresult.com`), sonst
+passt auch `boeseraceresult.com`. Und die Prüfung läuft auf dem Host, nie auf
+der ganzen URL – `https://angreifer.example/?x=my.raceresult.com` enthält den
+erlaubten Namen, ist aber eine fremde Adresse.
+
+Passt `config.server` nicht, wird **abgebrochen**, nicht auf
+`my.raceresult.com` zurückgefallen: Ein Adapter, dessen Portal plötzlich auf
+einen fremden Host verweist, hat ein Problem, das eine Meldung verdient und
+keine stille Ersatzroute.
 
 ### 6.11 Zustände der Oberfläche
 
@@ -2018,7 +2296,7 @@ warum diese Seite die Zeitläufe kann und der Import nicht:
 | `lsg_bl_distance_type()` | Distanzen | Label | Eingabe | Beispiel |
 |---|---|---|---|---|
 | `time` | `5km` … `100km`, `HM`, `Marathon` | „Zeit" | `HH:MM:SS` | `01:36:44` |
-| `distance` | `6h`, `12h`, `24h` | „Strecke" | `NNN,NNN km` | `112,737 km` |
+| `distance` | `6h`, `12h`, `24h` | „Strecke" | `N,NNN km` bis `NNN,NNN km` | `96,723 km`, `112,737 km` |
 
 Beides landet in derselben Spalte `lsg_best.time` – so ist der Bestand
 aufgebaut, und `lsg_bl_parse_performance()` liest beides bereits richtig. Das
@@ -2034,12 +2312,24 @@ Regeln für das Feld:
 - **Zeiten** werden wie beim Import normalisiert (6.5.1): `1:13:08` → `01:13:08`,
   `38:57` → `00:38:57`, Zehntel nach World-Athletics-Regel aufgerundet. Dieselbe
   Funktion, nicht eine zweite Implementierung.
-- **Strecken** werden in der Schreibweise des Bestands gespeichert: drei
-  Vorkommastellen mit führenden Nullen, Komma, drei Nachkommastellen, Leerzeichen,
-  `km` – also `096,723 km`, nicht `96,723 km`. Der Bestand ist durchgehend so
-  geschrieben, und eine einzelne abweichende Zeile fällt in der Tabellenspalte
-  sofort auf. Für die Sortierung ist es unerheblich:
-  `lsg_bl_parse_performance()` liest die Zahl, nicht den String.
+- **Strecken** werden als Kilometerzahl mit **drei Nachkommastellen**
+  gespeichert, Komma als Dezimaltrenner, Leerzeichen, `km` – also `96,723 km`
+  und `112,737 km`.
+
+  ⚠ **Entschieden: keine führende Null.** Ein früherer Entwurf verlangte drei
+  Vorkommastellen (`096,723 km`) mit der Begründung, der Bestand sei
+  durchgehend so geschrieben. Das stimmt nicht: von 199 Zeitlauf-Zeilen
+  entsprachen 173 der Form ohne Auffüllung, nur 23 trugen eine führende Null
+  (geprüft 2026-09-01). Die Auffüllung wird nicht erzeugt, und die 23
+  Altzeilen werden auf dieselbe Form gebracht (V1, Abschnitt 8) – die Spalte
+  ist danach einheitlich, und `96,723 km` ist die einzige gültige Schreibweise.
+  Das Prüfmuster des Formulars lehnt eine führende Null ab.
+
+  Die drei Nachkommastellen bleiben dagegen Pflicht: sie sind die Auflösung,
+  in der die Veranstalter messen, und `64,16 km` neben `112,737 km` liest sich
+  wie zwei verschiedene Genauigkeiten. Für die Sortierung ist beides
+  unerheblich – `lsg_bl_parse_performance()` liest die Zahl, nicht den
+  String –, für die Tabellenspalte nicht.
 - **Abgelehnt wird alles, was der Parser nur über den Zahlen-Fallback
   einfangen würde.** Dieser Fallback existiert für die historischen Tippfehler im
   Bestand; über das Formular darf kein neuer dazukommen.
@@ -2063,10 +2353,13 @@ Lauf 2026)"*. Man soll sehen, was gespeichert wird, ohne es ändern zu können;
 ⚠ **Nicht jeder gerechnete Code steht in `lsg_ak`.** Die Tabelle kennt
 `mhk`/`whk` und `m30`–`m75` bzw. `w30`–`w70`. Ein Athlet des Jahrgangs 1943
 ergibt bei einem Lauf 2026 `m80` – das ist kein Randfall, sondern ein aktiver
-Datensatz. Verhalten wie beim Import: **Warnung, keine Sperre.** Das Formular
-zeigt *„Die Altersklasse m80 steht nicht in `lsg_ak` – bitte dort ergänzen"*,
-speichert aber auf ausdrückliche Bestätigung. Ein Ergebnis zu verlieren, weil
-eine Stammdatentabelle nicht nachgezogen wurde, wäre die schlechtere Antwort.
+Datensatz, und im Bestand stehen bereits 32 solche Zeilen. Verhalten wie beim
+Import (6.5.3): **speichern, ohne Rückfrage.** Daneben der Hinweis *„Die
+Altersklasse m80 fehlt in `lsg_ak` – bis sie ergänzt ist, lässt sich im
+Frontend nicht danach filtern."* `lsg_ak` ist die Anzeigeliste des
+AK-Dropdowns, nicht die Instanz, die über die Richtigkeit eines Ergebnisses
+entscheidet; ein Bestätigungsschritt an dieser Stelle wäre eine Rückfrage, die
+der Mensch am Formular gar nicht beantworten kann.
 
 ### 7.3 Jahresbestzeit-Prüfung – warnend, nicht sperrend
 
@@ -2083,8 +2376,18 @@ SELECT id, time, town, date
   FROM lsg_best
  WHERE athletes_id = %d
    AND distance    = %s
-   AND YEAR(FROM_UNIXTIME(`date`)) = %d
+   AND `date`     >= %d
+   AND `date`      < %d
 ```
+
+Grenzen aus `lsg_bl_jahr_grenzen()`, aus demselben Grund wie in 6.5.4 – kein
+`YEAR(FROM_UNIXTIME())`, kein `mktime()`.
+
+⚠ Liefert die Abfrage **mehr als eine Zeile**, gilt dieselbe Regel wie in P4
+(6.5.4): Bezug ist die beste der gefundenen Zeilen, geschrieben wird nur in
+diese, und über dem Vergleich steht *„Doppelzeile im Bestand (ids #…) – bitte
+bereinigen"*. Seit der Bereinigung (Vorarbeit **V1**, Abschnitt 8, ausgeführt
+am 2026-09-01) sollte der Fall nicht mehr auftreten.
 
 **Entschieden: geprüft und gewarnt wird, gesperrt nicht.** Der Mensch am
 Formular weiß Dinge, die die Datenbank nicht weiß – etwa dass der vorhandene
@@ -2108,14 +2411,13 @@ dafür das Log – `lsg_best` ist keine Wettkampfhistorie (6.8).
 „Besser" heißt bei Zeitläufen **größer**. Das entscheidet
 `lsg_bl_parse_performance()` über `better`; hier wird der Zweig `'higher'`
 tatsächlich erreicht, anders als im Import (6.5.4). Für `12h` ist
-`112,737 km` besser als `096,723 km`, und der Vergleichstext heißt dann
+`112,737 km` besser als `96,723 km`, und der Vergleichstext heißt dann
 *„weiter"* statt *„schneller"*.
 
 ⚠ Das Jahr kommt aus dem **eingegebenen Veranstaltungsdatum**, nie aus
 `date('Y')` – ein im Januar nachgetragener Dezemberlauf gehört ins Vorjahr.
-Gespeichert wird der Timestamp mit **12:00 Uhr Ortszeit** (`mktime(12,0,0,…)`),
-aus demselben Grund wie in 6.5.1: Bei Mitternacht kann `date_i18n()` den Tag um
-eins verschieben.
+Gespeichert wird der Timestamp mit **12:00 Uhr Ortszeit** über
+`wp_timezone()`, nicht über `mktime()`, aus demselben Grund wie in 6.5.1.
 
 ### 7.4 Liste, Bearbeiten, Löschen
 
@@ -2219,11 +2521,81 @@ Vorgangsübersicht so aussehen, als wäre etwas gelesen und gefiltert worden.
 
 Geschnitten nach Meilensteinen. Jeder endet mit etwas, das man ausprobieren
 kann – das ist der Zweck der Aufteilung, sonst liegen 150 Häkchen nebeneinander
-und nichts läuft, bis alle abgehakt sind:
+und nichts läuft, bis alle abgehakt sind.
+
+**Davor standen zwei Vorarbeiten am Bestand.** Sie gehören nicht in „später
+vorgemerkt" (9.2): V1 ist die Voraussetzung dafür, dass P4 und 7.3 überhaupt
+auf einer eindeutigen Zeile arbeiten, V2 dafür, dass die Ergebnisse hinterher
+im Frontend auffindbar sind. Beide sind einmalige SQL-Vorgänge, kein Code.
+
+| V | Inhalt | Stand | Spätestens vor |
+|---|---|---|---|
+| V1 | Doppelzeilen, Schreibweisen und Datenfehler in `lsg_best` bereinigen | **erledigt 2026-09-01**, Skript von Hand ausgeführt | M3 |
+| V2 | `lsg_ak` bis `m95`/`w95` durchschreiben | **teilweise** – die fünf im Bestand vorkommenden Codes (`m80`, `w75`, `w80`, `w85`, `w90`) sind eingetragen; `m85`, `m90`, `m95`, `w95` fehlen noch | M3 |
+
+Die Anweisungen dafür liegen als kommentiertes Skript im Repository:
+`maintenance/2026-09-01-bestand-bereinigung.sql`. **Es ist am 2026-09-01 von
+Hand ausgeführt worden** und bleibt als Protokoll liegen – es dokumentiert, was
+am Bestand geändert wurde, und die Gegenproben in seinem Abschnitt 7 lassen
+sich jederzeit erneut laufen lassen.
+
+⚠ **Die Dumps in `assets/*.sql` sind damit veraltet.** Sie zeigen den Stand
+*vor* der Bereinigung. Wer eine spätere Prüfung gegen sie fährt, findet die
+26 Doppelzeilen und die Schreibweisen erneut und hält sie für offen. Vor der
+nächsten Auswertung also neu exportieren – oder direkt gegen die Datenbank
+arbeiten.
+
+Zwei Stellen waren im Skript auskommentiert und sind nachgezogen worden:
+Abschnitt 5 (`DELETE` der Leerzeile id 6556) ist ausgeführt, und für
+Abschnitt 3b ist entschieden – **keine führenden Nullen bei den Zeitläufen**,
+die 23 Altzeilen werden angeglichen. Der Block ist deshalb nicht mehr
+optional, sondern aktiver Bestandteil des Skripts.
+
+⚠ **Ein Punkt bleibt: die Dublettenprüfung gehört wiederholt.** Die Liste in
+Abschnitt 1 wurde gegen `date = 0` erzeugt, id 1649 bekam ihr Datum erst
+danach. Athlet 288 (Scholz, Steffen, 1970) hat 10-km-Jahresbestzeiten in fünf
+Jahren, und `00:38:57` aus id 1649 trifft je nach Jahr anders:
+
+| Jahr | vorhandene Zeile | Leistung | Folge |
+|---|---|---|---|
+| 2013 | id 1646, Rheinzabern | 00:36:37 | Bestand ist schneller → id 1649 entfällt |
+| 2014 | id 1647, Dillenburg | 00:37:42 | Bestand ist schneller → id 1649 entfällt |
+| 2015 | id 1648, Stutensee-Blankenl. | 00:40:56 | id 1649 ist schneller → id 1648 entfällt |
+| 2016 | id 4419, Stutensee-Büchig | 00:44:03 | id 1649 ist schneller → id 4419 entfällt |
+| 2017 | id 4745, Stutensee-Blankenloch | 00:39:44 | id 1649 ist schneller → id 4745 entfällt |
+
+Jedes andere Jahr: keine Dublette, id 1649 bleibt als einzige Zeile stehen.
+
+⚠ **Die Dumps in `assets/*.sql` bleiben absichtlich auf dem Stand vor der
+Bereinigung.** Sie sind der Ausgangszustand, gegen den dieser Plan geprüft
+wurde, und in dieser Rolle nützlich. Für eine spätere Auswertung sind sie
+damit aber nicht mehr maßgeblich – wer die Zahlen in diesem Abschnitt gegen
+sie nachrechnet, findet die 26 Doppelzeilen und die Schreibweisen erneut und
+hält sie für offen. Maßgeblich ist die Datenbank.
+
+Was V1 im Einzelnen umfasste (Ausgangsstand 2026-09-01, 5 951 Zeilen):
+
+| Befund | Umfang | Behandlung |
+|---|---|---|
+| zwei Zeilen für Athlet + Distanz + Jahr | 26 Gruppen, davon 11 aus 2024–2026 | die bessere Leistung bleibt, die schlechtere entfällt |
+| Zeit nicht als `HH:MM:SS` (`01:33.38`, `4:02:19`, `59:24`, `01:32:35.`) | 18 Zeilen | auf `HH:MM:SS` vereinheitlichen |
+| Strecke nicht als `N,NNN km` (führendes Leerzeichen, zu wenig Nachkommastellen) | 3 Zeilen (ids 4194, 4242, 6296) | korrigieren |
+| Strecke mit führender Null (`096,723 km`) | 23 Zeilen | Null entfernen – keine führenden Nullen bei Zeitläufen (7.2) |
+| `date = 0` → Jahr 1970, in keiner Jahresauswahl sichtbar | 1 Zeile (id 1649) | Datum von Hand nachgetragen |
+| Leerzeile (`distance = ''`, `00:00:00`) | 1 Zeile (id 6556) | gelöscht |
+| Lauf am 1. Januar, als 00:00 Ortszeit gespeichert → bei UTC-Session im Vorjahr | 6 Zeilen (ids 1073, 1532, 1535, 3356, 3396, 3972) | auf 12:00 Ortszeit ziehen, wie 6.5.1 es für neue Zeilen vorschreibt |
+
+⚠ Die 26 Doppelzeilen sind **Erfassungsfehler, keine zweite Lesart der
+Tabelle**. Auffällig ist die Häufung beim Halbmarathon 2024: sieben Athleten
+mit je einem Ettlingen- und einem Karlsruhe-Eintrag – das sieht nach einem
+doppelt erfassten Lauf aus. Die Bereinigung verwirft die jeweils schlechtere
+Leistung endgültig; `lsg_best` ist keine Wettkampfhistorie (6.8). Wer die
+zweiten Läufe behalten möchte, findet sie als Kommentar in Abschnitt 1 des
+Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 
 | M | Inhalt | Fertig, wenn |
 |---|---|---|
-| M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures | eine Ettlingen-Liste kommt normalisiert aus dem Adapter |
+| M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures, `tests/unit/` | `phpunit --testsuite unit` ist grün und eine Ettlingen-Liste kommt normalisiert aus dem Adapter |
 | M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | die Vorschau zeigt den Trichter – geschrieben wird noch nichts |
 | M3 | P3, P4, Übernahme, Log + Log-Ansicht | ein Import landet nachvollziehbar in `lsg_best`, zweimal ausgeführt ändert nichts |
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | derselbe Ablauf mit einer Runtix-URL |
@@ -2235,15 +2607,48 @@ Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
 REST-Schicht parallel baut, hat zwei halbfertige Eingänge in dieselbe Logik und
 prüft am Ende keinen von beiden.
 
+- [x] ~~**V1** Bestand bereinigen –
+      `maintenance/2026-09-01-bestand-bereinigung.sql`~~ – **von Hand
+      ausgeführt am 2026-09-01**
+  - [x] ~~26 Doppelzeilen auflösen, 18 Zeit- und 3 Streckenschreibweisen
+        vereinheitlichen~~
+  - [x] ~~Datum für id 1649 aus der Vereinsablage nachtragen~~
+  - [x] ~~Die sechs Neujahrsläufe auf 12:00 Ortszeit ziehen~~ (6.5.4)
+  - [x] ~~Leerzeile id 6556 löschen~~ (Abschnitt 5)
+  - [ ] Abschnitt 3b ausführen: die 23 führenden Nullen bei den Zeitläufen
+        entfernen – entschieden, nicht mehr optional (7.2)
+  - [ ] **Dublettenprüfung wiederholen**, weil id 1649 erst nach der Erzeugung
+        der Liste ein Datum bekam – Abschnitt 1b des Skripts, mit der
+        Entscheidungstabelle für Athlet 288 oben
+  - [ ] Gegenprobe (Abschnitt 7) liefert überall die leere Menge – zusammen
+        mit den beiden Punkten oben
+- [x] ~~**V2** `lsg_ak`: die fünf im Bestand vorkommenden Codes `m80`, `w75`,
+      `w80`, `w85`, `w90` ergänzen~~ – erledigt mit Abschnitt 6 des Skripts
+  - [ ] `lsg_ak` bis `m95`/`w95` durchschreiben (`m85`, `m90`, `m95`, `w95`
+        fehlen noch) – sonst läuft die Tabelle dem Bestand in ein paar Jahren
+        wieder hinterher (6.5.3)
 - [ ] Plugin-Grundgerüst (Header, Autoloader, Activation/Deactivation-Hooks)
 - [ ] Datenmodell: Zusatztabellen `lsg_athlete_map`, `lsg_import_run`,
       `lsg_import_log` per `dbDelta()` in `lsg_bl_install_schema()`
   - [ ] Schema-Version `lsg_bl_db_version` + Upgrade auf `admin_init` – der
         Activation-Hook läuft auf der bestehenden Installation nicht noch
         einmal, sonst fehlen die Tabellen schlicht (6.8)
-  - [ ] Aktivierung und Upgrade rufen dieselbe Funktion
-  - [ ] Keine Anzeigebreiten (`int UNSIGNED`, `year`) – sonst wiederholte
-        `ALTER TABLE`s durch `dbDelta()` auf MySQL 8 (6.8)
+  - [ ] Aktivierung und Upgrade rufen dieselbe `lsg_bl_install_schema()` – die
+        **nur** die drei neuen Tabellen kennt; die vier Bestandstabellen
+        bleiben in `lsg_bl_activate()` (6.8)
+  - [ ] Keine Anzeigebreiten (`int UNSIGNED`, `year`; Ausnahme `tinyint(1)`) –
+        sonst wiederholte `ALTER TABLE`s durch `dbDelta()` auf MySQL 8 (6.8)
+  - [ ] Tabellennamen über `lsg_bl_table()`, Kollation über
+        `$wpdb->get_charset_collate()`
+- [ ] `lsg_bl_jahr_grenzen( int $jahr ): array` – Kalenderjahr → `[von, bis)`
+      über `wp_timezone()` und `DateTimeImmutable`, **nicht** `mktime()` (6.5.4)
+  - [ ] `YEAR(FROM_UNIXTIME())` aus allen fünf Bestandsabfragen entfernen:
+        `lsg_bl_get_best_rows()`, `lsg_bl_get_distances_present()`,
+        `lsg_bl_get_win_rows()` auf die Zeitspanne umstellen;
+        `lsg_bl_get_best_years()` und `lsg_bl_get_win_years()` lesen den
+        Timestamp und rechnen über `lsg_bl_year_from_timestamp()`
+  - [ ] Veranstaltungsdatum beim Schreiben über
+        `new DateTimeImmutable( '… 12:00:00', wp_timezone() )` (6.5.1, 7.3)
 - [ ] `ErgebnisQuelle`-Interface + `Ergebnis`-Value-Object
 - [ ] `RaceResultAdapter`
   - [ ] `config` abrufen, `key` + `server` extrahieren
@@ -2316,12 +2721,15 @@ prüft am Ende keinen von beiden.
   - [ ] P3 Meldung über der Tabelle: „N Teilnehmer ohne Zuordnung"
   - [ ] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
   - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
-  - [ ] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr, gegen `lsg_ak` prüfen
+  - [ ] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr; Code immer
+        schreiben, fehlender `lsg_ak`-Eintrag nur als Hinweis auf den Filter
   - [ ] P4 Abgleich Athlet + Distanz + Kalenderjahr gegen `lsg_best`
   - [ ] P4 Jahr aus dem Veranstaltungsdatum, nie aus `date('Y')`
   - [ ] P4 Über Jahresgrenzen hinweg wird nie überschrieben
   - [ ] P4 Vergleich über `lsg_bl_parse_performance()`, nicht per String-Vergleich
   - [ ] P4 Status neu / schneller / langsamer / gleich / offen
+  - [ ] P4 Mehr als eine Bestandszeile: beste als Bezug, nur dorthin schreiben,
+        Zusatz „Doppelzeile im Bestand" – **kein** stilles `LIMIT 1` (6.5.4)
 - [ ] Gesamtsieg (Abschnitt 6.5.5) – **nur Erkennung und Markierung**
   - [ ] Platz 1 erkennen, aber ausschließlich in der Gesamtwertung
   - [ ] 🏆 in der Übernahme-Tabelle + Hinweis über der Tabelle
@@ -2337,13 +2745,15 @@ prüft am Ende keinen von beiden.
   - [ ] Statusvergleich unmittelbar vor dem Schreiben wiederholen → `konflikt`
   - [ ] Alles in einer Transaktion, `$wpdb->insert()/update()` mit Formaten
 - [ ] Import-Log (Abschnitt 6.8)
-  - [ ] Tabellen `lsg_import_run` + `lsg_import_log` in `lsg_bl_activate()`
+  - [ ] Tabellen `lsg_import_run` + `lsg_import_log` in `lsg_bl_install_schema()`
   - [ ] Auch die Nicht-Aktionen protokollieren (`skip_*`, `konflikt`)
   - [ ] Log-Ansicht als `WP_List_Table`: Suche, Filter, zwei Ebenen
 - [ ] REST-Routen `lsg/v1/import/*` mit
       `permission_callback => fn() => current_user_can( LSG_BL_CAP )` –
       **nie** eine hart notierte Capability und **nie** `__return_true` (6.10)
   - [ ] `wp_safe_remote_get()`, Host-Allowlist aus der Registry, Redirect-Prüfung
+  - [ ] `ErgebnisQuelle::hosts()` + `lsg_bl_url_erlaubt()`; **jeder** Abruf geht
+        durch die Prüfung, auch der zweite Request aus `config.server` (6.10)
   - [ ] Rate-Limit pro Benutzer (Transient-Zähler)
   - [ ] Discovery-Cache (Transient, 15 min) – **ohne** den rotierenden `key`
   - [ ] Parse-Ergebnis in Transient (1 h), Persistenz erst bei „Übernehmen"
@@ -2357,11 +2767,13 @@ prüft am Ende keinen von beiden.
   - [ ] Leistungsfeld wechselt mit `lsg_bl_distance_type()`: Label, Platzhalter,
         Prüfmuster – und wird beim Wechsel geleert
   - [ ] Zeiten über dieselbe Normalisierung wie P1 (keine zweite Implementierung)
-  - [ ] Strecken in der Schreibweise des Bestands (`096,723 km`, drei Stellen)
+  - [ ] Strecken mit drei Nachkommastellen, **ohne** führende Null
+        (`96,723 km`, nicht `096,723 km`) – 7.2
   - [ ] Eingaben ablehnen, die `lsg_bl_parse_performance()` nur über den
         Zahlen-Fallback einfangen würde
   - [ ] AK berechnen und **nur anzeigen**, nie als Eingabefeld
-  - [ ] AK nicht in `lsg_ak` (z.B. `m80`) → Warnung, Speichern nach Bestätigung
+  - [ ] AK nicht in `lsg_ak` (z.B. `m80`) → Hinweis auf den fehlenden
+        Frontend-Filter, kein Bestätigungsschritt
   - [ ] Datum als Timestamp mit 12:00 Uhr Ortszeit
   - [ ] Jahresbestzeit-Prüfung wie P4, aber warnend: überschreiben oder abbrechen
   - [ ] **Keine** Option „zusätzlich anlegen" – nie zwei Zeilen je Athlet/Distanz/Jahr
@@ -2385,18 +2797,102 @@ prüft am Ende keinen von beiden.
 
 ### Verifikation
 
-⚠ **Womit geprüft wird, ist noch nicht entschieden.** Das Projekt hat bewusst
-keine Composer-Abhängigkeit und damit kein PHPUnit; die Referenzdateien liegen
-außerdem nicht mehr im Ordner (Abschnitt 10). Beides gehört geklärt, bevor die
-erste Zeile Adapter-Code entsteht – sonst bleibt diese Liste eine
-Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
+Zuerst die beiden Vorarbeiten – sie sind mit reinem SQL prüfbar und brauchen
+keinen Testrahmen. V1 und der Pflichtteil von V2 sind am 2026-09-01 von Hand
+ausgeführt; was hier noch offen steht, ist die Abnahme:
+
+- [ ] V1: die vier Gegenproben aus Abschnitt 7 des Skripts liefern die leere
+      Menge (keine Doppelgruppe, keine abweichende Zeit- oder
+      Streckenschreibweise, kein `lsg_best.ak` ohne Entsprechung in `lsg_ak`)
+- [ ] V1: Zeilenzahl 5 951 → 5 924, bzw. 5 923, falls die Dublettenprüfung
+      eine 27. Zeile findet; die Jahres-Bestenliste 2024 zeigt für den
+      Halbmarathon jeden Athleten nur noch einmal
+- [ ] V1: keine Zeitlauf-Zeile mehr mit führender Null –
+      `SELECT COUNT(*) … WHERE \`time\` REGEXP '^0'` ergibt 0
+- [ ] V1: id 1649 hat ein Datum, das zum Lauf passt, und `38:57` steht als
+      `00:38:57` da
+- [ ] V1: die sechs Neujahrsläufe stehen auf 12:00 Ortszeit – Gegenprobe aus
+      Abschnitt 6b des Skripts
+- [x] ~~V2: `lsg_ak` kennt `m80`, `w75`, `w80`, `w85`, `w90`~~
+- [ ] V2: das AK-Dropdown im Frontend bietet auch `75`, `80`, `85`, `90` an,
+      und die Auswahl liefert die zugehörigen Zeilen (32 Zeilen von fünf
+      Personen)
+
+#### Testrahmen: PHPUnit
+
+**Entschieden: PHPUnit**, in zwei Lagen und als reine Entwicklungs-
+abhängigkeit. Das Plugin selbst bleibt Composer-frei – `vendor/` wird nicht
+ausgeliefert, es gibt keinen Composer-Autoloader im Produktivpfad, und ohne
+`composer install` funktioniert das Plugin unverändert. Composer ist Werkzeug
+der Entwicklung, nicht Bestandteil der Auslieferung.
+
+Die zwei Lagen sind kein Selbstzweck, sie unterscheiden sich in der Laufzeit:
+
+| Lage | Braucht | Prüft | Läuft |
+|---|---|---|---|
+| `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields` | in Sekunden, ohne Datenbank, ohne Netz |
+| `tests/integration/` | WordPress-Testsuite + MySQL | `dbDelta()`-Schema, P3/P4 gegen echte Tabellen, REST-Routen, Capability, SSRF-Allowlist | langsamer, braucht eine Testdatenbank |
+
+Die untere Lage ist die, die täglich läuft; sie ist auch der Grund für die
+Trennung aus Abschnitt 5: **der Abruf gehört nicht in den Parser.** Ein Adapter,
+der einen String bekommt und Zeilen zurückgibt, ist ohne WordPress prüfbar –
+einer, der selbst `wp_remote_get()` aufruft, nicht.
+
+Versionen, damit es nicht am ersten Tag klemmt:
+
+```json
+{
+  "require-dev": {
+    "phpunit/phpunit": "^9.6",
+    "yoast/phpunit-polyfills": "^2.0"
+  }
+}
+```
+
+⚠ **PHPUnit 9, nicht 10 oder 11.** Zwei Gründe, beide hart: Der Plugin-Header
+nennt `Requires PHP: 7.4`, und PHPUnit 10+ verlangt PHP 8.1. Unabhängig davon
+unterstützt die WordPress-Testsuite PHPUnit 10+ nicht – sie erwartet die
+`yoast/phpunit-polyfills`, die genau diese Lücke schließen. Wer mit 10 anfängt,
+hat die Integrationslage nie zum Laufen gebracht.
+
+Ablage:
+
+```
+composer.json               nur require-dev, kein "autoload" für das Plugin
+phpunit.xml.dist            zwei testsuites: unit, integration
+tests/bootstrap.php         lädt je nach Suite: nur die Parser, oder WordPress
+tests/unit/                 ohne WordPress
+tests/integration/          WP_UnitTestCase
+tests/fixtures/             die Rohantworten (Abschnitt 10)
+.gitignore                  vendor/, .phpunit.result.cache
+.distignore                 tests/, phpunit.xml.dist, composer.json
+```
+
+⚠ `.distignore` nicht vergessen (bzw. der entsprechende Ausschluss im
+Build-Schritt): `tests/` und `phpunit.xml.dist` gehören nicht ins
+Auslieferungs-ZIP. Eine mitgelieferte Testsuite ist im WP-Repo unerwünscht und
+transportiert die Fixtures – fremde Ergebnislisten – auf jede Installation.
+
+Die Integrationslage wird mit `install-wp-tests.sh` aus dem
+WordPress-Develop-Repository eingerichtet (dieselbe Datei, die
+`wp scaffold plugin-tests` erzeugt). Sie legt eine eigene Testdatenbank an und
+leert sie bei jedem Lauf – **niemals auf die Datenbank der Installation
+zeigen**, in der die 6 000 Zeilen Vereinsgeschichte liegen.
+
+Zeitliche Einordnung: Die Unit-Lage entsteht **mit M1**, nicht danach – sie ist
+der Grund, warum M1 als „eine Ettlingen-Liste kommt normalisiert aus dem
+Adapter" überhaupt prüfbar ist. Die Integrationslage kommt mit M3 (erster
+Schreibvorgang) und wächst mit M6 (REST).
 
 - [ ] Fixtures beschaffen und unter `tests/fixtures/` ins Repository legen
       (Abschnitt 10) – sie sind der einzige Weg, die Adapter zu prüfen, ohne
       die Portale zu treffen
-- [ ] Testrahmen festlegen: WordPress-Testsuite mit PHPUnit als reine
-      Entwicklungsabhängigkeit (nicht im Auslieferungspaket – das Plugin bleibt
-      Composer-frei), oder ein schlankes eigenes Prüfskript unter `tests/`
+- [ ] `composer.json` mit `require-dev` (PHPUnit ^9.6, phpunit-polyfills ^2.0),
+      `vendor/` in `.gitignore` – **kein** Composer-Autoloader im Plugin
+- [ ] `phpunit.xml.dist` mit den zwei Suites, `tests/bootstrap.php`
+- [ ] `install-wp-tests.sh` + eigene Testdatenbank für die Integrationslage
+- [ ] `.distignore` (bzw. Build-Ausschluss) für `tests/`, `phpunit.xml.dist`,
+      `composer.json`
 - [ ] Parser so schneiden, dass sie einen String entgegennehmen und keine
       WordPress-Funktion brauchen (5) – dann laufen die Adapter-Tests ohne
       WordPress und ohne Netz
@@ -2406,6 +2902,14 @@ Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
 - [ ] Beide Adapter → identisches Zielschema (Contract-Test)
 - [ ] Zeit-Parser: `01:11:54.9` → `01:11:55`, `01:11:54.0` → `01:11:54`
       (kein Float-Rundungsfehler), `1:13:08` → `01:13:08`, `38:57` → `00:38:57`
+- [ ] Zeit-Parser: `18:57.3` und `18:57,3` → `00:18:58` (MM:SS mit Zehntel –
+      der Fall, der ohne eigene Behandlung durchrutscht)
+- [ ] Zeit-Parser: `01:11:59.9` → `01:12:00` (Übertrag über Minute und Stunde)
+- [ ] Zeit-Parser: `.000` und `.004` – die erste rundet nicht, die zweite schon
+- [ ] Zeit-Parser: nicht erkannte Schreibweise liefert `''` und die Zeile wird
+      verworfen – **kein** Rückfall auf den Zahlen-Fallback
+- [ ] `dbDelta()`: `lsg_bl_install_schema()` zweimal hintereinander aufrufen →
+      beim zweiten Mal keine `ALTER TABLE` (Query-Log prüfen)
 - [ ] Zeit-Parser: DNF / DSQ / DNS / leere Zeit werden verworfen und gezählt
 - [ ] Manueller Abgleich: Top 10 einer Liste gegen die Website
 - [ ] Test mit leerer / noch nicht veröffentlichter Ergebnisliste
@@ -2417,6 +2921,10 @@ Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
       `#2_B45FAB`-Fragment, `runtix.com`-URL ohne `/sts/`
 - [ ] Erkennung: unbekannter Host → kein Adapter, saubere Meldung statt Fehler
 - [ ] SSRF: `http://127.0.0.1/`, `file://`, Redirect auf fremden Host → alle geblockt
+- [ ] SSRF: manipulierte `config`-Antwort mit `server: "angreifer.example"` →
+      Abbruch mit Meldung, **kein** Rückfall auf `my.raceresult.com`
+- [ ] SSRF: `boeseraceresult.com` und
+      `https://angreifer.example/?x=my.raceresult.com` treffen die Allowlist nicht
 - [ ] REST-Routen ohne Login / ohne Nonce → 401/403
 - [ ] race result: Liste mit `Contest: 0` erscheint bei jedem Wettbewerb
 - [ ] Runtix: Wettbewerb `"w"` überlebt den Weg durch Attribut, REST und Parser
@@ -2424,6 +2932,9 @@ Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
 - [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
 - [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
 - [ ] Zweimal derselbe Import → alle Zeilen `gleich`, keine Duplikate
+- [ ] Künstlich angelegte Doppelzeile (Athlet + Distanz + Jahr): P4 nimmt die
+      bessere als Bezug, schreibt nur dorthin, meldet „Doppelzeile im Bestand"
+      mit beiden ids – dasselbe im Formular (7.3)
 - [ ] Namens-Splitter: „Körner, Holger", „BORGHARDT Lukas", „von Hoff Anna-Maria",
       „VAN DER BERG Jan-Peter", einteiliger Name
 - [ ] Vereinsfilter: `LSG Karlsruhe`, `LSG-Karlsruhe`, `lsg karlsruhe e.V.` treffen –
@@ -2450,7 +2961,8 @@ Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
       „kein Athlet gefunden"
 - [ ] `skip_offen` steht mit Rohdaten im Log, auch wenn nichts geschrieben wurde
 - [ ] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
-      Code nicht in `lsg_ak` → Warnung statt stillem Schreiben
+      Code nicht in `lsg_ak` → wird geschrieben, Hinweis auf den fehlenden
+      Frontend-Filter erscheint
 - [ ] Distanz-Select bietet `6h`/`12h`/`24h` **nicht** an; ein Zeitlauf-Wettbewerb
       erzeugt die Meldung statt eines Imports
 - [ ] Datum: `17.05.2026` im Namen wird erkannt; nur `2026` → Feld unvollständig,
@@ -2460,6 +2972,16 @@ Absichtserklärung, und der Adapter wird gegen das Live-Portal entwickelt:
 - [ ] Beide Wettbewerbe „Walking 21,1km" und „Hauptlauf 21,1km" schlagen `HM`
       vor; das Dropdown ist in beiden Fällen sichtbar und änderbar
 - [ ] Datum 31.12. → Import zählt ins alte Jahr, auch wenn im Januar importiert
+- [ ] Datum 01.01. → Import zählt ins neue Jahr. Derselbe Test mit
+      MySQL-Session-Zeitzone auf `UTC` **und** auf `Europe/Berlin`: gleiches
+      Ergebnis, weil das Jahr nicht mehr in SQL gerechnet wird (6.5.4)
+- [ ] `lsg_bl_jahr_grenzen( 2026 )` liefert 31.12.2025 23:00 UTC bis
+      31.12.2026 23:00 UTC (Winterzeit, Europe/Berlin) – und **nicht** die
+      `mktime()`-Werte
+- [ ] Bestandszeile, die auf 00:00 Ortszeit des 1. Januar liegt, wird dem
+      richtigen Jahr zugeordnet (Regressionstest für die sechs Altfälle)
+- [ ] Frontend und Import sind sich einig: für dieselbe Zeile nennt die
+      Jahres-Bestenliste dasselbe Jahr wie der Vergleich in P4
 - [ ] Schnellere Zeit im Folgejahr → zweite Zeile, Vorjahr unverändert
 - [ ] Datum nach dem Parsen geändert → Vorschau verworfen, Button zurück auf „Parsen"
 - [ ] Gespeicherter Timestamp wird als der eingegebene Tag ausgegeben
@@ -2474,16 +2996,19 @@ Manuelle Erfassung (Abschnitt 7):
 - [ ] Distanz `12h` gewählt → Feld heißt „Strecke", nimmt `112,737 km` an und
       lehnt `01:36:44` ab; bei `HM` genau umgekehrt
 - [ ] Distanzwechsel leert das Leistungsfeld (kein stehengebliebener Wert)
-- [ ] `96,723 km` wird als `096,723 km` gespeichert
+- [ ] `96,723 km` wird unverändert als `96,723 km` gespeichert – **keine**
+      führende Null; `96,7 km` wird auf `96,700 km` ergänzt und `96,7234 km`
+      abgelehnt (drei Nachkommastellen sind Pflicht)
 - [ ] AK aus Jahrgang 1976 bei Lauf 2026 → `m50`, angezeigt und nicht editierbar
-- [ ] Jahrgang 1943 bei Lauf 2026 → `m80`, Warnung „nicht in lsg_ak", Speichern
-      nach Bestätigung möglich
+- [ ] Jahrgang 1943 bei Lauf 2026 → `m80`, wird ohne Rückfrage gespeichert;
+      fehlt `m80` in `lsg_ak`, erscheint der Hinweis auf den Filter
 - [ ] Athlet mit `cat = 'f'` → Code beginnt mit `w`, nicht mit `f`
 - [ ] Zweiter Eintrag für Athlet + Distanz + Jahr: Vergleich erscheint, es gibt
       **keine** Möglichkeit, eine zweite Zeile anzulegen
 - [ ] Langsamere Leistung: Speichern erst nach ausdrücklichem Haken
 - [ ] Identische Leistung: Speichern deaktiviert
-- [ ] `12h`: `112,737 km` gegen `096,723 km` gilt als besser (nicht als kürzer)
+- [ ] `12h`: `112,737 km` gegen `96,723 km` gilt als besser (nicht als kürzer) –
+      und der Vergleich funktioniert auch gegen eine Altzeile `096,723 km`
 - [ ] Bearbeiten und dabei das Jahr ändern → Prüfung läuft gegen das neue Jahr
 - [ ] Löschen ohne gültige Nonce → abgelehnt
 - [ ] Gelöschter Datensatz steht vollständig im Log und lässt sich daraus
@@ -2568,6 +3093,31 @@ zuständigen Stelle eingearbeitet, hier nur als Nachweis:
 - [x] **Datum und Distanz bleiben leer, wenn sie nicht eindeutig sind.** Kein
       Raten, kein stiller Ersatzwert – der Parsen-Button bleibt gesperrt, bis
       beide Felder stehen (6.5.1).
+- [x] **Jahresabfragen laufen über eine Zeitspanne, nicht über
+      `YEAR(FROM_UNIXTIME())`.** Die Grenzen kommen aus
+      `lsg_bl_jahr_grenzen()` und damit aus `wp_timezone()`; `mktime()` ist
+      dafür untauglich, weil WordPress die PHP-Zeitzone auf UTC setzt.
+      Umgestellt werden alle fünf Frontend-Abfragen mit, und die sechs
+      Neujahrsläufe im Bestand kommen in V1 auf 12:00 Ortszeit (6.5.4).
+- [x] **Geprüft wird mit PHPUnit**, in zwei Lagen (`tests/unit/` ohne
+      WordPress, `tests/integration/` mit der WordPress-Testsuite). Composer
+      nur als Entwicklungsabhängigkeit, `vendor/` und `tests/` gehören nicht
+      ins Auslieferungspaket. PHPUnit ^9.6 wegen `Requires PHP: 7.4` und der
+      WordPress-Testsuite (Abschnitt 8, Verifikation).
+- [x] **Der Bestand wird vor M3 bereinigt, nicht der Plan an ihn angepasst.**
+      Die 26 Doppelzeilen aus Athlet + Distanz + Jahr sind Erfassungsfehler;
+      die Regel „eine Zeile je Athlet, Distanz und Kalenderjahr" bleibt, wie
+      sie ist. Vorarbeit V1, Abschnitt 8 – **ausgeführt am 2026-09-01**.
+- [x] **P4 und das Formular haben trotzdem eine Regel für Mehrfachtreffer**:
+      beste Zeile als Bezug, nur dorthin schreiben, Zusatz „Doppelzeile im
+      Bestand" – kein stilles `LIMIT 1`, kein automatisches Aufräumen im
+      Import (6.5.4, 7.3).
+- [x] **`lsg_ak` ist eine Anzeigeliste, keine Prüfinstanz.** Der berechnete
+      AK-Code wird immer geschrieben; fehlt er in `lsg_ak`, ist das ein
+      Hinweis auf den fehlenden Frontend-Filter, keine Warnung vor dem
+      Ergebnis. Die Tabelle wird einmalig bis `m95`/`w95` durchgeschrieben
+      (Vorarbeit V2) – heute fehlen `m80`, `w75`, `w80`, `w85`, `w90`, die im
+      Bestand schon 32-mal vorkommen (6.5.3, 7.2).
 - [x] **Weitere Untermenüs** unter `lsg-bestenliste`: Import-Log,
       „Zuordnungen" und „Bestenliste" jetzt, Sportler- und Gesamtsieger-Pflege
       in Phase 4 (6.2).
@@ -2590,19 +3140,45 @@ vorbereitet, damit später keine Migration nötig wird:
 - [ ] **Bestand nachrechnen.** Ändert sich der Jahrgang eines Athleten, sind
       dessen gespeicherte `lsg_best.ak`-Werte falsch. Das Formular rechnet nur
       die Zeile neu, die es speichert (7.4). Ein Durchlauf über den ganzen
-      Bestand – AK neu berechnen, vorhandene Doppelzeilen je Athlet/Distanz/Jahr
-      auflisten – ist ein eigener Wartungsvorgang mit Vorschau, kein
-      Formularknopf.
+      Bestand – AK neu berechnen, Abweichungen zur Vorschau stellen – ist ein
+      eigener Wartungsvorgang, kein Formularknopf.
+
+      Das *Auflösen* vorhandener Doppelzeilen gehört nicht mehr hierher: Es ist
+      als Vorarbeit V1 vorgezogen (Abschnitt 8) und damit einmalig erledigt.
+      Was bleibt, ist die laufende Kontrolle – eine Abfrage auf
+      `GROUP BY athletes_id, distance, jahr HAVING COUNT(*) > 1`, die in einem
+      späteren Wartungsvorgang mitlaufen kann. Der Import meldet solche Zeilen
+      ohnehin an Ort und Stelle (6.5.4).
 - [ ] **Phase 4 der README**: Pflege-Oberflächen für Sportler und Gesamtsiege.
       Die Bestenlisten-Pflege ist mit Abschnitt 7 vorgezogen und damit
       erledigt.
 
 ### 9.3 Offen
 
-Aktuell keine offenen Punkte. Was hier neu auftaucht, gehört auch wirklich
-entschieden, bevor es in Abschnitt 8 wandert.
+Entschieden bzw. erledigt sind inzwischen: der Testrahmen (PHPUnit, 9.1), das
+fehlende Veranstaltungsdatum zu `lsg_best` id 1649 (von Hand nachgetragen am
+2026-09-01) und die Zeitzonenrechnung bei Jahresabfragen (9.1, 6.5.4).
 
----
+Ein Punkt bleibt:
+
+**`tstamp` ist in `lsg_best` unbrauchbar.** 3 675 der 5 951 Zeilen tragen
+`4294967295` – den Maximalwert von `int UNSIGNED`, also den 07.02.2106 –,
+weitere 39 tragen `0`; nur 2 237 haben einen plausiblen Wert. Ein
+Migrationsartefakt. `lsg_athlete`, `lsg_win` und `lsg_ak` sind sauber.
+
+Heute schadet es nicht: die Spalte wird im Plugin **nirgends gelesen**, sie
+steht nur in den vier `CREATE TABLE`s. Der Import würde sie erstmals mit einem
+echten Wert füllen (6.7), und sobald irgendwo „zuletzt geändert" sortiert oder
+angezeigt wird, stehen 3 675 Zeilen im Jahr 2106. Zur Wahl:
+
+- die 3 714 Zeilen in V1 auf `0` setzen – der Default, und ehrlich „unbekannt";
+- oder sie stehen lassen und in Kauf nehmen, dass die Spalte gemischt ist.
+
+*Vorschlag:* auf `0`. Ein Wert, der in 80 Jahren liegt, ist schlimmer als kein
+Wert, weil er jede Sortierung anführt.
+
+Was hier neu auftaucht, gehört auch wirklich entschieden, bevor es in
+Abschnitt 8 wandert.
 
 ## 10. Anhang: verifizierte Requests
 
