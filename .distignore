@@ -1,0 +1,17 @@
+# Was nicht ins Auslieferungs-ZIP gehoert.
+# Eine mitgelieferte Testsuite ist im WP-Repo unerwuenscht und transportiert
+# die Fixtures - fremde Ergebnislisten - auf jede Installation.
+.git
+.gitignore
+.distignore
+.DS_Store
+tests
+phpunit.xml.dist
+phpunit.xml
+composer.json
+composer.lock
+vendor
+node_modules
+plan.md
+maintenance
+.phpunit.result.cache

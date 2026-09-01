@@ -290,6 +290,69 @@ function lsg_bl_ak_list_for_gender( $gender ) {
 }
 
 /**
+ * Kalenderjahr → Zeitspanne [von, bis) in Unix-Timestamps, in der Zeitzone
+ * der Installation. Für JEDE Jahresabfrage auf lsg_best und lsg_win.
+ *
+ * ⚠ Nicht YEAR(FROM_UNIXTIME(`date`)) in SQL. Das rechnet mit der
+ * MySQL-Session-Zeitzone, und die ist nicht die Zeitzone der
+ * WordPress-Installation. Der Bestand speichert `date` als 00:00 Ortszeit
+ * des Wettkampftags – steht die Session auf UTC, wird daraus der Vortag, und
+ * bei einem Lauf am 1. Januar das Vorjahr (Plan 6.5.4).
+ *
+ * ⚠ Und nicht mktime(). WordPress setzt die PHP-Zeitzone auf UTC, also
+ * liefert mktime( 0, 0, 0, 1, 1, $jahr ) den 1. Januar 00:00 UTC – eine
+ * Zeile, die auf 00:00 Ortszeit liegt, fällt davor. Derselbe Fehler, nur von
+ * SQL nach PHP verschoben.
+ *
+ * Nebenbei ist die Zeitspanne auch die schnellere Form: YEAR(FROM_UNIXTIME(x))
+ * ist ein Funktionsaufruf auf der Spalte und schließt jeden Index aus.
+ *
+ * @param int $jahr Kalenderjahr.
+ * @return array{0:int,1:int} [von, bis)
+ */
+function lsg_bl_jahr_grenzen( $jahr ) {
+	$jahr = (int) $jahr;
+	$tz   = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+
+	return array(
+		( new DateTimeImmutable( sprintf( '%04d-01-01 00:00:00', $jahr ), $tz ) )->getTimestamp(),
+		( new DateTimeImmutable( sprintf( '%04d-01-01 00:00:00', $jahr + 1 ), $tz ) )->getTimestamp(),
+	);
+}
+
+/**
+ * Veranstaltungsdatum ('JJJJ-MM-TT') → Unix-Timestamp, 12:00 Uhr Ortszeit.
+ *
+ * ⚠ 12:00, nicht 00:00: Bei Mitternacht kann die Zeitzonenrechnung den Tag um
+ * eins verschieben, und dann steht in der Bestenliste der Vortag – genau so
+ * liegen sechs Altfälle im Bestand (alles Neujahrsläufe).
+ *
+ * ⚠ Über wp_timezone(), nicht über mktime(): WordPress setzt die
+ * PHP-Zeitzone auf UTC, mktime( 12, 0, 0, … ) liefert also 12:00 UTC. In
+ * Mitteleuropa wäre das derselbe Tag, der Wert also brauchbar – aber er ist
+ * nicht das, was dasteht, und auf einer Installation mit anderer Zeitzone
+ * bricht die Annahme (Plan 6.5.1, 6.5.4, 7.3).
+ *
+ * @param string $datum 'JJJJ-MM-TT'.
+ * @return int Timestamp, oder 0 bei ungültigem Datum.
+ */
+function lsg_bl_datum_zu_timestamp( $datum ) {
+	if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', trim( (string) $datum ), $m ) ) {
+		return 0;
+	}
+	if ( ! checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
+		return 0;
+	}
+
+	$tz = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+
+	return ( new DateTimeImmutable(
+		sprintf( '%04d-%02d-%02d 12:00:00', (int) $m[1], (int) $m[2], (int) $m[3] ),
+		$tz
+	) )->getTimestamp();
+}
+
+/**
  * Formatiert einen Unix-Timestamp als TT.MM.JJJJ. Leere/ungültige Werte
  * ergeben einen leeren String.
  */

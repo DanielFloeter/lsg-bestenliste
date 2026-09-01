@@ -1,0 +1,17 @@
+{
+	"name": "karlsruher-lemminge/lsg-bestenliste",
+	"description": "Entwicklungsabhaengigkeiten des Plugins. Das Plugin selbst bleibt Composer-frei: vendor/ wird nicht ausgeliefert, es gibt keinen Composer-Autoloader im Produktivpfad, und ohne composer install funktioniert das Plugin unveraendert.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"require-dev": {
+		"phpunit/phpunit": "^9.6",
+		"yoast/phpunit-polyfills": "^2.0"
+	},
+	"config": {
+		"allow-plugins": false
+	},
+	"scripts": {
+		"test": "phpunit --testsuite unit",
+		"test:all": "phpunit"
+	}
+}

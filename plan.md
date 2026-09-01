@@ -12,6 +12,15 @@
 > Abschnitt 8 aufgenommen und im Skript
 > `maintenance/2026-09-01-bestand-bereinigung.sql` ausformuliert.
 >
+> Stand der Umsetzung: 2026-09-01 – **M1 ist fertig und geprüft.**
+> Datenmodell samt Schema-Version, Interface, Value-Objects, Registry,
+> HTTP-Torwächter, `RaceResultAdapter`, die gesamte Normalisierung und die
+> Unit-Lage der Tests stehen; die Unit-Suite ist grün (148 Tests,
+> 968 Assertions, gegen die echte Ettlingen-Antwort mit 658 Datensätzen).
+> Zwei Befunde aus der Umsetzung sind unten an ihrer Stelle eingearbeitet:
+> die race-result-Listen stehen nicht unter `config.lists` (4.1), und
+> `01:20.24` braucht eine eigene Regel im Zeit-Parser (6.5.1).
+>
 > Stand der Bereinigung: 2026-09-01 – V1 und der Pflichtteil von V2 sind von
 > Hand ausgeführt. Die Dumps in `assets/*.sql` bleiben absichtlich auf dem
 > Stand **davor**: sie sind der Ausgangszustand, gegen den dieser Plan geprüft
@@ -219,6 +228,17 @@ früheren `zieleinlauf.json`. Die API ist der klar bessere Weg.
 
    → { list:{Fields:[…]}, data:[[…],[…]], DataFields, LiveUpdateInterval, … }
 ```
+
+⚠ **Korrektur, geprüft 2026-09-01 (Event 375768):** Die Ergebnislisten
+stehen **nicht** unter `config.lists` – diesen Schlüssel gibt es gar nicht.
+Sie liegen unter **`config.Tab.Config.Lists`**, genau in der oben notierten
+Form, und ein zweites Mal unter `config.TabConfig.Lists` (dort mit
+`Details: "details0"` statt `""`). Der Adapter liest der Reihe nach
+`Tab.Config.Lists`, `TabConfig.Lists`, `lists` – damit trägt er auch, wenn
+race result das Feld wieder umhängt.
+
+Bei Ettlingen sind es 16 Listen; `Contest` ist dort ein **String** (`"2"`),
+nicht die Zahl.
 
 ### 4.2 Fallstricke
 
@@ -796,6 +816,21 @@ ist beides gleich, bei einer Quelle mit Millisekunden (`.004`) nicht.
 ⚠ Das Aufrunden über die Minuten- und Stundengrenze fällt durch die Rechnung
 in Sekunden von selbst richtig aus: `01:11:59.9` wird zu `01:12:00`, nicht zu
 `01:11:60`. Ein Zusammensetzen aus den Einzelgruppen täte das nicht.
+
+⚠ **Ergänzt bei der Umsetzung: `MM:SS` mit zwei Nachkommastellen wird
+verworfen.** Zwei Schreibweisen sehen gleich aus und sind es nicht:
+
+```
+18:57.3    MM:SS mit Zehntel        →  00:18:58
+01:20.24   Tippfehler für 01:20:24 →  ''        (verworfen)
+```
+
+Beide sind „MM:SS + Nachkommastellen". Unterscheidbar sind sie nur an der
+Stellenzahl: eine echte Zehntelangabe hat *eine* Stelle, eine verrutschte
+Sekundenangabe zwei. Ohne diese Regel liefert `01:20.24` die Zeit `00:01:21` –
+eine Minute für einen Halbmarathon, und niemand sieht es. Nach einer
+vollständigen `HH:MM:SS`-Form bleibt dagegen jede Stellenzahl erlaubt
+(`.0`, `.9`, `.004`); dort ist nichts mehrdeutig.
 
 ⚠ **Kein Rückfall auf den Zahlen-Fallback.** Was diese Funktion nicht erkennt,
 liefert `''` und die Zeile wird verworfen und gezählt – sie wird nicht
@@ -2595,7 +2630,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 
 | M | Inhalt | Fertig, wenn |
 |---|---|---|
-| M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures, `tests/unit/` | `phpunit --testsuite unit` ist grün und eine Ettlingen-Liste kommt normalisiert aus dem Adapter |
+| M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures, `tests/unit/` | ✅ **erledigt 2026-09-01** – `phpunit --testsuite unit` ist grün (148 Tests) und die Ettlingen-Liste kommt normalisiert aus dem Adapter |
 | M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | die Vorschau zeigt den Trichter – geschrieben wird noch nichts |
 | M3 | P3, P4, Übernahme, Log + Log-Ansicht | ein Import landet nachvollziehbar in `lsg_best`, zweimal ausgeführt ändert nichts |
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | derselbe Ablauf mit einer Runtix-URL |
@@ -2627,45 +2662,52 @@ prüft am Ende keinen von beiden.
   - [ ] `lsg_ak` bis `m95`/`w95` durchschreiben (`m85`, `m90`, `m95`, `w95`
         fehlen noch) – sonst läuft die Tabelle dem Bestand in ein paar Jahren
         wieder hinterher (6.5.3)
-- [ ] Plugin-Grundgerüst (Header, Autoloader, Activation/Deactivation-Hooks)
-- [ ] Datenmodell: Zusatztabellen `lsg_athlete_map`, `lsg_import_run`,
+- [x] Plugin-Grundgerüst (Header, Autoloader, Activation/Deactivation-Hooks)
+      → ein Autoloader kam bewusst nicht dazu: `require_once` je Datei, kein
+        Composer im Produktivpfad (9.1)
+- [x] Datenmodell: Zusatztabellen `lsg_athlete_map`, `lsg_import_run`,
       `lsg_import_log` per `dbDelta()` in `lsg_bl_install_schema()`
-  - [ ] Schema-Version `lsg_bl_db_version` + Upgrade auf `admin_init` – der
+  - [x] Schema-Version `lsg_bl_db_version` + Upgrade auf `admin_init` – der
         Activation-Hook läuft auf der bestehenden Installation nicht noch
         einmal, sonst fehlen die Tabellen schlicht (6.8)
-  - [ ] Aktivierung und Upgrade rufen dieselbe `lsg_bl_install_schema()` – die
+  - [x] Aktivierung und Upgrade rufen dieselbe `lsg_bl_install_schema()` – die
         **nur** die drei neuen Tabellen kennt; die vier Bestandstabellen
         bleiben in `lsg_bl_activate()` (6.8)
-  - [ ] Keine Anzeigebreiten (`int UNSIGNED`, `year`; Ausnahme `tinyint(1)`) –
+  - [x] Keine Anzeigebreiten (`int UNSIGNED`, `year`; Ausnahme `tinyint(1)`) –
         sonst wiederholte `ALTER TABLE`s durch `dbDelta()` auf MySQL 8 (6.8)
-  - [ ] Tabellennamen über `lsg_bl_table()`, Kollation über
+  - [x] Tabellennamen über `lsg_bl_table()`, Kollation über
         `$wpdb->get_charset_collate()`
-- [ ] `lsg_bl_jahr_grenzen( int $jahr ): array` – Kalenderjahr → `[von, bis)`
+- [x] `lsg_bl_jahr_grenzen( int $jahr ): array` – Kalenderjahr → `[von, bis)`
       über `wp_timezone()` und `DateTimeImmutable`, **nicht** `mktime()` (6.5.4)
-  - [ ] `YEAR(FROM_UNIXTIME())` aus allen fünf Bestandsabfragen entfernen:
+  - [x] `YEAR(FROM_UNIXTIME())` aus allen fünf Bestandsabfragen entfernen:
         `lsg_bl_get_best_rows()`, `lsg_bl_get_distances_present()`,
         `lsg_bl_get_win_rows()` auf die Zeitspanne umstellen;
         `lsg_bl_get_best_years()` und `lsg_bl_get_win_years()` lesen den
         Timestamp und rechnen über `lsg_bl_year_from_timestamp()`
-  - [ ] Veranstaltungsdatum beim Schreiben über
+  - [x] Veranstaltungsdatum beim Schreiben über
         `new DateTimeImmutable( '… 12:00:00', wp_timezone() )` (6.5.1, 7.3)
-- [ ] `ErgebnisQuelle`-Interface + `Ergebnis`-Value-Object
-- [ ] `RaceResultAdapter`
-  - [ ] `config` abrufen, `key` + `server` extrahieren
-  - [ ] Listen auflisten / per `Name` auflösen
-  - [ ] `list` abrufen mit `r=all&l=0`
-  - [ ] Feld-Mapping über `DataFields`
+        → `lsg_bl_datum_zu_timestamp()` steht; benutzt wird sie erst vom
+          Schreibweg (M3) und vom Formular (M5)
+- [x] `ErgebnisQuelle`-Interface + `Ergebnis`-Value-Object
+- [x] `RaceResultAdapter`
+  - [x] `config` abrufen, `key` + `server` extrahieren
+  - [x] Listen auflisten / per `Name` auflösen
+  - [x] `list` abrufen mit `r=all&l=0`
+  - [x] Feld-Mapping über `DataFields`
+        → über die Expression aufgelöst, Positionsversatz nur als letzte
+          Rückfallebene. Dazu: `data` kommt bei gruppierten Listen (AK-Liste)
+          als Objekt statt als Array – im Plan nicht vorgesehen, kommt aber vor
 - [ ] `RuntixAdapter`
   - [ ] URL-Builder (ohne trailing slash!)
   - [ ] Contest-IDs als String, `"w"`-Fall berücksichtigen
   - [ ] DOMXPath-Parser nach CSS-Klassen
   - [ ] `col-ageclass` vs. `col-place-ageclass` exakt trennen
   - [ ] Umlaut-/Encoding-Test (Körner, Häffner, Säckingen)
-- [ ] Zeit-Parser: `01:11:54.9`, `1:13:08`, evtl. `MM:SS` → einheitlich Sekunden
-- [ ] Normalisierung: `lsg_bl_verein_normalisieren()` + Namens-Normalisierung
+- [x] Zeit-Parser: `01:11:54.9`, `1:13:08`, evtl. `MM:SS` → einheitlich Sekunden
+- [x] Normalisierung: `lsg_bl_verein_normalisieren()` + Namens-Normalisierung
       (Umlaute, Bindestriche, Groß/Klein) – Basis für P2 und P3
 - [ ] Transient-Caching innerhalb eines Vorgangs (Discovery 15 min, Parse 1 h)
-- [ ] Adapter-Registry + Filter `lsg_bl_ergebnis_adapter`
+- [x] Adapter-Registry + Filter `lsg_bl_ergebnis_adapter`
 - [ ] Admin-Seite „Ergebnis-Import" (Abschnitt 6)
   - [ ] Top-Level-Menü `lsg-bestenliste` + Konstante `LSG_BL_CAP`
   - [ ] Schritt 1: URL-Feld + Adapter-Erkennung, Adapter manuell übersteuerbar
@@ -2678,10 +2720,13 @@ prüft am Ende keinen von beiden.
   - [ ] Assets nur auf dieser Seite laden (`$hook`-Vergleich)
   - [ ] Nonce + `check_admin_referer()` + Capability-Prüfung in jedem Handler
 - [ ] Parse-Pipeline P1–P4 (Abschnitt 6.5)
-  - [ ] P1 Namens-Splitter: Komma-Form, GROSSBUCHSTABEN-Form, Fallback + `namen_unsicher`
-  - [ ] P1 Geschlecht aus dem AK-Code der Quelle (`M 30`, `1. M35`) → `m`/`f`
-  - [ ] P1 Netto vor Brutto, `zeit_typ` mitführen
-  - [ ] P1 Zeit-Normalisierung auf `HH:MM:SS`, DNF/DSQ/DNS verwerfen + zählen
+  - [x] P1 Namens-Splitter: Komma-Form, GROSSBUCHSTABEN-Form, Fallback + `namen_unsicher`
+        → ⚠ das scharfe ß hat keine Großform, die die Quellen benutzen
+          (`GEIßLER`, `STÖßER`): vor dem Vergleich zu `SS` auflösen, sonst fällt
+          jeder solche Nachname in den Rateweg
+  - [x] P1 Geschlecht aus dem AK-Code der Quelle (`M 30`, `1. M35`) → `m`/`f`
+  - [x] P1 Netto vor Brutto, `zeit_typ` mitführen
+  - [x] P1 Zeit-Normalisierung auf `HH:MM:SS`, DNF/DSQ/DNS verwerfen + zählen
   - [ ] P1 Felder Distanz / Datum / Ort über der Tabelle, vorbelegt + änderbar
   - [ ] P1 Datum ermitteln: Adapter-Metadaten → Datum im Namen → Jahr → leer
   - [ ] P1 Runtix: `/sts/10021/{id}` für den Einstieg, `/sts/10020/{jahr}` als
@@ -2689,8 +2734,10 @@ prüft am Ende keinen von beiden.
   - [ ] P1 Runtix: höchstens zwei Jahres-Versuche, dann Feld leer lassen
   - [ ] P1 Runtix: Jahreszahl der Fußzeile (`Copyright … 2001 - 2026`) ignorieren
   - [ ] P1 Veranstaltungsübersicht je Jahr cachen (Transient, 15 min)
-  - [ ] P1 race result: kein Datum in `config` – Feld leer lassen, Hinweis zeigen
-  - [ ] P1 race result: `Tab.ActiveFrom` **nicht** als Veranstaltungsdatum lesen
+  - [x] P1 race result: kein Datum in `config` – Feld leer lassen, Hinweis zeigen
+  - [x] P1 race result: `Tab.ActiveFrom` **nicht** als Veranstaltungsdatum lesen
+        → und der Wettbewerbsname wird für das Datum gar nicht gelesen: dort
+          stehen Jahrgangsgrenzen (`Bambini 500m`, `Kids 1000m`)
   - [ ] P1 Beide Controls leer lassen, sobald der Wert mehrdeutig ist
   - [ ] P1 `datum_quelle` mitführen und am Feld anzeigen
   - [ ] P1 Unvollständiges Datum **nicht** ergänzen (kein stiller 1. Januar)
@@ -2699,13 +2746,20 @@ prüft am Ende keinen von beiden.
   - [ ] P1 Plausibilität: Zukunft, > 10 Jahre zurück, Jahr ≠ Jahr im Eventnamen
   - [ ] P1 Parsen erst freigeben, wenn Distanz **und** vollständiges Datum stehen
   - [ ] Änderung von Datum oder Distanz verwirft die Vorschau (zurück auf „Parsen")
-  - [ ] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
-  - [ ] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
+  - [x] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
+  - [x] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
+        → aufgelöst über drei Regeln: ein Staffel-Multiplikator (`4x10 km`) ist
+          sofort mehrdeutig, Ordnungszahlen (`5.`) und fremde Einheiten
+          (`10 Meilen`, `500m`) zählen nicht, und widersprechen sich Name und
+          Zahl, bleibt das Feld leer
   - [ ] P1 Distanz-Select geschlossen: kein Freitext, keine neuen Distanzen
-  - [ ] P1 Distanz-Select **ohne** `6h`/`12h`/`24h` – Zeitläufe halten in
+  - [x] P1 Distanz-Select **ohne** `6h`/`12h`/`24h` – Zeitläufe halten in
         `lsg_best.time` eine Strecke, keine Zeit (6.5.1)
-  - [ ] P1 `platz` mitlesen (nur für 6.5.5)
-  - [ ] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
+  - [x] P1 `platz` mitlesen (nur für 6.5.5)
+  - [x] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
+        → die Ettlingen-Fixture belegt den Zweck der UND-Regel: sie enthält
+          22 Zeilen `LSG Weiher` neben 11 Zeilen `LSG Karlsruhe`, dazu
+          `(Karlsruhe)` als Wohnort und `Karlsruher Lemminge e.V.`
   - [ ] P2 Block „nicht übernommene Vereine" + Vereins-Alias-Option
   - [ ] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
   - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 377)
@@ -2721,8 +2775,10 @@ prüft am Ende keinen von beiden.
   - [ ] P3 Meldung über der Tabelle: „N Teilnehmer ohne Zuordnung"
   - [ ] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
   - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
-  - [ ] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr; Code immer
+  - [x] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr; Code immer
         schreiben, fehlender `lsg_ak`-Eintrag nur als Hinweis auf den Filter
+        → `lsg_bl_ak_berechnen()` steht. Der Hinweis auf einen in `lsg_ak`
+          fehlenden Code gehört in die Oberfläche und kommt mit M2/M5
   - [ ] P4 Abgleich Athlet + Distanz + Kalenderjahr gegen `lsg_best`
   - [ ] P4 Jahr aus dem Veranstaltungsdatum, nie aus `date('Y')`
   - [ ] P4 Über Jahresgrenzen hinweg wird nie überschrieben
@@ -2751,10 +2807,13 @@ prüft am Ende keinen von beiden.
 - [ ] REST-Routen `lsg/v1/import/*` mit
       `permission_callback => fn() => current_user_can( LSG_BL_CAP )` –
       **nie** eine hart notierte Capability und **nie** `__return_true` (6.10)
-  - [ ] `wp_safe_remote_get()`, Host-Allowlist aus der Registry, Redirect-Prüfung
-  - [ ] `ErgebnisQuelle::hosts()` + `lsg_bl_url_erlaubt()`; **jeder** Abruf geht
+  - [x] `wp_safe_remote_get()`, Host-Allowlist aus der Registry, Redirect-Prüfung
+        → Redirects werden von Hand verfolgt (`redirection => 0`), damit jeder
+          Zwischenschritt erneut durch die Allowlist läuft
+  - [x] `ErgebnisQuelle::hosts()` + `lsg_bl_url_erlaubt()`; **jeder** Abruf geht
         durch die Prüfung, auch der zweite Request aus `config.server` (6.10)
-  - [ ] Rate-Limit pro Benutzer (Transient-Zähler)
+  - [x] Rate-Limit pro Benutzer (Transient-Zähler)
+        → `lsg_bl_rate_limit_ok()` steht; verdrahtet wird sie in den Handlern (M2)
   - [ ] Discovery-Cache (Transient, 15 min) – **ohne** den rotierenden `key`
   - [ ] Parse-Ergebnis in Transient (1 h), Persistenz erst bei „Übernehmen"
   - [ ] Formular-Handler und REST-Route rufen dieselbe Funktion (keine Doppel-Logik)
@@ -2884,49 +2943,58 @@ der Grund, warum M1 als „eine Ettlingen-Liste kommt normalisiert aus dem
 Adapter" überhaupt prüfbar ist. Die Integrationslage kommt mit M3 (erster
 Schreibvorgang) und wächst mit M6 (REST).
 
-- [ ] Fixtures beschaffen und unter `tests/fixtures/` ins Repository legen
+- [x] Fixtures beschaffen und unter `tests/fixtures/` ins Repository legen
       (Abschnitt 10) – sie sind der einzige Weg, die Adapter zu prüfen, ohne
       die Portale zu treffen
-- [ ] `composer.json` mit `require-dev` (PHPUnit ^9.6, phpunit-polyfills ^2.0),
+      → race result ist da (`raceresult-375768-config.json`,
+        `raceresult-375768-contest2.json`, 658 Datensätze, abgerufen 2026-09-01).
+        Die drei Runtix-Fixtures fehlen noch – Vorarbeit für **M4**, die
+        `curl`-Zeilen stehen in `tests/README.md`
+- [x] `composer.json` mit `require-dev` (PHPUnit ^9.6, phpunit-polyfills ^2.0),
       `vendor/` in `.gitignore` – **kein** Composer-Autoloader im Plugin
-- [ ] `phpunit.xml.dist` mit den zwei Suites, `tests/bootstrap.php`
+- [x] `phpunit.xml.dist` mit den zwei Suites, `tests/bootstrap.php`
 - [ ] `install-wp-tests.sh` + eigene Testdatenbank für die Integrationslage
-- [ ] `.distignore` (bzw. Build-Ausschluss) für `tests/`, `phpunit.xml.dist`,
+- [x] `.distignore` (bzw. Build-Ausschluss) für `tests/`, `phpunit.xml.dist`,
       `composer.json`
-- [ ] Parser so schneiden, dass sie einen String entgegennehmen und keine
+- [x] Parser so schneiden, dass sie einen String entgegennehmen und keine
       WordPress-Funktion brauchen (5) – dann laufen die Adapter-Tests ohne
       WordPress und ohne Netz
 
-- [ ] Unit-Test `RaceResultAdapter` gegen Referenz-Fixture (658 Zeilen Ettlingen)
+- [x] Unit-Test `RaceResultAdapter` gegen Referenz-Fixture (658 Zeilen Ettlingen)
 - [ ] Unit-Test `RuntixAdapter` gegen gespeicherte HTML-Fixture
 - [ ] Beide Adapter → identisches Zielschema (Contract-Test)
 - [ ] Zeit-Parser: `01:11:54.9` → `01:11:55`, `01:11:54.0` → `01:11:54`
       (kein Float-Rundungsfehler), `1:13:08` → `01:13:08`, `38:57` → `00:38:57`
-- [ ] Zeit-Parser: `18:57.3` und `18:57,3` → `00:18:58` (MM:SS mit Zehntel –
+- [x] Zeit-Parser: `18:57.3` und `18:57,3` → `00:18:58` (MM:SS mit Zehntel –
       der Fall, der ohne eigene Behandlung durchrutscht)
-- [ ] Zeit-Parser: `01:11:59.9` → `01:12:00` (Übertrag über Minute und Stunde)
-- [ ] Zeit-Parser: `.000` und `.004` – die erste rundet nicht, die zweite schon
-- [ ] Zeit-Parser: nicht erkannte Schreibweise liefert `''` und die Zeile wird
+- [x] Zeit-Parser: `01:11:59.9` → `01:12:00` (Übertrag über Minute und Stunde)
+- [x] Zeit-Parser: `.000` und `.004` – die erste rundet nicht, die zweite schon
+- [x] Zeit-Parser: nicht erkannte Schreibweise liefert `''` und die Zeile wird
       verworfen – **kein** Rückfall auf den Zahlen-Fallback
 - [ ] `dbDelta()`: `lsg_bl_install_schema()` zweimal hintereinander aufrufen →
       beim zweiten Mal keine `ALTER TABLE` (Query-Log prüfen)
-- [ ] Zeit-Parser: DNF / DSQ / DNS / leere Zeit werden verworfen und gezählt
+- [x] Zeit-Parser: DNF / DSQ / DNS / leere Zeit werden verworfen und gezählt
 - [ ] Manueller Abgleich: Top 10 einer Liste gegen die Website
-- [ ] Test mit leerer / noch nicht veröffentlichter Ergebnisliste
+- [x] Test mit leerer / noch nicht veröffentlichter Ergebnisliste
 - [ ] Test mit deaktiviertem Netzwerk: Klartext-Fehlermeldung und Zustand
       `fehler` (6.11) – **kein** Rückfall auf alte Daten. Einen
       stale-while-error-Pfad gibt es nicht (5.2), und ein halb gefüllter
       Import wäre schlimmer als ein sichtbarer Abbruch
-- [ ] Erkennung: Tabelle aus 6.2 als Testfälle, inkl. URL mit/ohne trailing slash,
+- [x] Erkennung: Tabelle aus 6.2 als Testfälle, inkl. URL mit/ohne trailing slash,
       `#2_B45FAB`-Fragment, `runtix.com`-URL ohne `/sts/`
-- [ ] Erkennung: unbekannter Host → kein Adapter, saubere Meldung statt Fehler
+      → der race-result-Teil ist geprüft, der Runtix-Teil kommt mit M4
+- [x] Erkennung: unbekannter Host → kein Adapter, saubere Meldung statt Fehler
 - [ ] SSRF: `http://127.0.0.1/`, `file://`, Redirect auf fremden Host → alle geblockt
 - [ ] SSRF: manipulierte `config`-Antwort mit `server: "angreifer.example"` →
       Abbruch mit Meldung, **kein** Rückfall auf `my.raceresult.com`
-- [ ] SSRF: `boeseraceresult.com` und
+- [x] SSRF: `boeseraceresult.com` und
       `https://angreifer.example/?x=my.raceresult.com` treffen die Allowlist nicht
+      → ebenso `raceresult.com.angreifer.example`, `http://127.0.0.1/` und
+        `file:///etc/passwd`
 - [ ] REST-Routen ohne Login / ohne Nonce → 401/403
-- [ ] race result: Liste mit `Contest: 0` erscheint bei jedem Wettbewerb
+- [x] race result: Liste mit `Contest: 0` erscheint bei jedem Wettbewerb
+      → im Adapter umgesetzt; die Ettlingen-Fixture enthält keinen solchen
+        Eintrag, geprüft ist also die Regel, nicht der Fall
 - [ ] Runtix: Wettbewerb `"w"` überlebt den Weg durch Attribut, REST und Parser
 - [ ] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
 - [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
@@ -2935,15 +3003,20 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [ ] Künstlich angelegte Doppelzeile (Athlet + Distanz + Jahr): P4 nimmt die
       bessere als Bezug, schreibt nur dorthin, meldet „Doppelzeile im Bestand"
       mit beiden ids – dasselbe im Formular (7.3)
-- [ ] Namens-Splitter: „Körner, Holger", „BORGHARDT Lukas", „von Hoff Anna-Maria",
+- [x] Namens-Splitter: „Körner, Holger", „BORGHARDT Lukas", „von Hoff Anna-Maria",
       „VAN DER BERG Jan-Peter", einteiliger Name
-- [ ] Vereinsfilter: `LSG Karlsruhe`, `LSG-Karlsruhe`, `lsg karlsruhe e.V.` treffen –
+      → dazu `GEIßLER Franziska`, `STÖßER Vivien` und `VAN WEES-SNEL Trees`
+        aus der echten Liste
+- [x] Vereinsfilter: `LSG Karlsruhe`, `LSG-Karlsruhe`, `lsg karlsruhe e.V.` treffen –
       `LG Region Karlsruhe` und ein leeres Vereinsfeld treffen **nicht**
+      → ebenso nicht getroffen: `LSG Weiher`, `(Karlsruhe)` und
+        `Karlsruher Lemminge e.V.`
 - [ ] Athletenzuordnung: `Koerner` findet `Körner`, gleicher Name mit anderem
       Jahrgang findet **nicht**
-- [ ] Distanz-Mapping: `21 KM Sparkasse Kraichgau-Lauf` → `HM`,
+- [x] Distanz-Mapping: `21 KM Sparkasse Kraichgau-Lauf` → `HM`,
       `42,195 km` → `Marathon`, `5. Ettlinger Marathon` → `Marathon` (nicht `5km`),
       `10 Meilen` → kein Treffer
+      → dazu alle neun Ettlinger Wettbewerbsnamen aus der Fixture
 - [ ] Regel 171: `Pfeiffer, Wolfram` + 1961 → 171; anderer Jahrgang → kein Treffer
 - [ ] Regel 183: beliebiger Nachname + `Harry` + 1943 → 183
 - [ ] Regel 377: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 377
@@ -2960,22 +3033,31 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [ ] Zeile ohne Jahrgang in der Quelle → „nennt keinen Jahrgang", nicht
       „kein Athlet gefunden"
 - [ ] `skip_offen` steht mit Rohdaten im Log, auch wenn nichts geschrieben wurde
-- [ ] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
+- [x] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
       Code nicht in `lsg_ak` → wird geschrieben, Hinweis auf den fehlenden
       Frontend-Filter erscheint
-- [ ] Distanz-Select bietet `6h`/`12h`/`24h` **nicht** an; ein Zeitlauf-Wettbewerb
+      → der Hinweis auf den fehlenden Frontend-Filter kommt mit der
+        Oberfläche (M2/M5)
+- [x] Distanz-Select bietet `6h`/`12h`/`24h` **nicht** an; ein Zeitlauf-Wettbewerb
       erzeugt die Meldung statt eines Imports
-- [ ] Datum: `17.05.2026` im Namen wird erkannt; nur `2026` → Feld unvollständig,
+      → das Select ist geschlossen; die Meldung bei einem Zeitlauf-Wettbewerb
+        kommt mit der Oberfläche (M2)
+- [x] Datum: `17.05.2026` im Namen wird erkannt; nur `2026` → Feld unvollständig,
       Parsen gesperrt; gar nichts → Feld leer
-- [ ] race result Ettlingen: Datumsfeld bleibt leer, Hinweistext erscheint,
+      → die Sperre des Parsen-Buttons kommt mit M2. Zusätzlich geprüft: ein
+        vollständiges, aber unmögliches Datum (`31.02.2026`) liefert auch keine
+        Jahreszahl – wer den Tag falsch schreibt, kann das Jahr genauso falsch
+        geschrieben haben
+- [x] race result Ettlingen: Datumsfeld bleibt leer, Hinweistext erscheint,
       `ActiveFrom` (2022) taucht nirgends auf
-- [ ] Beide Wettbewerbe „Walking 21,1km" und „Hauptlauf 21,1km" schlagen `HM`
+- [x] Beide Wettbewerbe „Walking 21,1km" und „Hauptlauf 21,1km" schlagen `HM`
       vor; das Dropdown ist in beiden Fällen sichtbar und änderbar
+      → dass das Dropdown sichtbar und änderbar ist, prüft M2
 - [ ] Datum 31.12. → Import zählt ins alte Jahr, auch wenn im Januar importiert
 - [ ] Datum 01.01. → Import zählt ins neue Jahr. Derselbe Test mit
       MySQL-Session-Zeitzone auf `UTC` **und** auf `Europe/Berlin`: gleiches
       Ergebnis, weil das Jahr nicht mehr in SQL gerechnet wird (6.5.4)
-- [ ] `lsg_bl_jahr_grenzen( 2026 )` liefert 31.12.2025 23:00 UTC bis
+- [x] `lsg_bl_jahr_grenzen( 2026 )` liefert 31.12.2025 23:00 UTC bis
       31.12.2026 23:00 UTC (Winterzeit, Europe/Berlin) – und **nicht** die
       `mktime()`-Werte
 - [ ] Bestandszeile, die auf 00:00 Ortszeit des 1. Januar liegt, wird dem

@@ -18,8 +18,34 @@ function lsg_bl_get_best_years() {
 	global $wpdb;
 	$table = lsg_bl_table( 'lsg_best' );
 	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-	$rows = $wpdb->get_col( "SELECT DISTINCT YEAR(FROM_UNIXTIME(`date`)) FROM {$table} WHERE `date` IS NOT NULL AND `date` > 0 ORDER BY 1 DESC" );
-	return array_map( 'intval', $rows );
+	$stamps = $wpdb->get_col( "SELECT DISTINCT `date` FROM {$table} WHERE `date` IS NOT NULL AND `date` > 0" );
+	return lsg_bl_jahre_aus_timestamps( $stamps );
+}
+
+/**
+ * Timestamps → absteigend sortierte Liste eindeutiger Jahre.
+ *
+ * Die beiden Jahres-Dropdowns lasen früher SELECT DISTINCT
+ * YEAR(FROM_UNIXTIME(`date`)) – das rechnet mit der MySQL-Session-Zeitzone
+ * und kann einen Neujahrslauf ins Vorjahr schieben. Hier wird stattdessen
+ * nur der Timestamp gelesen und in PHP über lsg_bl_year_from_timestamp()
+ * (also date_i18n(), also die richtige Zeitzone) in ein Jahr umgerechnet
+ * (Plan 6.5.4).
+ *
+ * @param array $stamps Rohe Timestamps aus der Datenbank.
+ * @return int[]
+ */
+function lsg_bl_jahre_aus_timestamps( $stamps ) {
+	$jahre = array();
+	foreach ( (array) $stamps as $ts ) {
+		$j = lsg_bl_year_from_timestamp( $ts );
+		if ( $j > 0 ) {
+			$jahre[ $j ] = true;
+		}
+	}
+	$jahre = array_keys( $jahre );
+	rsort( $jahre, SORT_NUMERIC );
+	return $jahre;
 }
 
 /**
@@ -31,8 +57,8 @@ function lsg_bl_get_win_years() {
 	global $wpdb;
 	$table = lsg_bl_table( 'lsg_win' );
 	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-	$rows = $wpdb->get_col( "SELECT DISTINCT YEAR(FROM_UNIXTIME(`date`)) FROM {$table} WHERE `date` IS NOT NULL AND `date` > 0 ORDER BY 1 DESC" );
-	return array_map( 'intval', $rows );
+	$stamps = $wpdb->get_col( "SELECT DISTINCT `date` FROM {$table} WHERE `date` IS NOT NULL AND `date` > 0" );
+	return lsg_bl_jahre_aus_timestamps( $stamps );
 }
 
 /**
@@ -67,8 +93,13 @@ function lsg_bl_get_best_rows( $distance, $gender, $ak, $year = 0 ) {
 	}
 
 	if ( $year > 0 ) {
-		$where[]  = 'YEAR(FROM_UNIXTIME(b.date)) = %d';
-		$params[] = $year;
+		// Zeitspanne statt YEAR(FROM_UNIXTIME()): zeitzonenfest und
+		// indexfaehig (siehe lsg_bl_jahr_grenzen(), Plan 6.5.4).
+		list( $von, $bis ) = lsg_bl_jahr_grenzen( $year );
+		$where[]  = 'b.date >= %d';
+		$params[] = $von;
+		$where[]  = 'b.date < %d';
+		$params[] = $bis;
 	}
 
 	$where_sql = implode( ' AND ', $where );
@@ -117,8 +148,13 @@ function lsg_bl_get_distances_present( $gender, $ak, $year = 0 ) {
 		$params[] = $ak;
 	}
 	if ( $year > 0 ) {
-		$where[]  = 'YEAR(FROM_UNIXTIME(b.date)) = %d';
-		$params[] = $year;
+		// Zeitspanne statt YEAR(FROM_UNIXTIME()): zeitzonenfest und
+		// indexfaehig (siehe lsg_bl_jahr_grenzen(), Plan 6.5.4).
+		list( $von, $bis ) = lsg_bl_jahr_grenzen( $year );
+		$where[]  = 'b.date >= %d';
+		$params[] = $von;
+		$where[]  = 'b.date < %d';
+		$params[] = $bis;
 	}
 	$where_sql = $where ? ( 'WHERE ' . implode( ' AND ', $where ) ) : '';
 
@@ -187,8 +223,13 @@ function lsg_bl_get_win_rows( $year ) {
 	$where  = array();
 	$params = array();
 	if ( $year > 0 ) {
-		$where[]  = 'YEAR(FROM_UNIXTIME(w.date)) = %d';
-		$params[] = $year;
+		// Dieselbe Umstellung wie bei lsg_best: lsg_win hat heute keinen Lauf
+		// am 1. Januar, aber die Falle bliebe sonst offen (Plan 6.5.4).
+		list( $von, $bis ) = lsg_bl_jahr_grenzen( $year );
+		$where[]  = 'w.date >= %d';
+		$params[] = $von;
+		$where[]  = 'w.date < %d';
+		$params[] = $bis;
 	}
 
 	$where_sql = $where ? ( 'WHERE ' . implode( ' AND ', $where ) ) : '';

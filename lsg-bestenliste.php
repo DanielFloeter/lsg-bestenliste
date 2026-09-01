@@ -31,12 +31,43 @@ if ( ! defined( 'LSG_BL_USE_WP_PREFIX' ) ) {
 	define( 'LSG_BL_USE_WP_PREFIX', false );
 }
 
+/**
+ * Wer darf importieren und Ergebnisse von Hand erfassen?
+ *
+ * Entschieden: jeder angemeldete WordPress-Benutzer. Die passende Capability
+ * dafür ist `read` – sie hat jede Rolle bis hinunter zum Abonnenten, und sie
+ * greift in add_menu_page(), current_user_can() und im permission_callback
+ * gleichermaßen (Plan 6.2).
+ *
+ * ⚠ `read` ist nicht „egal": nicht angemeldete Besucher haben diese
+ * Capability nicht. Die Prüfung muss trotzdem in JEDEM Handler stehen, sonst
+ * ist der Import ein offener Endpunkt, über den Fremde Requests an
+ * Drittserver auslösen können.
+ *
+ * ⚠ Diese Konstante ist die EINZIGE Stelle, an der die Capability steht. Soll
+ * der Kreis enger werden, genügt eine Zeile in der wp-config.php:
+ *   define( 'LSG_BL_CAP', 'edit_posts' );    // Redakteure aufwärts
+ *   define( 'LSG_BL_CAP', 'manage_options' ); // nur Administratoren
+ * Sie greift dann für Import und manuelle Erfassung gleichzeitig.
+ */
+if ( ! defined( 'LSG_BL_CAP' ) ) {
+	define( 'LSG_BL_CAP', 'read' );
+}
+
+require_once LSG_BL_PATH . 'includes/class-lsg-normalize.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-helpers.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-db.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-schema.php';
 require_once LSG_BL_PATH . 'includes/render-bestenliste.php';
 require_once LSG_BL_PATH . 'includes/render-gesamtsiege.php';
 require_once LSG_BL_PATH . 'includes/render-ewige-bestenliste.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-rest.php';
+
+require_once LSG_BL_PATH . 'includes/adapters/interface-ergebnis-quelle.php';
+require_once LSG_BL_PATH . 'includes/adapters/class-event-ref.php';
+require_once LSG_BL_PATH . 'includes/adapters/class-raceresult-adapter.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-http.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-adapters.php';
 
 /**
  * Liefert den vollen (ggf. präfixierten) Tabellennamen.
@@ -53,11 +84,31 @@ function lsg_bl_table( $name ) {
 }
 
 /**
- * Aktivierung: legt die vier Tabellen an, falls sie noch nicht existieren
- * (z.B. bei einer frischen Installation ohne vorherigen manuellen Import).
- * Bereits vorhandene Tabellen und Daten werden nicht verändert.
+ * Aktivierung.
+ *
+ * Zwei Funktionen, nicht eine: lsg_bl_install_schema() kennt nur die drei
+ * neuen Tabellen der Import-Erweiterung und läuft auch bei jedem
+ * Versionssprung (siehe class-lsg-schema.php). Die vier Bestandstabellen
+ * bleiben hier, weil ihre Definitionen Anzeigebreiten tragen
+ * (int(10) UNSIGNED, year(4)) – liefen sie regelmäßig durch dbDelta(),
+ * bekämen vier Tabellen mit 6 000 Zeilen Vereinsgeschichte bei jedem
+ * Durchlauf überflüssige ALTER TABLEs (Plan 6.8).
  */
 function lsg_bl_activate() {
+	lsg_bl_install_legacy_schema();
+	lsg_bl_install_schema();
+	lsg_bl_seed_athlete_map();
+	update_option( 'lsg_bl_db_version', LSG_BL_DB_VERSION );
+}
+
+/**
+ * Legt die vier Bestandstabellen an, falls sie noch nicht existieren
+ * (z.B. bei einer frischen Installation ohne vorherigen manuellen Import).
+ * Bereits vorhandene Tabellen und Daten werden nicht verändert.
+ *
+ * ⚠ Wird NUR aus lsg_bl_activate() gerufen, nie aus dem Upgrade-Lauf.
+ */
+function lsg_bl_install_legacy_schema() {
 	global $wpdb;
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
