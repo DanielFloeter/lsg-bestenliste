@@ -1,0 +1,159 @@
+/*
+ * Admin-Styles der Import-Seite.
+ *
+ * Bewusst wenig: die Oberflaeche benutzt die WordPress-Admin-Klassen
+ * (notice notice-error, wp-list-table, form-table). Kein eigenes
+ * UI-Framework, nur ein paar Zeilen fuer den Trichter und die
+ * Vorschautabelle (Plan 6.11).
+ */
+
+/* --- Zustandszeile ---------------------------------------------------- */
+
+.lsg-bl-zustand {
+	margin: .5em 0 1.5em;
+	color: #50575e;
+	font-size: 13px;
+}
+
+.lsg-bl-zustand-punkt {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	margin-right: .5em;
+	border-radius: 50%;
+	background: #c3c4c7;
+	vertical-align: 1px;
+}
+
+.lsg-bl-zustand-bereit .lsg-bl-zustand-punkt,
+.lsg-bl-zustand-punkt.lsg-bl-zustand-bereit,
+.lsg-bl-zustand-punkt.lsg-bl-zustand-vorschau,
+.lsg-bl-zustand-punkt.lsg-bl-zustand-gespeichert {
+	background: #00a32a;
+}
+
+.lsg-bl-zustand-punkt.lsg-bl-zustand-erkannt {
+	background: #dba617;
+}
+
+.lsg-bl-zustand-punkt.lsg-bl-zustand-fehler,
+.lsg-bl-zustand-punkt.lsg-bl-zustand-unbekannt {
+	background: #d63638;
+}
+
+/* --- Erkennung und Herkunftsangaben ----------------------------------- */
+
+.lsg-bl-erkannt,
+.lsg-bl-quelle {
+	margin: 0 0 1em;
+	padding: .6em .9em;
+	background: #f6f7f7;
+	border-left: 4px solid #2271b1;
+}
+
+.lsg-bl-herkunft {
+	margin-left: .6em;
+	padding: 2px 6px;
+	background: #f0f0f1;
+	border-radius: 3px;
+	color: #50575e;
+	font-size: 12px;
+}
+
+.lsg-bl-plausibel {
+	margin: .4em 0 0;
+	color: #8a6d00;
+	font-size: 13px;
+}
+
+.lsg-bl-gesperrt {
+	margin: 1em 0 .3em;
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+/* --- Der Trichter ----------------------------------------------------- */
+
+.lsg-bl-trichter {
+	margin: 1em 0 1.5em;
+	font-size: 15px;
+	line-height: 2.2;
+}
+
+.lsg-bl-trichter .lsg-bl-stufe {
+	padding: .35em .7em;
+	background: #f0f0f1;
+	border-radius: 3px;
+	white-space: nowrap;
+}
+
+.lsg-bl-trichter .lsg-bl-stufe-lsg {
+	background: #e6f4ea;
+}
+
+.lsg-bl-trichter .lsg-bl-stufe-verworfen,
+.lsg-bl-trichter .lsg-bl-stufe-offen {
+	background: #fcf0f1;
+}
+
+.lsg-bl-trichter .lsg-bl-pfeil {
+	color: #8c8f94;
+}
+
+/* --- Vorschautabelle -------------------------------------------------- */
+
+.lsg-bl-vorschau .lsg-bl-roh {
+	color: #646970;
+	font-size: 12px;
+}
+
+.lsg-bl-vorschau .lsg-bl-warnzeile {
+	color: #8a6d00;
+	font-size: 12px;
+}
+
+.lsg-bl-sieg {
+	font-size: 15px;
+}
+
+/* --- Nicht uebernommene Vereine --------------------------------------- */
+
+.lsg-bl-abgelehnt {
+	margin: 2em 0;
+	padding: 1em;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+}
+
+.lsg-bl-abgelehnt > summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.lsg-bl-abgelehnt table {
+	margin-top: 1em;
+}
+
+.lsg-bl-abgelehnt tr.lsg-bl-nah td {
+	background: #fcf9e8;
+}
+
+.lsg-bl-restliste {
+	margin-top: 1em;
+	max-height: 14em;
+	overflow-y: auto;
+	padding: .8em;
+	background: #f6f7f7;
+	color: #50575e;
+	font-size: 12px;
+	line-height: 1.9;
+}
+
+.lsg-bl-anzahl {
+	color: #8c8f94;
+}
+
+.lsg-bl-aliasliste {
+	margin-top: 1em;
+	font-size: 13px;
+}

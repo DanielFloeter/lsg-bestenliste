@@ -68,6 +68,17 @@ require_once LSG_BL_PATH . 'includes/adapters/class-event-ref.php';
 require_once LSG_BL_PATH . 'includes/adapters/class-raceresult-adapter.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-http.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-adapters.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-pipeline.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-import.php';
+
+/*
+ * Die Admin-Oberflächen nur im Backend laden – ein Frontend-Aufruf braucht
+ * weder das Menü noch die Formular-Handler. `admin-post.php` und
+ * `admin-ajax.php` zählen dazu, sonst greifen die Handler nicht.
+ */
+if ( is_admin() ) {
+	require_once LSG_BL_PATH . 'includes/admin/page-import.php';
+}
 
 /**
  * Liefert den vollen (ggf. präfixierten) Tabellennamen.

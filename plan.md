@@ -12,7 +12,7 @@
 > Abschnitt 8 aufgenommen und im Skript
 > `maintenance/2026-09-01-bestand-bereinigung.sql` ausformuliert.
 >
-> Stand der Umsetzung: 2026-09-01 – **M1 ist fertig und geprüft.**
+> Stand der Umsetzung: 2026-09-01 – **M1 und M2 sind fertig und geprüft.**
 > Datenmodell samt Schema-Version, Interface, Value-Objects, Registry,
 > HTTP-Torwächter, `RaceResultAdapter`, die gesamte Normalisierung und die
 > Unit-Lage der Tests stehen; die Unit-Suite ist grün (148 Tests,
@@ -20,6 +20,13 @@
 > Zwei Befunde aus der Umsetzung sind unten an ihrer Stelle eingearbeitet:
 > die race-result-Listen stehen nicht unter `config.lists` (4.1), und
 > `01:20.24` braucht eine eigene Regel im Zeit-Parser (6.5.1).
+>
+> Mit M2 stehen die Admin-Seite (Schritt 1–3, vollständig ohne JavaScript),
+> P1 und P2, die Distanz-/Datums-/Ort-Controls, der Trichter, die Vorschau
+> und der Block der nicht übernommenen Vereine. Geschrieben wird noch
+> nichts. Die Unit-Suite hat 196 Tests; dazu ist die Seite in allen ohne
+> JavaScript erreichbaren Zuständen gegen die Ettlinger Fixture gerendert
+> worden (658 gelesen → 1 ohne Zeit → 11 LSG, zwei Abrufe je Import).
 >
 > Stand der Bereinigung: 2026-09-01 – V1 und der Pflichtteil von V2 sind von
 > Hand ausgeführt. Die Dumps in `assets/*.sql` bleiben absichtlich auf dem
@@ -301,6 +308,12 @@ includes/adapters/interface-ergebnis-quelle.php
 includes/adapters/class-event-ref.php          EventRef, Wettbewerb, Liste, Ergebnis
 includes/adapters/class-raceresult-adapter.php
 includes/adapters/class-runtix-adapter.php
+includes/class-lsg-normalize.php               Normalisierung, ohne WordPress
+includes/class-lsg-pipeline.php                P2, Trichter, Zustände – ohne WordPress
+includes/class-lsg-import.php                  Discovery, Caches, Parse-Orchestrierung
+includes/class-lsg-http.php                    Torwächter, Allowlist, Rate-Limit
+includes/class-lsg-adapters.php                Registry
+includes/class-lsg-schema.php                  die drei neuen Tabellen
 includes/admin/page-import.php                 Abschnitt 6
 includes/admin/page-log.php                    6.8
 includes/admin/page-map.php                    6.5.3
@@ -2631,7 +2644,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M | Inhalt | Fertig, wenn |
 |---|---|---|
 | M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures, `tests/unit/` | ✅ **erledigt 2026-09-01** – `phpunit --testsuite unit` ist grün (148 Tests) und die Ettlingen-Liste kommt normalisiert aus dem Adapter |
-| M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | die Vorschau zeigt den Trichter – geschrieben wird noch nichts |
+| M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | ✅ **erledigt 2026-09-01** – die Vorschau zeigt den Trichter `658 gelesen → 1 ohne Zeit → 11 LSG`, geschrieben wird nichts |
 | M3 | P3, P4, Übernahme, Log + Log-Ansicht | ein Import landet nachvollziehbar in `lsg_best`, zweimal ausgeführt ändert nichts |
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | derselbe Ablauf mit einer Runtix-URL |
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | Zeitläufe und Korrekturen sind erfassbar |
@@ -2706,19 +2719,30 @@ prüft am Ende keinen von beiden.
 - [x] Zeit-Parser: `01:11:54.9`, `1:13:08`, evtl. `MM:SS` → einheitlich Sekunden
 - [x] Normalisierung: `lsg_bl_verein_normalisieren()` + Namens-Normalisierung
       (Umlaute, Bindestriche, Groß/Klein) – Basis für P2 und P3
-- [ ] Transient-Caching innerhalb eines Vorgangs (Discovery 15 min, Parse 1 h)
+- [x] Transient-Caching innerhalb eines Vorgangs (Discovery 15 min, Parse 1 h)
+      → Discovery holt Wettbewerbe, Listen und Datum in einem Rutsch, damit ein
+        Wechsel des Wettbewerbs keinen Request auslöst. Gemessen: der zweite
+        Seitenaufruf derselben Veranstaltung kostet null Abrufe, ein Parsen kostet
+        genau zwei (config + list).
 - [x] Adapter-Registry + Filter `lsg_bl_ergebnis_adapter`
 - [ ] Admin-Seite „Ergebnis-Import" (Abschnitt 6)
-  - [ ] Top-Level-Menü `lsg-bestenliste` + Konstante `LSG_BL_CAP`
-  - [ ] Schritt 1: URL-Feld + Adapter-Erkennung, Adapter manuell übersteuerbar
-  - [ ] Schritt 2: Wettbewerbs-Select, Listen-Select (ausblenden bei ≤ 1 Liste)
-  - [ ] Schritt 3: Parsen-Button, Vorschautabelle, Übernehmen/Verwerfen
-  - [ ] Alle elf Zustände aus 6.11 darstellen (inkl. Fehler mit Klartext)
-  - [ ] Formular-Roundtrip über `admin-post.php` (funktioniert ohne JS)
+  - [x] Top-Level-Menü `lsg-bestenliste` + Konstante `LSG_BL_CAP`
+  - [x] Schritt 1: URL-Feld + Adapter-Erkennung, Adapter manuell übersteuerbar
+  - [x] Schritt 2: Wettbewerbs-Select, Listen-Select (ausblenden bei ≤ 1 Liste)
+  - [x] Schritt 3: Parsen-Button, Vorschautabelle, Übernehmen/Verwerfen
+        → Vorschau und Verwerfen stehen; „Übernehmen" kommt mit M3 – bis dahin sagt
+          die Seite ausdrücklich, dass nichts gespeichert wird.
+  - [x] Alle elf Zustände aus 6.11 darstellen (inkl. Fehler mit Klartext)
+        → als eine Funktion (`lsg_bl_import_zustand()`); dargestellt werden die ohne
+          JavaScript erreichbaren. `erkenne`, `parse` und `uebernahme` sind
+          Zwischenzustände eines laufenden Requests und werden erst mit M6 sichtbar.
+          ⚠ „erkannt" deckt zwei Lagen ab, die der Plan nicht trennt: Wettbewerb noch
+          nicht gewählt, und Wettbewerb gewählt, aber Distanz oder Datum fehlen.
+  - [x] Formular-Roundtrip über `admin-post.php` (funktioniert ohne JS)
   - [ ] `assets/js/admin-import.js` für den Ablauf ohne Reload
   - [ ] `AbortController` gegen Race Condition beim schnellen Umschalten
-  - [ ] Assets nur auf dieser Seite laden (`$hook`-Vergleich)
-  - [ ] Nonce + `check_admin_referer()` + Capability-Prüfung in jedem Handler
+  - [x] Assets nur auf dieser Seite laden (`$hook`-Vergleich)
+  - [x] Nonce + `check_admin_referer()` + Capability-Prüfung in jedem Handler
 - [ ] Parse-Pipeline P1–P4 (Abschnitt 6.5)
   - [x] P1 Namens-Splitter: Komma-Form, GROSSBUCHSTABEN-Form, Fallback + `namen_unsicher`
         → ⚠ das scharfe ß hat keine Großform, die die Quellen benutzen
@@ -2727,8 +2751,11 @@ prüft am Ende keinen von beiden.
   - [x] P1 Geschlecht aus dem AK-Code der Quelle (`M 30`, `1. M35`) → `m`/`f`
   - [x] P1 Netto vor Brutto, `zeit_typ` mitführen
   - [x] P1 Zeit-Normalisierung auf `HH:MM:SS`, DNF/DSQ/DNS verwerfen + zählen
-  - [ ] P1 Felder Distanz / Datum / Ort über der Tabelle, vorbelegt + änderbar
-  - [ ] P1 Datum ermitteln: Adapter-Metadaten → Datum im Namen → Jahr → leer
+  - [x] P1 Felder Distanz / Datum / Ort über der Tabelle, vorbelegt + änderbar
+        → Vorbelegt wird nur, was der Mensch nicht selbst gesetzt hat. Der
+          Unterschied zwischen „noch nicht angefasst" und „bewusst geleert" steht in
+          der Query: fasst jemand das Feld an, ist der Parameter da – auch leer.
+  - [x] P1 Datum ermitteln: Adapter-Metadaten → Datum im Namen → Jahr → leer
   - [ ] P1 Runtix: `/sts/10021/{id}` für den Einstieg, `/sts/10020/{jahr}` als
         maßgebliche Quelle, Eintrag über den Link `/sts/10050/{id}` finden
   - [ ] P1 Runtix: höchstens zwei Jahres-Versuche, dann Feld leer lassen
@@ -2738,14 +2765,21 @@ prüft am Ende keinen von beiden.
   - [x] P1 race result: `Tab.ActiveFrom` **nicht** als Veranstaltungsdatum lesen
         → und der Wettbewerbsname wird für das Datum gar nicht gelesen: dort
           stehen Jahrgangsgrenzen (`Bambini 500m`, `Kids 1000m`)
-  - [ ] P1 Beide Controls leer lassen, sobald der Wert mehrdeutig ist
-  - [ ] P1 `datum_quelle` mitführen und am Feld anzeigen
-  - [ ] P1 Unvollständiges Datum **nicht** ergänzen (kein stiller 1. Januar)
-  - [ ] P1 Timestamp mit 12:00 Uhr Ortszeit speichern (Zeitzonenfalle)
-  - [ ] P1 `<input type="date">` mit Textfeld-Fallback `TT.MM.JJJJ`
-  - [ ] P1 Plausibilität: Zukunft, > 10 Jahre zurück, Jahr ≠ Jahr im Eventnamen
-  - [ ] P1 Parsen erst freigeben, wenn Distanz **und** vollständiges Datum stehen
-  - [ ] Änderung von Datum oder Distanz verwirft die Vorschau (zurück auf „Parsen")
+  - [x] P1 Beide Controls leer lassen, sobald der Wert mehrdeutig ist
+  - [x] P1 `datum_quelle` mitführen und am Feld anzeigen
+  - [x] P1 Unvollständiges Datum **nicht** ergänzen (kein stiller 1. Januar)
+  - [x] P1 Timestamp mit 12:00 Uhr Ortszeit speichern (Zeitzonenfalle)
+  - [x] P1 `<input type="date">` mit Textfeld-Fallback `TT.MM.JJJJ`
+  - [x] P1 Plausibilität: Zukunft, > 10 Jahre zurück, Jahr ≠ Jahr im Eventnamen
+        → ⚠ verglichen wird gegen `time()`, nicht gegen `current_time()`: WordPress
+          setzt die PHP-Zeitzone auf UTC, `current_time()` wäre um den Offset
+          verschoben.
+  - [x] P1 Parsen erst freigeben, wenn Distanz **und** vollständiges Datum stehen
+  - [x] Änderung von Datum oder Distanz verwirft die Vorschau (zurück auf „Parsen")
+        → über einen Fingerabdruck über Adapter, Event, Wettbewerb, Liste, Distanz
+          und Datum. ⚠ Der Ort steht bewusst NICHT drin: er landet in
+          `lsg_best.town`, geht aber in keinen Vergleich ein – ihn zu ändern darf
+          keine Tabelle wegwerfen.
   - [x] P1 `lsg_bl_distance_aliases()`: 21→HM, 42→Marathon, Zahl+Name
   - [x] P1 Distanzwort schlägt Zahl (Marathon vor 42, „5. Ettlinger Marathon")
         → aufgelöst über drei Regeln: ein Staffel-Multiplikator (`4x10 km`) ist
@@ -2757,10 +2791,22 @@ prüft am Ende keinen von beiden.
         `lsg_best.time` eine Strecke, keine Zeit (6.5.1)
   - [x] P1 `platz` mitlesen (nur für 6.5.5)
   - [x] P2 `lsg_bl_ist_lsg()` (LSG **und** Karlsruhe, normalisiert)
+        → In der Ettlinger Liste stehen `Karlsruher Lemminge` und `Karlsruher
+          Lemminge e.V.` als eigene Vereine (je 1 Zeile). Beide fallen durch den
+          Filter. **Offen: sind das eigene Leute?** Wenn ja, ist der Alias der Weg,
+          nicht eine Änderung der UND-Regel.
         → die Ettlingen-Fixture belegt den Zweck der UND-Regel: sie enthält
           22 Zeilen `LSG Weiher` neben 11 Zeilen `LSG Karlsruhe`, dazu
           `(Karlsruhe)` als Wohnort und `Karlsruher Lemminge e.V.`
-  - [ ] P2 Block „nicht übernommene Vereine" + Vereins-Alias-Option
+  - [x] P2 Block „nicht übernommene Vereine" + Vereins-Alias-Option
+        → Zwei Listen: Schreibweisen mit `LSG` oder `Karlsruhe` im Namen bekommen
+          eine Aktion, die übrigen stehen vollständig als kompakte Liste da. Bei der
+          Ettlinger Liste sind das 16 gegen 287 – mit einem Link je Zeile wog die
+          Seite 137 kB, fast alles davon Links, die niemand anklickt. „(kein Verein)"
+          steht mit in der oberen Tabelle: es ist der einzige Eintrag, der kein
+          Verein ist, und dort können Mitglieder stecken.
+          ⚠ Ein neuer Alias verwirft die Vorschau, wie Datum und Distanz – der Filter
+          hat sich geändert. Eine leere Vereinsangabe wird als Alias abgelehnt.
   - [ ] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
   - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 377)
   - [ ] P3 Jede `athletes_id` des Startdatensatzes gegen Name und Jahrgang
@@ -2787,8 +2833,11 @@ prüft am Ende keinen von beiden.
   - [ ] P4 Mehr als eine Bestandszeile: beste als Bezug, nur dorthin schreiben,
         Zusatz „Doppelzeile im Bestand" – **kein** stilles `LIMIT 1` (6.5.4)
 - [ ] Gesamtsieg (Abschnitt 6.5.5) – **nur Erkennung und Markierung**
-  - [ ] Platz 1 erkennen, aber ausschließlich in der Gesamtwertung
-  - [ ] 🏆 in der Übernahme-Tabelle + Hinweis über der Tabelle
+  - [x] Platz 1 erkennen, aber ausschließlich in der Gesamtwertung
+  - [x] 🏆 in der Übernahme-Tabelle + Hinweis über der Tabelle
+        → Erkannt und markiert, ohne Wirkung. In der Ettlinger Liste gewinnt kein
+          LSG-Läufer – bester LSG-Karlsruhe-Platz ist 20 –, die Erkennung meldet also
+          richtigerweise nichts.
   - [ ] Spalten `roh_platz`, `gesamtsieg` im Log anlegen (leer nutzen)
   - [ ] **Nicht** nach `lsg_win` schreiben – späterer Ausbaustand
 - [ ] Übernahme-Oberfläche (Abschnitt 6.6)
@@ -2814,9 +2863,18 @@ prüft am Ende keinen von beiden.
         durch die Prüfung, auch der zweite Request aus `config.server` (6.10)
   - [x] Rate-Limit pro Benutzer (Transient-Zähler)
         → `lsg_bl_rate_limit_ok()` steht; verdrahtet wird sie in den Handlern (M2)
-  - [ ] Discovery-Cache (Transient, 15 min) – **ohne** den rotierenden `key`
-  - [ ] Parse-Ergebnis in Transient (1 h), Persistenz erst bei „Übernehmen"
-  - [ ] Formular-Handler und REST-Route rufen dieselbe Funktion (keine Doppel-Logik)
+  - [x] Discovery-Cache (Transient, 15 min) – **ohne** den rotierenden `key`
+        → Im Cache stehen nur die abgeleiteten Wettbewerbs- und Listennamen. `key`
+          und `server` sind ausgenommen und werden bei jedem Datenabruf frisch aus
+          `config` geholt.
+  - [x] Parse-Ergebnis in Transient (1 h), Persistenz erst bei „Übernehmen"
+        → Der Token ist an die `user_id` gebunden und wird beim Lesen gegengeprüft.
+          Gehalten werden nur die Zeilen, die P2 passiert haben – die
+          Nicht-LSG-Ergebnisse landen nirgends, auch nicht im Transient.
+  - [x] Formular-Handler und REST-Route rufen dieselbe Funktion (keine Doppel-Logik)
+        → Die Logik steht in `class-lsg-import.php` (`lsg_bl_discovery()`,
+          `lsg_bl_parsen()`); die Admin-Seite ist nur ein Eingang. Der zweite kommt
+          mit M6.
 - [ ] Admin-Seite „Bestenliste": von Hand erfassen (Abschnitt 7)
   - [ ] Untermenü `lsg-bestenliste-best`, Callback in `includes/admin/page-best.php`
   - [ ] Capability `LSG_BL_CAP`, Nonce + `check_admin_referer()` in jedem Handler
@@ -2976,10 +3034,12 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [x] Zeit-Parser: DNF / DSQ / DNS / leere Zeit werden verworfen und gezählt
 - [ ] Manueller Abgleich: Top 10 einer Liste gegen die Website
 - [x] Test mit leerer / noch nicht veröffentlichter Ergebnisliste
-- [ ] Test mit deaktiviertem Netzwerk: Klartext-Fehlermeldung und Zustand
+- [x] Test mit deaktiviertem Netzwerk: Klartext-Fehlermeldung und Zustand
       `fehler` (6.11) – **kein** Rückfall auf alte Daten. Einen
       stale-while-error-Pfad gibt es nicht (5.2), und ein halb gefüllter
       Import wäre schlimmer als ein sichtbarer Abbruch
+      → geprüft mit einer leeren Antwort: `notice-error` mit Klartext, und keine
+        alten Daten in der Ausgabe.
 - [x] Erkennung: Tabelle aus 6.2 als Testfälle, inkl. URL mit/ohne trailing slash,
       `#2_B45FAB`-Fragment, `runtix.com`-URL ohne `/sts/`
       → der race-result-Teil ist geprüft, der Runtix-Teil kommt mit M4
@@ -2996,7 +3056,7 @@ Schreibvorgang) und wächst mit M6 (REST).
       → im Adapter umgesetzt; die Ettlingen-Fixture enthält keinen solchen
         Eintrag, geprüft ist also die Regel, nicht der Fall
 - [ ] Runtix: Wettbewerb `"w"` überlebt den Weg durch Attribut, REST und Parser
-- [ ] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
+- [x] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
 - [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
 - [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
 - [ ] Zweimal derselbe Import → alle Zeilen `gleich`, keine Duplikate
@@ -3023,7 +3083,7 @@ Schreibvorgang) und wächst mit M6 (REST).
       (= Schlippe-Schrieber, Gudrun; **nicht** 337 = Österle, Hans-Jörg, 1967)
 - [ ] Zwei passende Regeln → `mehrdeutig`, Zeile bleibt offen, beide IDs genannt
 - [ ] Regel nur mit Jahrgang lässt sich nicht anlegen
-- [ ] Invariante: Zeilenzahl der Tabelle == LSG-Zahl aus P2, bei jedem Import
+- [x] Invariante: Zeilenzahl der Tabelle == LSG-Zahl aus P2, bei jedem Import
 - [ ] Unbekannter Teilnehmer erscheint in der Tabelle, nicht nur in den Zahlen
 - [ ] Unbekannter Teilnehmer hat keine Checkbox und wird auch von „Alle" nicht
       angehakt; nach dem Übernehmen steht kein neuer `lsg_athlete`-Datensatz da
