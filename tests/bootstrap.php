@@ -51,6 +51,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once LSG_BL_PLUGIN_DIR . 'includes/class-lsg-normalize.php';
 require_once LSG_BL_PLUGIN_DIR . 'includes/class-lsg-pipeline.php';
 require_once LSG_BL_PLUGIN_DIR . 'includes/class-lsg-helpers.php';
+require_once LSG_BL_PLUGIN_DIR . 'includes/class-lsg-leistung.php';
+require_once LSG_BL_PLUGIN_DIR . 'includes/class-lsg-leistung.php';
 require_once LSG_BL_PLUGIN_DIR . 'includes/adapters/interface-ergebnis-quelle.php';
 require_once LSG_BL_PLUGIN_DIR . 'includes/adapters/class-event-ref.php';
 require_once LSG_BL_PLUGIN_DIR . 'includes/adapters/class-raceresult-adapter.php';

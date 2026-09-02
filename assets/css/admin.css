@@ -213,3 +213,200 @@
 	margin-left: -.35em;
 	color: #8c8f94;
 }
+
+/* --- Seite „Bestenliste" (Plan 7) ------------------------------------- */
+
+.lsg-bl-bestfilter {
+	margin: 1em 0 .5em;
+}
+
+.lsg-bl-bestfilter label {
+	margin-right: .8em;
+}
+
+.lsg-bl-aktivfilter {
+	margin-left: .8em;
+	padding: 2px 8px;
+	background: #f0f6fc;
+	border-radius: 3px;
+	font-size: 13px;
+}
+
+/*
+ * Fehler stehen AM Feld, nicht nur oben in einer Notice: bei sechs Feldern
+ * ist „bitte Eingaben pruefen" keine Hilfe.
+ */
+.lsg-bl-bestform tr.lsg-bl-feldfehler th,
+.lsg-bl-mapform tr.lsg-bl-feldfehler th {
+	border-left: 4px solid #d63638;
+	padding-left: .6em;
+}
+
+.lsg-bl-fehlertext {
+	margin: .4em 0 0;
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+.lsg-bl-akzeile {
+	margin: .6em 0 0;
+	padding: .4em .7em;
+	display: inline-block;
+	background: #f0f6fc;
+	border-radius: 3px;
+}
+
+.lsg-bl-akfehlt {
+	margin: .4em 0 0;
+	color: #8a6d00;
+	font-size: 13px;
+}
+
+/* --- Der Vergleich mit dem Bestand (7.3) ------------------------------ */
+
+.lsg-bl-vergleich {
+	margin: 1.5em 0;
+	padding: 1em 1.2em;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-left-width: 4px;
+}
+
+.lsg-bl-vergleich h2 {
+	margin: 0 0 .5em;
+	font-size: 14px;
+}
+
+.lsg-bl-vergleich-keine {
+	border-left-color: #c3c4c7;
+}
+
+.lsg-bl-vergleich-besser {
+	border-left-color: #00a32a;
+	background: #f6fbf7;
+}
+
+.lsg-bl-vergleich-schlechter {
+	border-left-color: #dba617;
+	background: #fdfaf0;
+}
+
+.lsg-bl-vergleich-gleich {
+	border-left-color: #2271b1;
+	background: #f6f7f7;
+}
+
+.lsg-bl-vergleich-text {
+	margin: 0 0 .3em;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.lsg-bl-vergleich-alt {
+	margin: 0;
+	color: #50575e;
+	font-size: 13px;
+}
+
+/* --- Loeschen --------------------------------------------------------- */
+
+.lsg-bl-loeschen-hinweis {
+	color: #b32d2e;
+}
+
+.lsg-bl-loeschlink {
+	margin-top: 2em;
+}
+
+.lsg-bl-loeschlink a,
+.lsg-bl-loeschknopf {
+	color: #b32d2e;
+}
+
+/* --- Seite „Zuordnungen" (6.5.3) -------------------------------------- */
+
+.lsg-bl-mapsuche {
+	margin: 1em 0;
+}
+
+.lsg-bl-maptabelle {
+	margin-top: 1em;
+}
+
+.lsg-bl-regelid {
+	color: #8c8f94;
+	font-weight: 400;
+}
+
+.lsg-bl-maptabelle tr.lsg-bl-regel-aus td {
+	color: #8c8f94;
+}
+
+.lsg-bl-maptabelle tr.lsg-bl-regel-kollision td {
+	background: #fcf9e8;
+}
+
+.lsg-bl-ausgeschaltet {
+	color: #8c8f94;
+	font-size: 12px;
+}
+
+.lsg-bl-kollision {
+	color: #8a6d00;
+	font-size: 12px;
+}
+
+/*
+ * Die Aktionsspalte haelt einen Link und zwei kleine Formulare. Ein Formular
+ * ist von sich aus ein Block – ohne inline-block stehen „abschalten" und
+ * „loeschen" untereinander und die Zeile wird dreimal so hoch.
+ */
+.lsg-bl-mapaktionen form {
+	display: inline-block;
+	margin-left: .6em;
+}
+
+/* --- Seite „Bestenliste" (Plan 7) ------------------------------------- */
+
+.lsg-bl-bestfilter {
+	margin: 1em 0;
+}
+
+.lsg-bl-bestfilter select,
+.lsg-bl-bestfilter input {
+	margin-right: .3em;
+	vertical-align: middle;
+}
+
+.lsg-bl-bestliste .lsg-bl-pfeil {
+	color: #8c8f94;
+}
+
+.lsg-bl-bestliste td a.lsg-bl-loeschen,
+.lsg-bl-mapliste td a.lsg-bl-loeschen {
+	color: #b32d2e;
+}
+
+.lsg-bl-ak {
+	margin: .4em 0 0;
+	font-weight: 600;
+}
+
+.lsg-bl-lage {
+	margin: 1em 0;
+	padding: .2em 1em;
+}
+
+.lsg-bl-lage .lsg-bl-roh {
+	color: #50575e;
+}
+
+/* --- Zuordnungen ------------------------------------------------------ */
+
+.lsg-bl-mapliste tr.lsg-bl-inaktiv td {
+	color: #8c8f94;
+}
+
+.lsg-bl-mapliste tr.lsg-bl-inaktiv code {
+	color: #8c8f94;
+}

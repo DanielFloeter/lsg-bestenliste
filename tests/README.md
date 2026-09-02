@@ -4,7 +4,7 @@ Zwei Lagen, wie in `plan.md`, Abschnitt 8 (Verifikation) festgelegt.
 
 | Lage | Braucht | Prüft |
 |---|---|---|
-| `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields`, Datumserkennung, AK-Berechnung, URL-Erkennung, P2, P3, P4, Trichter, Zustände |
+| `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields`, Datumserkennung, AK-Berechnung, URL-Erkennung, P2, P3, P4, Trichter, Zustände, Leistungsfeld und Jahresbestzeit-Prüfung (7.3), Regelkollisionen |
 | `tests/integration/` | WordPress-Testsuite + MySQL | `dbDelta()`-Schema, P3/P4 gegen echte Tabellen, REST-Routen, Capability, SSRF-Allowlist |
 
 ## Unit-Lage laufen lassen
@@ -37,6 +37,7 @@ erwartet die `yoast/phpunit-polyfills`.
 | `p3-p4-test.php` | Zuordnungsstufen, die drei Startregeln, Statusbildung, Doppelzeilen |
 | `runtix-adapter-test.php` | URL-Zerlegung, Contest `w`, DOM-Parser nach Klasse, Umlaute, Datumsauflösung |
 | `adapter-contract-test.php` | beide Adapter → identisches Zielschema, Allowlist-Form, `datum()`-Struktur |
+| `leistung-test.php` | Leistungsfeld je Distanztyp, Streckenprüfung, Jahresbestzeit-Prüfung (7.3), Formularvalidierung, Regelkollisionen |
 
 ## Integrationslage
 
@@ -56,6 +57,23 @@ Repositories geprüft ist:
 - `dbDelta()` zweimal hintereinander erzeugt beim zweiten Mal kein
   `ALTER TABLE`
 - REST-Routen ohne Login oder ohne Nonce → 401/403
+
+Und aus **M5** (Abschnitt 7):
+
+- das Formular legt eine Zeile in `lsg_best` an und schreibt genau einen
+  Vorgang mit `adapter = 'manuell'`
+- eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg – auch
+  nicht über das Bearbeiten
+- Löschen protokolliert den vollständigen Datensatz, **bevor** die Zeile
+  weg ist
+- ein Speichern, das nichts ändert, erzeugt keine Log-Zeile
+- die Listensortierung: Jahr absteigend, Distanz in der Reihenfolge von
+  `lsg_bl_distance_map()`, Leistung – und bei den Zeitläufen die weiteste
+  Strecke zuerst. ⚠ Das ist der Teil, der außerhalb von MySQL **nicht**
+  geprüft ist: die Sortierung steckt in SQL (`CASE` plus
+  `CAST(… AS DECIMAL(12,3))`), und die SQLite-Kulisse des Wegwerf-Harness
+  rechnet dort anders
+- `WP_List_Table` mit der echten Klasse statt mit dem Stub des Harness
 
 ⚠ Sie legt eine eigene Testdatenbank an und leert sie bei jedem Lauf –
 **niemals auf die Datenbank der Installation zeigen**, in der die 6 000
@@ -156,6 +174,24 @@ Auch hier keine Beispieldaten, sondern die Fallstricke:
 - **58 von 157 Übersichtszeilen ohne Ergebnisse**, deren Name auf
   `/sts/10021/` zeigt statt auf `/sts/10050/`. Zeile 3190 in der Fixture
   ist so eine.
+
+## Was außerhalb dieser Suite geprüft ist
+
+⚠ Zwei Dinge laufen heute **nicht** in `tests/unit/`, weil sie WordPress
+oder eine Datenbank brauchen – geprüft sind sie trotzdem, nur mit
+Wegwerf-Skripten außerhalb des Repositories. Wer diese Suite für
+vollständig hält, hält sie für mehr, als sie ist:
+
+- **Die Admin-Seiten** (`page-import.php`, `page-log.php`, `page-best.php`,
+  `page-map.php`) werden gegen WordPress-Stubs und eine SQLite-Kulisse
+  gerendert – jeder Zustand einmal, plus die Schreibwege. Das fängt
+  PHP-Fehler und fehlende Ausgaben, nicht die Eigenheiten von MySQL.
+- **`WP_List_Table`** gibt es dort nur als Stub. Er ruft dieselben Methoden
+  auf, die WordPress aufruft (`get_columns()`, `column_athlet()`,
+  `column_default()`), damit der eigene Code wirklich läuft; das Markup,
+  das WordPress selbst um die Zellen legt, ist damit nicht geprüft.
+
+Beides gehört in die Integrationslage, sobald sie steht.
 
 ### Was in den race-result-Fixtures steckt
 

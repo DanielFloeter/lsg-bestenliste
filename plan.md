@@ -349,12 +349,24 @@ includes/class-lsg-import.php                  Discovery, Caches, Parse-Orchestr
 includes/class-lsg-http.php                    Torwächter, Allowlist, Rate-Limit
 includes/class-lsg-adapters.php                Registry
 includes/class-lsg-schema.php                  die drei neuen Tabellen
+includes/class-lsg-helpers.php                 Distanzen, Leistungsparser, AK, Datum
+includes/class-lsg-leistung.php                Leistungsfeld, 7.3-Pruefung, Formular – ohne WordPress
+includes/class-lsg-best.php                    lsg_best und lsg_athlete_map: Holen und Schreiben
 includes/admin/page-import.php                 Abschnitt 6
-includes/admin/page-log.php                    6.8
 includes/admin/page-log.php                    6.8
 includes/admin/page-map.php                    6.5.3
 includes/admin/page-best.php                   Abschnitt 7
+includes/admin/class-lsg-best-table.php        die WP_List_Table dazu (7.4)
 ```
+
+⚠ **`class-lsg-best-table.php` wird von `lsg-bestenliste.php` NICHT geladen.**
+Die Klasse erbt von `WP_List_Table`, und die liegt in `wp-admin/includes/`,
+also ausserhalb dessen, was beim Laden eines Plugins schon da ist. Ein
+`extends` zur Ladezeit ist ein „Class not found" auf **jeder** Adminseite,
+nicht nur auf der eigenen. Geladen wird die Datei von
+`lsg_bl_best_liste_anzeigen()`, direkt nachdem die Basisklasse angefordert
+wurde. (Die frühere Fassung dieser Liste nannte `page-log.php` zweimal und
+`class-lsg-helpers.php` gar nicht – beides hier korrigiert.)
 
 ⚠ **Der Abruf gehört nicht in den Parser.** Die Adapter bekommen den fertigen
 HTML- bzw. JSON-String und geben normalisierte Zeilen zurück; `wp_safe_remote_get()`
@@ -2300,6 +2312,31 @@ Zeitmessung Barth; geplant ist keiner davon.
 
 ## 7. Backend-Oberfläche: Ergebnisse von Hand erfassen
 
+> ⚠ **Nachtrag 2026-09-02, nach dem Bau (M5).** Drei Stellen sind anders
+> umgesetzt als hier beschrieben. Alle drei stehen als Test fest:
+>
+> 1. **Das Leistungsfeld wird beim Distanzwechsel nicht geleert** (7.2). Ohne
+>    JavaScript ist der Wechsel ein Formular-Roundtrip, und dabei die Eingabe
+>    wegzuwerfen hiesse: ein Vertipper in der Distanz kostet die getippte
+>    Zeit. Stattdessen wird die unpassende Eingabe abgelehnt – `01:36:44`
+>    unter „Strecke" ergibt eine Fehlermeldung mit Vorschlag. Das Leeren
+>    gehört zu M6.
+> 2. **Löschen läuft über eine eigene Ansicht mit POST-Formular**, nicht über
+>    einen `wp_nonce_url()`-Link (7.4). Ein GET-Link löscht, wenn ein
+>    Prefetch oder ein Crawler ihn anfasst, und ein `confirm()` wäre auf
+>    einer Seite ohne JavaScript keine Rückfrage, sondern eine Hoffnung.
+> 3. **Nachkommastellen werden nicht ergänzt** (7.2). `96,7 km` wird
+>    abgelehnt statt zu `96,700 km` gemacht: wer eine Stelle tippt, hat
+>    vielleicht 96,700 gemeint – oder sich verschrieben, und dann wären 700
+>    Meter erfunden.
+>
+> Und eine Ergänzung, die der Abschnitt nicht vorsah: **ein Speichern, das
+> nichts ändert, schreibt nichts und erzeugt keine Log-Zeile.** Die Meldung
+> nennt die geänderten Felder („Ort Ettlingen → Bruchsal") statt einer
+> Leistung, die gleich geblieben ist. Dieselbe Überlegung wie bei der Lage
+> `gleich`: ein Update, das denselben Wert schreibt, stünde als Änderung im
+> Log und wäre keine.
+
 Der Import deckt ab, was die Portale in einer parsebaren Liste liefern. Daneben
 bleiben drei Fälle, die es nie in diese Oberfläche schaffen:
 
@@ -2707,7 +2744,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | ✅ **erledigt 2026-09-01** – die Vorschau zeigt den Trichter `658 gelesen → 1 ohne Zeit → 11 LSG`, geschrieben wird nichts |
 | M3 | P3, P4, Übernahme, Log + Log-Ansicht | ✅ **erledigt 2026-09-02** – der Ettlinger Halbmarathon landet als `7 angelegt, 1 aktualisiert, 3 übersprungen` in `lsg_best`; ein zweiter Durchlauf zeigt lauter `gleich` und schreibt nichts |
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | ✅ **erledigt 2026-09-02** – derselbe Ablauf mit `https://runtix.com/sts/10050/3152/21/total`: erkannt als runtix, Datum `16.08.2026` aus der Veranstaltungsübersicht, Distanz „Halbmarathon" aus dem Wettbewerbsnamen, Trichter `22 gelesen → 1 LSG`. Die Oberfläche hat dafür keine Zeile Sonderbehandlung |
-| M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | Zeitläufe und Korrekturen sind erfassbar |
+| M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | ✅ **erledigt 2026-09-02** – ein 24-Stunden-Ergebnis (`112,737 km`) ist von Hand erfassbar, landet mit `ak = m45` in `lsg_best` und als `adapter = 'manuell'` im Log; eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg, und Löschen protokolliert den vollständigen Datensatz, bevor die Zeile weg ist |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | derselbe Ablauf ohne Reload |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
@@ -2960,7 +2997,29 @@ prüft am Ende keinen von beiden.
           Person" gibt es bewusst nicht.
   - [x] P3 Meldung über der Tabelle: „N Teilnehmer ohne Zuordnung"
   - [x] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
-  - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
+  - [x] Untermenü „Zuordnungen" zum Pflegen der Regeln
+        → `includes/admin/page-map.php`. Anlegen, bearbeiten, abschalten, löschen –
+          und die Regel wird beim Speichern normalisiert (`FLÖTER` → `floeter`),
+          weil P3 normalisiert vergleicht. Eine Regel, die nicht normalisiert
+          gespeichert wird, greift nie.
+        → ⚠ **Über den Plan hinaus, und der eigentliche Gewinn der Seite:** sie
+          rechnet die **Kollisionen** aus und zeigt sie an – markierte Zeile plus
+          Klartext „kollidiert mit #2". Beim Speichern einer kollidierenden Regel
+          kommt die Warnung sofort, nicht erst beim nächsten Import. 6.5.3 sagt,
+          zwei Regeln auf dieselbe Zeile seien ein Fehler; ohne diese Anzeige
+          merkt man den Fehler an einer Import-Zeile, die unerklärlich `offen`
+          bleibt – am falschen Ort und Wochen später.
+        → Ein Regel-Jahrgang, der nicht zum Athleten passt, wird abgelehnt: die
+          Regel könnte nie greifen, weil der Jahrgang aus der Ergebnisliste
+          beides sein müsste. Auch das fällt sonst erst beim Import auf – und
+          zwar als Nichtereignis, das niemand sucht.
+        → Die Spalte „gegriffen" zählt Log-Zeilen mit `match_type = 'regel'`.
+          ⚠ Je **Athlet**, nicht je Regel: das Log führt die Regel-ID nicht mit.
+          Bei einem Athleten mit einer Regel ist die Zahl genau, bei zwei Regeln
+          auf denselben Athleten die Summe – und genau so steht es auch unter der
+          Tabelle. Eine Regel, die in zwei Jahren nie gegriffen hat, ist
+          entweder falsch geschrieben oder überflüssig; ohne diese Spalte sieht
+          man beides nicht.
   - [x] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr; Code immer
         schreiben, fehlender `lsg_ak`-Eintrag nur als Hinweis auf den Filter
         → `lsg_bl_ak_berechnen()`; der Code wird ohne Vorbehalt geschrieben,
@@ -3054,36 +3113,145 @@ prüft am Ende keinen von beiden.
         → Die Logik steht in `class-lsg-import.php` (`lsg_bl_discovery()`,
           `lsg_bl_parsen()`); die Admin-Seite ist nur ein Eingang. Der zweite kommt
           mit M6.
-- [ ] Admin-Seite „Bestenliste": von Hand erfassen (Abschnitt 7)
-  - [ ] Untermenü `lsg-bestenliste-best`, Callback in `includes/admin/page-best.php`
-  - [ ] Capability `LSG_BL_CAP`, Nonce + `check_admin_referer()` in jedem Handler
-  - [ ] Athlet-Select: „Nachname, Vorname (Jahrgang)", sortiert, `<optgroup>`
+- [x] Admin-Seite „Bestenliste": von Hand erfassen (Abschnitt 7)
+      → Vier Ansichten über `?action=`: Liste, `new`, `edit`, `delete`. Die reine
+        Logik steht in `includes/class-lsg-leistung.php` (ohne WordPress, in der
+        Unit-Lage geprüft), der Datenzugriff in `includes/class-lsg-best.php`,
+        die Ausgabe in `includes/admin/page-best.php`.
+  - [x] Untermenü `lsg-bestenliste-best`, Callback in `includes/admin/page-best.php`
+  - [x] Capability `LSG_BL_CAP`, Nonce + `check_admin_referer()` in jedem Handler
+  - [x] Athlet-Select: „Nachname, Vorname (Jahrgang)", sortiert, `<optgroup>`
         Aktiv / Ehemalige – legt **keinen** Athleten an
-  - [ ] Distanz-Select über **alle zwölf** Codes, inkl. `6h`/`12h`/`24h`
-  - [ ] Leistungsfeld wechselt mit `lsg_bl_distance_type()`: Label, Platzhalter,
+        → ⚠ `lsg_athlete.active` ist `varchar(1)`, nicht `tinyint`. Verglichen
+          wird deshalb `'1' === (string) $r['active']` – ein `(bool)`-Cast auf
+          den String `'0'` sähe richtig aus und wäre es auch, aber bei einem
+          leeren Feld läge er falsch.
+  - [x] Distanz-Select über **alle zwölf** Codes, inkl. `6h`/`12h`/`24h`
+        → geprüft gegen `lsg_bl_import_distanzen()`: zwölf hier, neun dort, und
+          die Differenz ist genau `6h`/`12h`/`24h`
+  - [x] Leistungsfeld wechselt mit `lsg_bl_distance_type()`: Label, Platzhalter,
         Prüfmuster – und wird beim Wechsel geleert
-  - [ ] Zeiten über dieselbe Normalisierung wie P1 (keine zweite Implementierung)
-  - [ ] Strecken mit drei Nachkommastellen, **ohne** führende Null
+        → ⚠ **Abweichung, bewusst:** geleert wird das Feld NICHT. Der Grund ist
+          der Weg ohne JavaScript: das Umschalten der Distanz ist ein
+          Formular-Roundtrip („Prüfen"), und dabei die Eingabe wegzuwerfen
+          hieße, dass ein Vertipper in der Distanz die getippte Zeit kostet.
+          Stattdessen wird die unpassende Eingabe **abgelehnt** – `01:36:44`
+          unter „Strecke" ergibt eine Fehlermeldung mit Vorschlag, keine
+          stille Übernahme. Das Leeren gehört zu M6, wo der Wechsel ohne
+          Reload passiert und die Eingabe ohnehin noch im Feld steht.
+  - [x] Zeiten über dieselbe Normalisierung wie P1 (keine zweite Implementierung)
+        → `lsg_bl_leistung_lesen()` ruft `lsg_bl_zeit_normalisieren()`; der Test
+          vergleicht das Ergebnis zusätzlich Zeichen für Zeichen mit dem, was P1
+          liefert. Zwei Schreibweisen in derselben Spalte machen die Sortierung
+          unerklärlich.
+  - [x] Strecken mit drei Nachkommastellen, **ohne** führende Null
         (`96,723 km`, nicht `096,723 km`) – 7.2
-  - [ ] Eingaben ablehnen, die `lsg_bl_parse_performance()` nur über den
+        → ⚠ Und die Nachkommastellen werden **nicht stillschweigend ergänzt**:
+          `96,7 km` wird abgelehnt, nicht zu `96,700 km` gemacht. Wer eine
+          Stelle tippt, hat vielleicht 96,700 gemeint – oder sich verschrieben,
+          und dann wären 700 Meter erfunden. Die Fehlermeldung schlägt den
+          richtigen Wert vor, statt nur zu meckern.
+  - [x] Eingaben ablehnen, die `lsg_bl_parse_performance()` nur über den
         Zahlen-Fallback einfangen würde
-  - [ ] AK berechnen und **nur anzeigen**, nie als Eingabefeld
-  - [ ] AK nicht in `lsg_ak` (z.B. `m80`) → Hinweis auf den fehlenden
+        → Der Test prüft es von der anderen Seite: was durchkommt, muss einen
+          POSITIVEN `sort`-Wert ergeben. Der Zahlen-Fallback liefert bei Zeiten
+          einen negativen – ein negativer Wert heißt also, die Eingabe wurde
+          nicht als Zeit erkannt. `01:20.24` (der Tippfehler, der im Bestand
+          wirklich steht) kommt damit nicht durch.
+  - [x] AK berechnen und **nur anzeigen**, nie als Eingabefeld
+        → als Satz unter dem Datumsfeld: „Altersklasse: m50 (Jahrgang 1976,
+          Lauf 2026)". Der Test prüft ausdrücklich, dass **kein** `name="ak"`
+          im Formular steht.
+  - [x] AK nicht in `lsg_ak` (z.B. `m80`) → Hinweis auf den fehlenden
         Frontend-Filter, kein Bestätigungsschritt
-  - [ ] Datum als Timestamp mit 12:00 Uhr Ortszeit
-  - [ ] Jahresbestzeit-Prüfung wie P4, aber warnend: überschreiben oder abbrechen
-  - [ ] **Keine** Option „zusätzlich anlegen" – nie zwei Zeilen je Athlet/Distanz/Jahr
-  - [ ] Zeitläufe: `better => 'higher'`, Vergleichstext „weiter" statt „schneller"
-  - [ ] Liste als `WP_List_Table`: Filter Jahr/Distanz/Geschlecht/Athlet,
+        → geprüft mit `van Wees-Snel`, Jahrgang 1948: 2026 ergibt `w75`, die in
+          der `lsg_ak`-Liste fehlt. Gespeichert wird sie, „Speichern" bleibt
+          aktiv, daneben steht der Satz über den fehlenden Filter.
+  - [x] Datum als Timestamp mit 12:00 Uhr Ortszeit
+        → über `lsg_bl_datum_zu_timestamp()`, dieselbe Funktion wie beim Import
+  - [x] Jahresbestzeit-Prüfung wie P4, aber warnend: überschreiben oder abbrechen
+        → `lsg_bl_best_pruefung()`. ⚠ Bewusst **nicht** `lsg_bl_p4_status()`: die
+          Stufen sind dieselben, die Antwort ist eine andere. P4 entscheidet, ob
+          geschrieben wird; diese Funktion beschreibt, was der Mensch sehen soll,
+          und die Entscheidung bleibt bei ihm. Der gemeinsame Kern steckt in
+          `lsg_bl_parse_performance()` und `lsg_bl_perf_besser()`, die beide Wege
+          benutzen – es gibt also keine zweite Vergleichslogik.
+        → ⚠ Die Prüfung läuft **zweimal**: einmal für die Anzeige und noch
+          einmal unmittelbar vor dem Schreiben. Die Anzeige kann Minuten alt
+          sein; entschieden wird auf dem Stand, auf dem geschrieben wird.
+  - [x] **Keine** Option „zusätzlich anlegen" – nie zwei Zeilen je Athlet/Distanz/Jahr
+        → geprüft auf beiden Wegen: beim Anlegen, und beim Bearbeiten einer Zeile,
+          die auf ein Jahr geschoben wird, in dem schon eine steht. Der zweite
+          Weg ist der gefährlichere, weil er nach einer harmlosen Korrektur
+          aussieht (Plan 7.4).
+  - [x] Zeitläufe: `better => 'higher'`, Vergleichstext „weiter" statt „schneller"
+        → und „kürzer" statt „langsamer". Der Test deckt beide Richtungen ab,
+          einschließlich des Falls, an dem eine String-Sortierung scheitert:
+          `112,737` gegen `96,723`, wo `1` kleiner als `9` ist.
+  - [x] Liste als `WP_List_Table`: Filter Jahr/Distanz/Geschlecht/Athlet,
         Distanz-Sortierung nach `lsg_bl_distance_map()`, Paginierung
-  - [ ] Bearbeiten: Prüfung aus 7.3 erneut, sobald Athlet, Distanz oder Jahr wechselt
-  - [ ] Löschen einzeln, mit Rückfrage und `wp_nonce_url()`, kein Bulk-Delete
-  - [ ] Jeder Schreibvorgang ins Log: `adapter='manuell'`, `match_type='manuell'`,
+        → ⚠ Hier **mit** `WP_List_Table`, anders als bei der Log-Ansicht. Kein
+          Widerspruch, sondern der Bedarf: diese Seite braucht Zeilen-Aktionen
+          („Bearbeiten | Löschen") und ein Suchfeld, das Log wird gelesen und
+          nicht bearbeitet.
+        → ⚠ Die Klasse steht in einer **eigenen Datei**
+          (`includes/admin/class-lsg-best-table.php`), die `lsg-bestenliste.php`
+          NICHT lädt: `WP_List_Table` liegt in `wp-admin/includes/` und ist beim
+          Laden der Plugin-Dateien noch nicht deklariert. Ein `extends` zur
+          Ladezeit wäre ein „Class not found" – und zwar auf JEDER Adminseite,
+          nicht nur auf dieser. Geladen wird sie von `lsg_bl_best_liste_anzeigen()`.
+        → ⚠ Sortierbar sind bewusst nur Sportler, Datum und Ort. **Nicht**
+          Distanz und **nicht** Leistung: alphabetisch stellte `100km` vor
+          `10km`, und eine Leistungssortierung über alle Distanzen hinweg
+          verglich Sekunden mit Kilometern. Beides sähe nach einer Funktion aus
+          und wäre keine. Wer nach Leistung sortieren will, filtert auf eine
+          Distanz – dann ist die Standardsortierung genau das.
+        → ⚠ Die Standardsortierung braucht **zwei** Schlüssel, nicht einen:
+          `CASE`-Ausdruck für den Distanz-Rang (aus `lsg_bl_distance_map()`
+          gebaut, damit beide nicht auseinanderlaufen), dann ein zweiter
+          `CASE`, der bei Zeitläufen die negative Kilometerzahl liefert und
+          sonst 0, dann `time` als String. Weil der Rang schon nach Distanz
+          gruppiert, vergleicht nie ein Kilometerwert mit einer Sekundenzahl.
+          Ein einziger gemischter Schlüssel ginge nicht: MySQL läse
+          `'01:36:44'` numerisch als 1.
+  - [x] Bearbeiten: Prüfung aus 7.3 erneut, sobald Athlet, Distanz oder Jahr wechselt
+        → ⚠ Und die bearbeitete Zeile wird dabei aus dem Bestand
+          **herausgefiltert**: sie ist nicht ihr eigener Konflikt. Ohne das
+          meldete jedes Bearbeiten „steht bereits so in der Datenbank" und
+          liesse sich nie speichern – auch dann nicht, wenn nur der Ort falsch
+          geschrieben war.
+  - [x] Löschen einzeln, mit Rückfrage und `wp_nonce_url()`, kein Bulk-Delete
+        → ⚠ **Abweichung:** die Rückfrage ist eine eigene Ansicht mit einem
+          POST-Formular, nicht ein nonce'd Link. Der Plan nennt
+          `wp_nonce_url()`; ein GET-Link löscht aber, wenn ein Prefetch oder
+          ein Crawler ihn anfasst, und ein JavaScript-`confirm()` wäre auf
+          einer Seite, die ohne JavaScript funktionieren soll, keine Rückfrage,
+          sondern eine Hoffnung. Der Link in der Tabelle führt jetzt auf
+          `?action=delete&id=`, die Ansicht zeigt den vollständigen Datensatz,
+          und gelöscht wird per POST mit Nonce.
+  - [x] Jeder Schreibvorgang ins Log: `adapter='manuell'`, `match_type='manuell'`,
         `aktion` insert/update/**delete**, Rohfelder aus dem Formular
-  - [ ] Beim Löschen den vollständigen Datensatz protokollieren, nicht nur die ID
-  - [ ] Log-Ansicht: Filter „von Hand erfasst"
-- [x] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log und
-      „Bestenliste" jetzt, Sportler- und Gesamtsieger-Pflege aus Phase 4 danach
+        → über `lsg_bl_log_manuell()` – ein Aufsatz auf `lsg_bl_log_schreiben()`,
+          keine zweite Implementierung. Geprüft: `datum_quelle = 'manuell'`,
+          `zeit_typ` leer (die Quelle ist ein Mensch), und `cnt_gelesen`,
+          `cnt_lsg`, `cnt_zugeordnet` bleiben auf 0.
+        → ⚠ **Über den Plan hinaus:** ein Speichern, das **nichts** ändert,
+          schreibt auch nichts und erzeugt keine Log-Zeile. Der Anlass war eine
+          Meldung, die „Zeile geändert (96,723 km → 96,723 km)" lautete, wenn
+          jemand nur den Ort korrigierte. `lsg_bl_best_diff()` sagt jetzt, was
+          sich wirklich geändert hat – „Ort Ettlingen → Bruchsal" –, und
+          derselbe Satz wandert ins Log. In zwei Jahren ist er die einzige
+          Auskunft darüber, was an dieser Zeile passiert ist.
+  - [x] Beim Löschen den vollständigen Datensatz protokollieren, nicht nur die ID
+        → ⚠ Und **zuerst** protokollieren, dann löschen. Andersherum ginge der
+          Datensatz verloren, sobald zwischen beiden Schritten etwas schiefgeht –
+          bei der einen Aktion, die keine Wiederherstellung hat.
+  - [x] Log-Ansicht: Filter „von Hand erfasst"
+        → stand schon seit M3 im Quellenfilter (`adapter = 'manuell'`), jetzt
+          liefert die Seite auch Zeilen dafür
+- [x] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log,
+      „Zuordnungen" und „Bestenliste" stehen; Sportler- und
+      Gesamtsieger-Pflege bleiben Phase 4
 - [ ] **Keine** Event-Verwaltung: Läufe kommen ausschließlich über die URL
 - [x] ~~Frontend: Shortcode und/oder Block für die Bestenliste~~ – erledigt,
       die drei Blöcke stehen (Phase 3 der README)
@@ -3224,8 +3392,10 @@ Schreibvorgang) und wächst mit M6 (REST).
       → ⚠ Der erste Test der Datei zählt die Adapterdateien im Verzeichnis und
         vergleicht mit der Liste im Test. Ohne das wäre der Contract-Test wertlos:
         ein dritter Adapter würde einfach nicht mitgeprüft.
-- [ ] Zeit-Parser: `01:11:54.9` → `01:11:55`, `01:11:54.0` → `01:11:54`
+- [x] Zeit-Parser: `01:11:54.9` → `01:11:55`, `01:11:54.0` → `01:11:54`
       (kein Float-Rundungsfehler), `1:13:08` → `01:13:08`, `38:57` → `00:38:57`
+      → alle vier stehen seit M1 in `zeit-test.php` und waren hier nur nicht
+        abgehakt
 - [x] Zeit-Parser: `18:57.3` und `18:57,3` → `00:18:58` (MM:SS mit Zehntel –
       der Fall, der ohne eigene Behandlung durchrutscht)
 - [x] Zeit-Parser: `01:11:59.9` → `01:12:00` (Übertrag über Minute und Stunde)
@@ -3347,7 +3517,11 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [ ] Frontend und Import sind sich einig: für dieselbe Zeile nennt die
       Jahres-Bestenliste dasselbe Jahr wie der Vergleich in P4
 - [x] Schnellere Zeit im Folgejahr → zweite Zeile, Vorjahr unverändert
-- [ ] Datum nach dem Parsen geändert → Vorschau verworfen, Button zurück auf „Parsen"
+- [x] Datum nach dem Parsen geändert → Vorschau verworfen, Button zurück auf „Parsen"
+      → seit M2 gebaut und geprüft: `lsg_bl_import_fingerprint()` im Unit-Test
+        (Datum, Distanz, Wettbewerb und Liste gehen ein, der Ort bewusst
+        nicht), und die Import-Seite rendert den verworfenen Zustand in der
+        Kulisse. Hier nur nicht abgehakt.
 - [x] Gespeicherter Timestamp wird als der eingegebene Tag ausgegeben
       (kein Vortag durch Zeitzone)
 - [x] `38:57` gegen `01:38:57` wird korrekt verglichen (kein String-Vergleich)
@@ -3359,30 +3533,94 @@ Schreibvorgang) und wächst mit M6 (REST).
 
 Manuelle Erfassung (Abschnitt 7):
 
-- [ ] Distanz `12h` gewählt → Feld heißt „Strecke", nimmt `112,737 km` an und
+- [x] Distanz `12h` gewählt → Feld heißt „Strecke", nimmt `112,737 km` an und
       lehnt `01:36:44` ab; bei `HM` genau umgekehrt
-- [ ] Distanzwechsel leert das Leistungsfeld (kein stehengebliebener Wert)
-- [ ] `96,723 km` wird unverändert als `96,723 km` gespeichert – **keine**
-      führende Null; `96,7 km` wird auf `96,700 km` ergänzt und `96,7234 km`
+      → geprüft am Label und am Platzhalter, nicht am Vorkommen des Worts:
+        „Strecke" steht auch im Zeit-Formular, nämlich in der Beschreibung des
+        Distanz-Selects
+- [x] ~~Distanzwechsel leert das Leistungsfeld (kein stehengebliebener Wert)~~
+      → **verworfen für M5, kommt mit M6.** Ohne JavaScript ist der Wechsel ein
+        Formular-Roundtrip, und dabei die Eingabe wegzuwerfen hiesse: ein
+        Vertipper in der Distanz kostet die getippte Zeit. Stattdessen wird die
+        unpassende Eingabe abgelehnt, mit Vorschlag. Sobald der Wechsel ohne
+        Reload passiert (M6), ist das Leeren richtig – dann steht die Eingabe
+        ohnehin noch im Feld.
+- [x] `96,723 km` wird unverändert als `96,723 km` gespeichert – **keine**
+      führende Null; `96,7 km` wird ~~auf `96,700 km` ergänzt~~ und `96,7234 km`
       abgelehnt (drei Nachkommastellen sind Pflicht)
-- [ ] AK aus Jahrgang 1976 bei Lauf 2026 → `m50`, angezeigt und nicht editierbar
-- [ ] Jahrgang 1943 bei Lauf 2026 → `m80`, wird ohne Rückfrage gespeichert;
+      → ⚠ **Abweichung:** `96,7 km` wird **abgelehnt**, nicht ergänzt. Wer eine
+        Stelle tippt, hat vielleicht 96,700 gemeint – oder sich verschrieben,
+        und dann wären 700 Meter erfunden. Die Fehlermeldung nennt den
+        richtigen Wert; ergänzen darf der Mensch. Ebenso abgelehnt: `228 km`,
+        `096,723 km`, `0,500 km` und eine Zeit im Streckenfeld.
+- [x] AK aus Jahrgang 1976 bei Lauf 2026 → `m50`, angezeigt und nicht editierbar
+      → geprüft, dass **kein** `name="ak"` im Formular steht
+- [x] Jahrgang 1943 bei Lauf 2026 → `m80`, wird ohne Rückfrage gespeichert;
       fehlt `m80` in `lsg_ak`, erscheint der Hinweis auf den Filter
-- [ ] Athlet mit `cat = 'f'` → Code beginnt mit `w`, nicht mit `f`
-- [ ] Zweiter Eintrag für Athlet + Distanz + Jahr: Vergleich erscheint, es gibt
+      → in der Kulisse mit `van Wees-Snel` (1948 → `w75`) geprüft: Hinweis da,
+        „Speichern" bleibt aktiv
+- [x] Athlet mit `cat = 'f'` → Code beginnt mit `w`, nicht mit `f`
+      → `w35` und `whk` im Test, über dieselbe Funktion wie P3
+- [x] Zweiter Eintrag für Athlet + Distanz + Jahr: Vergleich erscheint, es gibt
       **keine** Möglichkeit, eine zweite Zeile anzulegen
-- [ ] Langsamere Leistung: Speichern erst nach ausdrücklichem Haken
-- [ ] Identische Leistung: Speichern deaktiviert
-- [ ] `12h`: `112,737 km` gegen `96,723 km` gilt als besser (nicht als kürzer) –
+      → geprüft auf beiden Wegen: beim Anlegen und beim Bearbeiten
+- [x] Langsamere Leistung: Speichern erst nach ausdrücklichem Haken
+      → ohne Haken kommt eine `warning` und nichts wird geschrieben; mit Haken
+        wird der Bestand ersetzt
+- [x] Identische Leistung: Speichern deaktiviert
+      → und zusätzlich serverseitig abgelehnt, falls doch abgeschickt: ein
+        `disabled` am Knopf ist keine Prüfung
+- [x] `12h`: `112,737 km` gegen `96,723 km` gilt als besser (nicht als kürzer) –
       und der Vergleich funktioniert auch gegen eine Altzeile `096,723 km`
-- [ ] Bearbeiten und dabei das Jahr ändern → Prüfung läuft gegen das neue Jahr
-- [ ] Löschen ohne gültige Nonce → abgelehnt
-- [ ] Gelöschter Datensatz steht vollständig im Log und lässt sich daraus
+      → beides geprüft. Der `096,723`-Fall geht über
+        `lsg_bl_parse_performance()`, die die führende Null beim Lesen
+        ignoriert – nur beim Schreiben ist sie verboten.
+- [x] Bearbeiten und dabei das Jahr ändern → Prüfung läuft gegen das neue Jahr
+      → und die bearbeitete Zeile wird aus dem Bestand herausgefiltert: sie ist
+        nicht ihr eigener Konflikt
+- [x] Löschen ohne gültige Nonce → abgelehnt
+      → `check_admin_referer()` im Handler; die Rückfrage ist eine eigene
+        Ansicht mit POST-Formular statt eines nonce'd GET-Links (siehe 7.4)
+- [x] Gelöschter Datensatz steht vollständig im Log und lässt sich daraus
       neu eintippen
-- [ ] Jede Formularaktion erzeugt genau einen `lsg_import_run` mit
+      → geprüft: `roh_name`, `roh_vorname`, `roh_jahrgang`, `time_alt`, Ort,
+        Distanz und Datum stehen in der `delete`-Zeile. Und protokolliert wird
+        **vor** dem Löschen.
+- [x] Jede Formularaktion erzeugt genau einen `lsg_import_run` mit
       `adapter = 'manuell'` und genau eine `lsg_import_log`-Zeile
-- [ ] Ehemalige Athleten (`active = '0'`) sind wählbar, aber getrennt gruppiert
+      → mit einer Ausnahme, die der Plan nicht vorsah: ein Speichern, das
+        **nichts** ändert, erzeugt **keinen** Vorgang. Ein Update, das denselben
+        Wert schreibt, stünde als Änderung im Log und wäre keine.
+- [x] Ehemalige Athleten (`active = '0'`) sind wählbar, aber getrennt gruppiert
+      → zwei `<optgroup>`; in der Liste steht „(ehemalig)" hinter dem Namen
 - [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler verweigern
+      → die Prüfung steht in jedem Handler und in jedem Render-Callback der
+        beiden neuen Seiten; **geprüft ist sie nicht**. Dafür braucht es zwei
+        WordPress-Benutzer, also die Integrationslage – derselbe offene Punkt
+        wie weiter oben für den Import.
+
+Zuordnungen (6.5.3):
+
+- [x] Regel wird normalisiert gespeichert (`FLÖTER` → `floeter`) – eine Regel,
+      die nicht normalisiert gespeichert wird, greift nie
+- [x] Regel ohne Vor- **und** Nachname wird abgelehnt
+- [x] Regel-Jahrgang, der nicht zum Athleten passt, wird abgelehnt: sie könnte
+      nie greifen
+- [x] Zwei Regeln auf **verschiedene** Athleten, die dieselbe Zeile treffen
+      können → Kollision, sofort beim Speichern gemeldet und in der Liste
+      markiert
+- [x] Zwei Regeln auf **denselben** Athleten → keine Kollision (das Ergebnis ist
+      dasselbe, egal welche greift)
+- [x] Leeres Namensfeld und leerer Jahrgang kollidieren mit allem – der Fall,
+      den man am leichtesten übersieht
+- [x] `modus = 'egal'` kollidiert mit einer feldweisen Regel derselben Token;
+      drei verschiedene Token gehen in zwei Namensfelder nicht auf
+- [x] Abgeschaltete Regel kollidiert nicht – deshalb ist das Abschalten die
+      vorgesehene Antwort auf eine Kollision
+- [x] Die Kollisionsanzeige und P3 sind sich einig: was die Pflegeoberfläche
+      meldet, kommt beim Import wirklich als `mehrdeutig` durch
+      → ⚠ Ohne diese Zusicherung warnte die Oberfläche vor etwas, das nicht
+        passiert – oder, schlimmer, schwiege zu etwas, das passiert
 
 ---
 
