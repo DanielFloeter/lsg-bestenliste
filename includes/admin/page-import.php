@@ -72,8 +72,30 @@ function lsg_bl_admin_menu() {
 		'lsg_bl_admin_log_page'
 	);
 
+	// Reihenfolge laut Plan 6.2: Ergebnis-Import, Import-Log, Zuordnungen,
+	// Bestenliste – alle vier "jetzt", nicht erst Phase 4.
+	$hook_map = add_submenu_page(
+		'lsg-bestenliste',
+		__( 'Zuordnungen', 'lsg-bestenliste' ),
+		__( 'Zuordnungen', 'lsg-bestenliste' ),
+		LSG_BL_CAP,
+		'lsg-bestenliste-map',
+		'lsg_bl_admin_map_page'
+	);
+
+	$hook_best = add_submenu_page(
+		'lsg-bestenliste',
+		__( 'Bestenliste', 'lsg-bestenliste' ),
+		__( 'Bestenliste', 'lsg-bestenliste' ),
+		LSG_BL_CAP,
+		'lsg-bestenliste-best',
+		'lsg_bl_admin_best_page'
+	);
+
 	$GLOBALS['lsg_bl_import_hook'] = $hook;
 	$GLOBALS['lsg_bl_log_hook']    = $hook_log;
+	$GLOBALS['lsg_bl_map_hook']    = $hook_map;
+	$GLOBALS['lsg_bl_best_hook']   = $hook_best;
 }
 add_action( 'admin_menu', 'lsg_bl_admin_menu' );
 
@@ -88,6 +110,8 @@ function lsg_bl_admin_assets( $hook ) {
 		array(
 			isset( $GLOBALS['lsg_bl_import_hook'] ) ? $GLOBALS['lsg_bl_import_hook'] : '',
 			isset( $GLOBALS['lsg_bl_log_hook'] ) ? $GLOBALS['lsg_bl_log_hook'] : '',
+			isset( $GLOBALS['lsg_bl_map_hook'] ) ? $GLOBALS['lsg_bl_map_hook'] : '',
+			isset( $GLOBALS['lsg_bl_best_hook'] ) ? $GLOBALS['lsg_bl_best_hook'] : '',
 		)
 	);
 	if ( ! in_array( $hook, $eigene, true ) ) {
