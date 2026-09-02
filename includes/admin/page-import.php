@@ -122,6 +122,12 @@ function lsg_bl_import_url( array $args = array() ) {
 	);
 	$args['page'] = 'lsg-bestenliste';
 
+	// add_query_arg() escaped selbst nichts (WP-Kernverhalten) – ein rohes
+	// '#' in der eingegebenen URL (race result: #2_B45FAB) würde sonst als
+	// Fragment-Trenner wirken und alles danach (adapter, page, ...) vom
+	// Request abschneiden. Deshalb hier selbst kodieren.
+	$args = array_map( 'rawurlencode', $args );
+
 	return add_query_arg( $args, admin_url( 'admin.php' ) );
 }
 
