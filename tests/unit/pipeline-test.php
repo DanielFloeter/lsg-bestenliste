@@ -137,10 +137,30 @@ class Pipeline_Test extends TestCase {
 
 		$this->assertSame( array( 'gelesen', 'verworfen', 'lsg' ), $keys );
 
+		// Die Phase steuert die Darstellung: Pfeil zwischen Phasen, Komma
+		// innerhalb. „7 neu → 1 schneller" waere falsch – das sind
+		// Geschwister, keine Stufen.
+		$this->assertSame( array( 1, 1, 2 ), array_column( $stufen, 'phase' ) );
+
 		// P3 und P4 sind null – „noch nicht gelaufen" darf nicht wie ein
 		// Nulltreffer aussehen.
 		$this->assertNotContains( 'zugeordnet', $keys );
 		$this->assertNotContains( 'neu', $keys );
+	}
+
+	public function test_trichter_phasen() {
+		$t = lsg_bl_trichter_leer();
+		foreach ( array( 'gelesen' => 658, 'verworfen' => 1, 'lsg' => 11, 'zugeordnet' => 10, 'offen' => 1, 'neu' => 7, 'schneller' => 1, 'langsamer' => 1, 'gleich' => 1 ) as $k => $v ) {
+			$t[ $k ] = $v;
+		}
+
+		$stufen = lsg_bl_trichter_stufen( $t );
+
+		$this->assertSame(
+			array( 'gelesen', 'verworfen', 'lsg', 'zugeordnet', 'offen', 'neu', 'schneller', 'langsamer', 'gleich' ),
+			array_column( $stufen, 'key' )
+		);
+		$this->assertSame( array( 1, 1, 2, 3, 3, 4, 4, 4, 4 ), array_column( $stufen, 'phase' ) );
 	}
 
 	public function test_trichter_null_ist_nicht_null_treffer() {

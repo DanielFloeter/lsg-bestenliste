@@ -11,11 +11,14 @@
  *
  *   P1  Alle Ergebnisse lesen        →  Rohzeilen, normalisiert
  *   P2  Auf LSG Karlsruhe filtern    →  nur Vereinsmitglieder
- *   P3  Athleten zuordnen            →  lsg_athlete.id je Zeile      (M3)
- *   P4  Gegen lsg_best abgleichen    →  Status je Zeile              (M3)
+ *   P3  Athleten zuordnen            →  lsg_athlete.id je Zeile
+ *   P4  Gegen lsg_best abgleichen    →  Status je Zeile
  *
- * P1 steckt im Adapter (der liest und normalisiert), P2 steht hier. P3 und P4
- * brauchen die Datenbank und kommen mit M3.
+ * P1 steckt im Adapter (der liest und normalisiert). P2, die Entscheidungs-
+ * logik von P3 und die Statusbildung von P4 stehen hier – jeweils als reine
+ * Funktion, die ihre Kandidaten übergeben bekommt. Wer sie aus der Datenbank
+ * holt, steht in class-lsg-athlete.php; wer die Stufen verkettet, in
+ * class-lsg-import.php.
  *
  * @package lsg-bestenliste
  */
@@ -62,20 +65,27 @@ function lsg_bl_trichter_leer() {
  * @return array<int,array{key:string,label:string,wert:int}>
  */
 function lsg_bl_trichter_stufen( array $trichter ) {
+	/*
+	 * Die Phase entscheidet über die Darstellung: zwischen Phasen steht ein
+	 * Pfeil, innerhalb einer Phase ein Komma. „7 neu → 1 schneller" wäre
+	 * falsch – das sind Geschwister, keine Stufen. Der Plan schreibt es
+	 * genauso: „428 gelesen → 9 LSG → 8 zugeordnet, 1 ohne Zuordnung →
+	 * 5 neu, 2 schneller, 1 langsamer, 1 offen" (Plan 6.5).
+	 */
 	$labels = array(
-		'gelesen'    => 'gelesen',
-		'verworfen'  => 'ohne Zeit',
-		'lsg'        => 'LSG',
-		'zugeordnet' => 'zugeordnet',
-		'offen'      => 'ohne Zuordnung',
-		'neu'        => 'neu',
-		'schneller'  => 'schneller',
-		'langsamer'  => 'langsamer',
-		'gleich'     => 'gleich',
+		'gelesen'    => array( 1, 'gelesen' ),
+		'verworfen'  => array( 1, 'ohne Zeit' ),
+		'lsg'        => array( 2, 'LSG' ),
+		'zugeordnet' => array( 3, 'zugeordnet' ),
+		'offen'      => array( 3, 'ohne Zuordnung' ),
+		'neu'        => array( 4, 'neu' ),
+		'schneller'  => array( 4, 'schneller' ),
+		'langsamer'  => array( 4, 'langsamer' ),
+		'gleich'     => array( 4, 'gleich' ),
 	);
 
 	$out = array();
-	foreach ( $labels as $key => $label ) {
+	foreach ( $labels as $key => $def ) {
 		if ( ! array_key_exists( $key, $trichter ) || null === $trichter[ $key ] ) {
 			continue;
 		}
@@ -86,7 +96,8 @@ function lsg_bl_trichter_stufen( array $trichter ) {
 		}
 		$out[] = array(
 			'key'   => $key,
-			'label' => $label,
+			'phase' => $def[0],
+			'label' => $def[1],
 			'wert'  => (int) $trichter[ $key ],
 		);
 	}
@@ -438,6 +449,564 @@ function lsg_bl_import_vorbelegung( array $disc, $contest_id ) {
 }
 
 /* -------------------------------------------------------------------------
+ * P3 – Athleten zuordnen
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Trifft diese Zuordnungsregel auf eine Quellzeile zu?
+ *
+ * Bedeutung der Felder (Plan 6.5.3):
+ *   born      immer Pflicht – keine Regel ohne Jahrgang
+ *   vorname / nachname   beschreiben die QUELLE, nicht lsg_athlete;
+ *                        leeres Feld = beliebig; normalisiert gespeichert
+ *   modus 'feld'  Vorname gegen Vornamensfeld, Nachname gegen Nachnamensfeld
+ *   modus 'egal'  jedes gesetzte Token muss in EINEM der beiden Felder
+ *                 vorkommen, egal in welchem – deckt vertauschte Spalten ab
+ *                 und den Fall, dass der Splitter danebengegriffen hat
+ *
+ * @param array  $regel        Zeile aus lsg_athlete_map.
+ * @param string $vorname_norm Normalisierter Vorname der Quelle.
+ * @param string $nachname_norm Normalisierter Nachname der Quelle.
+ * @return bool
+ */
+function lsg_bl_regel_trifft( array $regel, $vorname_norm, $nachname_norm ) {
+	$r_vor  = isset( $regel['vorname'] ) ? (string) $regel['vorname'] : '';
+	$r_nach = isset( $regel['nachname'] ) ? (string) $regel['nachname'] : '';
+	$modus  = isset( $regel['modus'] ) ? (string) $regel['modus'] : 'feld';
+
+	// Eine Regel ohne beide Namen zieht jeden Läufer dieses Jahrgangs an sich.
+	// Sie kann gar nicht erst angelegt werden (lsg_bl_regel_gueltig()); hier
+	// steht die Sicherung ein zweites Mal, falls doch eine im Bestand liegt.
+	if ( '' === $r_vor && '' === $r_nach ) {
+		return false;
+	}
+
+	if ( 'egal' === $modus ) {
+		$felder = array( $vorname_norm, $nachname_norm );
+		foreach ( array( $r_vor, $r_nach ) as $token ) {
+			if ( '' === $token ) {
+				continue;
+			}
+			if ( ! in_array( $token, $felder, true ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// modus 'feld'
+	if ( '' !== $r_vor && $r_vor !== $vorname_norm ) {
+		return false;
+	}
+	if ( '' !== $r_nach && $r_nach !== $nachname_norm ) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Darf diese Regel angelegt werden?
+ *
+ * ⚠ Eine Regel ohne Vor- UND Nachname (nur Jahrgang) wird abgelehnt: sie
+ * würde jeden LSG-Läufer dieses Jahrgangs auf einen Athleten ziehen
+ * (Plan 6.5.3).
+ *
+ * @param array $regel athletes_id, born, vorname, nachname.
+ * @return string Leer, wenn gültig – sonst der Grund im Klartext.
+ */
+function lsg_bl_regel_gueltig( array $regel ) {
+	$born  = isset( $regel['born'] ) ? (int) $regel['born'] : 0;
+	$vor   = isset( $regel['vorname'] ) ? trim( (string) $regel['vorname'] ) : '';
+	$nach  = isset( $regel['nachname'] ) ? trim( (string) $regel['nachname'] ) : '';
+	$ziel  = isset( $regel['athletes_id'] ) ? (int) $regel['athletes_id'] : 0;
+
+	if ( $ziel <= 0 ) {
+		return 'Eine Regel braucht einen Athleten, auf den sie zeigt.';
+	}
+	if ( $born <= 1900 ) {
+		return 'Eine Regel braucht einen Jahrgang – ohne ihn ist sie nicht eindeutig genug.';
+	}
+	if ( '' === $vor && '' === $nach ) {
+		return 'Eine Regel braucht mindestens einen Namen. Nur mit Jahrgang würde sie jeden LSG-Läufer dieses Jahrgangs auf denselben Athleten ziehen.';
+	}
+	return '';
+}
+
+/**
+ * P3: einen Athleten zu einer Quellzeile finden.
+ *
+ * In dieser Reihenfolge, erster Treffer gewinnt (Plan 6.5.3):
+ *
+ *   1  name + firstname + born exakt (case-insensitive)   → `exakt`
+ *   2  Zuordnungsregel aus lsg_athlete_map                → `regel`
+ *   3  normalisierter Name + born                         → `normalisiert`
+ *   –  mehrere Treffer                                    → `mehrdeutig`
+ *   –  kein Treffer                                       → `offen`
+ *
+ * ⚠ Eine vierte Stufe „ähnlicher Name, wahrscheinlich dieselbe Person" gibt
+ * es bewusst NICHT. Entweder die Zuordnung ist eindeutig, oder die Zeile wird
+ * nicht importiert. Ein „wahrscheinlich" hätte niemand bestätigt, ohne es
+ * doch von Hand zu prüfen.
+ *
+ * ⚠ Der Jahrgang ist in jeder Stufe Pflicht. Zwei Personen mit gleichem Namen
+ * und gleichem Jahrgang im Verein sind unwahrscheinlich; ein Namensabgleich
+ * ohne Jahrgang würde dagegen früher oder später Ergebnisse dem Falschen
+ * zuschreiben. Liefert die Quelle keinen Jahrgang, bleibt die Zeile `offen` –
+ * auch wenn der Name eindeutig aussieht.
+ *
+ * @param array $zeile    nachname, vorname, jahrgang (aus P1).
+ * @param array $athleten Kandidaten desselben Jahrgangs: id, name, firstname,
+ *                        born, cat, active.
+ * @param array $regeln   Aktive Regeln desselben Jahrgangs aus lsg_athlete_map.
+ * @return array{athletes_id:int,match_type:string,meldung:string,regeln:int[]}
+ */
+function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
+	$offen = function ( $meldung, $type = 'offen', $regel_ids = array() ) {
+		return array(
+			'athletes_id' => 0,
+			'match_type'  => $type,
+			'meldung'     => $meldung,
+			'regeln'      => $regel_ids,
+		);
+	};
+
+	$jahrgang = isset( $zeile['jahrgang'] ) ? (int) $zeile['jahrgang'] : 0;
+	if ( $jahrgang <= 0 ) {
+		return $offen( 'Keine Zuordnung möglich – die Ergebnisliste nennt keinen Jahrgang' );
+	}
+
+	$q_nach = isset( $zeile['nachname'] ) ? (string) $zeile['nachname'] : '';
+	$q_vor  = isset( $zeile['vorname'] ) ? (string) $zeile['vorname'] : '';
+
+	$q_nach_norm = lsg_bl_text_normalisieren( $q_nach );
+	$q_vor_norm  = lsg_bl_text_normalisieren( $q_vor );
+
+	/* --- Stufe 1: exakt, nur Groß-/Kleinschreibung egal ---------------- */
+	//
+	// ⚠ Nicht strcasecmp(): das arbeitet byteweise und faltet keine Umlaute.
+	// „KÖRNER" gegen „Körner" liefe damit durch Stufe 1 hindurch und würde
+	// erst in Stufe 3 gefunden – der Treffer stünde dann als `normalisiert`
+	// im Log, obwohl er exakt war.
+	$treffer = array();
+	foreach ( $athleten as $a ) {
+		if ( (int) $a['born'] !== $jahrgang ) {
+			continue;
+		}
+		if ( lsg_bl_kleinschreiben( $a['name'] ) === lsg_bl_kleinschreiben( $q_nach )
+			&& lsg_bl_kleinschreiben( $a['firstname'] ) === lsg_bl_kleinschreiben( $q_vor )
+		) {
+			$treffer[] = (int) $a['id'];
+		}
+	}
+	$treffer = array_values( array_unique( $treffer ) );
+	if ( 1 === count( $treffer ) ) {
+		return array(
+			'athletes_id' => $treffer[0],
+			'match_type'  => 'exakt',
+			'meldung'     => '',
+			'regeln'      => array(),
+		);
+	}
+	if ( count( $treffer ) > 1 ) {
+		return $offen(
+			sprintf(
+				'Keine Zuordnung möglich – zwei Sportler heißen gleich und sind vom selben Jahrgang (#%s)',
+				implode( ', #', $treffer )
+			),
+			'mehrdeutig'
+		);
+	}
+
+	/* --- Stufe 2: Zuordnungsregel -------------------------------------- */
+	$regel_treffer = array();
+	foreach ( $regeln as $r ) {
+		if ( (int) $r['born'] !== $jahrgang ) {
+			continue;
+		}
+		if ( isset( $r['aktiv'] ) && ! $r['aktiv'] ) {
+			continue;
+		}
+		if ( lsg_bl_regel_trifft( $r, $q_vor_norm, $q_nach_norm ) ) {
+			$regel_treffer[ (int) $r['id'] ] = (int) $r['athletes_id'];
+		}
+	}
+
+	if ( count( $regel_treffer ) > 1 ) {
+		// ⚠ Zwei Regeln, die dieselbe Zeile treffen, sind ein Fehler, keine
+		// Auswahlfrage. Sonst entscheidet die Sortierreihenfolge der
+		// Datenbank darüber, wem ein Ergebnis gutgeschrieben wird – und das
+		// fällt niemandem auf.
+		$ids = array_keys( $regel_treffer );
+		return $offen(
+			sprintf(
+				'Keine Zuordnung möglich – Regeln #%s treffen beide zu',
+				implode( ' und #', $ids )
+			),
+			'mehrdeutig',
+			$ids
+		);
+	}
+	if ( 1 === count( $regel_treffer ) ) {
+		$ids = array_keys( $regel_treffer );
+		return array(
+			'athletes_id' => (int) reset( $regel_treffer ),
+			'match_type'  => 'regel',
+			'meldung'     => '',
+			'regeln'      => $ids,
+		);
+	}
+
+	/* --- Stufe 3: normalisiert ----------------------------------------- */
+	$treffer = array();
+	foreach ( $athleten as $a ) {
+		if ( (int) $a['born'] !== $jahrgang ) {
+			continue;
+		}
+		if ( lsg_bl_text_normalisieren( $a['name'] ) === $q_nach_norm
+			&& lsg_bl_text_normalisieren( $a['firstname'] ) === $q_vor_norm
+		) {
+			$treffer[] = (int) $a['id'];
+		}
+	}
+	$treffer = array_values( array_unique( $treffer ) );
+	if ( 1 === count( $treffer ) ) {
+		return array(
+			'athletes_id' => $treffer[0],
+			'match_type'  => 'normalisiert',
+			'meldung'     => '',
+			'regeln'      => array(),
+		);
+	}
+	if ( count( $treffer ) > 1 ) {
+		return $offen(
+			sprintf(
+				'Keine Zuordnung möglich – zwei Sportler heißen normalisiert gleich (#%s)',
+				implode( ', #', $treffer )
+			),
+			'mehrdeutig'
+		);
+	}
+
+	return $offen( 'Keine Zuordnung möglich – kein Sportler mit diesem Namen und Jahrgang' );
+}
+
+/**
+ * Ähnliche Athleten als Lesehilfe unter einer nicht zuordenbaren Zeile.
+ *
+ * ⚠ Reine Lesehilfe, kein Auswahlfeld. Sie beantwortet die häufigste Frage
+ * von selbst – „gibt es den schon, nur anders geschrieben?" – und macht
+ * sichtbar, warum die vorhandenen Datensätze eben NICHT passen: der eine im
+ * Namen, der andere im Jahrgang (Plan 6.5.3).
+ *
+ * @param array $zeile    nachname, vorname, jahrgang.
+ * @param array $athleten Kandidaten: id, name, firstname, born.
+ * @param int   $limit    Höchstzahl.
+ * @return array<int,array{id:int,name:string,firstname:string,born:int,grund:string}>
+ */
+function lsg_bl_p3_aehnliche( array $zeile, array $athleten, $limit = 5 ) {
+	$q_nach = lsg_bl_text_normalisieren( isset( $zeile['nachname'] ) ? $zeile['nachname'] : '' );
+	$q_vor  = lsg_bl_text_normalisieren( isset( $zeile['vorname'] ) ? $zeile['vorname'] : '' );
+	$q_jahr = isset( $zeile['jahrgang'] ) ? (int) $zeile['jahrgang'] : 0;
+
+	if ( '' === $q_nach && '' === $q_vor ) {
+		return array();
+	}
+
+	$kandidaten = array();
+	foreach ( $athleten as $a ) {
+		$a_nach = lsg_bl_text_normalisieren( $a['name'] );
+		$a_vor  = lsg_bl_text_normalisieren( $a['firstname'] );
+		$a_jahr = (int) $a['born'];
+
+		$rang  = 99;
+		$grund = '';
+
+		if ( $a_nach === $q_nach && $a_vor === $q_vor ) {
+			// Name passt, Jahrgang nicht – sonst wäre die Zeile zugeordnet.
+			$rang  = 1;
+			$grund = 'Name passt, Jahrgang nicht';
+		} elseif ( $a_nach === $q_nach && $a_jahr === $q_jahr ) {
+			$rang  = 2;
+			$grund = 'Nachname und Jahrgang passen, Vorname nicht';
+		} elseif ( $a_jahr === $q_jahr && '' !== $q_nach && levenshtein( $a_nach, $q_nach ) <= 2 ) {
+			$rang  = 3;
+			$grund = 'Jahrgang passt, Nachname ähnlich';
+		} elseif ( $a_nach === $q_nach ) {
+			$rang  = 4;
+			$grund = 'Nachname passt';
+		}
+
+		if ( 99 === $rang ) {
+			continue;
+		}
+
+		$kandidaten[] = array(
+			'id'        => (int) $a['id'],
+			'name'      => (string) $a['name'],
+			'firstname' => (string) $a['firstname'],
+			'born'      => $a_jahr,
+			'grund'     => $grund,
+			'_rang'     => $rang,
+		);
+	}
+
+	usort(
+		$kandidaten,
+		function ( $a, $b ) {
+			if ( $a['_rang'] !== $b['_rang'] ) {
+				return $a['_rang'] - $b['_rang'];
+			}
+			return strcasecmp( $a['name'] . $a['firstname'], $b['name'] . $b['firstname'] );
+		}
+	);
+
+	$kandidaten = array_slice( $kandidaten, 0, (int) $limit );
+	foreach ( $kandidaten as &$k ) {
+		unset( $k['_rang'] );
+	}
+	return $kandidaten;
+}
+
+/* -------------------------------------------------------------------------
+ * P4 – gegen lsg_best abgleichen
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Klartext je Status, wie er in der Tabelle steht (Plan 6.5.4).
+ *
+ * @return array<string,array{label:string,vorauswahl:bool}>
+ */
+function lsg_bl_p4_status_liste() {
+	return array(
+		'neu'        => array(
+			'label'      => 'Noch keine Zeit in der Datenbank vorhanden',
+			'vorauswahl' => true,
+		),
+		'schneller'  => array(
+			'label'      => 'Neue Zeit ist schneller',
+			'vorauswahl' => true,
+		),
+		'langsamer'  => array(
+			'label'      => 'Neue Zeit ist langsamer',
+			'vorauswahl' => false,
+		),
+		'gleich'     => array(
+			'label'      => 'Zeit bereits vorhanden',
+			'vorauswahl' => false,
+		),
+		'offen'      => array(
+			'label'      => 'Keine Zuordnung möglich – wird nicht importiert',
+			'vorauswahl' => false,
+		),
+		'mehrdeutig' => array(
+			'label'      => 'Keine Zuordnung möglich – wird nicht importiert',
+			'vorauswahl' => false,
+		),
+	);
+}
+
+/**
+ * P4: Status einer Zeile gegen den Bestand.
+ *
+ * Der Bezugsrahmen ist immer EIN Jahr: `lsg_best` hält Jahresbestleistungen –
+ * eine Zeile ist die beste Leistung eines Athleten auf einer Distanz in einem
+ * Kalenderjahr, nicht ein Wettkampfergebnis. Über Jahresgrenzen hinweg wird
+ * nie überschrieben (Plan 6.5.4).
+ *
+ * ⚠ Die Abfrage darf genau eine oder keine Zeile liefern – aber sie kann
+ * mehr. Dann ist die BESTE der gefundenen Zeilen der Bezug, geschrieben wird
+ * ausschließlich dorthin, die übrigen bleiben unangetastet, und die
+ * Statusspalte bekommt den Zusatz „Doppelzeile im Bestand". Kein stilles
+ * `LIMIT 1`, kein automatisches Aufräumen: Der Import meldet den kaputten
+ * Bestand, er repariert ihn nicht.
+ *
+ * ⚠ Verglichen wird über lsg_bl_parse_performance(), nicht per strcmp: die
+ * Funktion kennt die Formatvarianten des Bestands, auch die fehlende
+ * Stundenangabe. Ein String-Vergleich läge bei `38:57` gegen `01:38:57`
+ * falsch.
+ *
+ * @param string $distanz  Kanonischer Distanzcode.
+ * @param string $zeit_neu Normalisierte Zeit der Quelle, 'HH:MM:SS'.
+ * @param array  $bestand  Zeilen aus lsg_best: id, time, town, date.
+ * @return array{status:string,best_id:int,time_alt:string,doppelt:int[],zusatz:string}
+ */
+function lsg_bl_p4_status( $distanz, $zeit_neu, array $bestand ) {
+	$leer = array(
+		'status'   => 'neu',
+		'best_id'  => 0,
+		'time_alt' => '',
+		'doppelt'  => array(),
+		'zusatz'   => '',
+	);
+
+	if ( ! $bestand ) {
+		return $leer;
+	}
+
+	// Die beste der gefundenen Zeilen ist der Bezug.
+	$bezug      = null;
+	$bezug_perf = null;
+	foreach ( $bestand as $b ) {
+		$perf = lsg_bl_parse_performance( $distanz, $b['time'] );
+		if ( null === $bezug_perf || lsg_bl_perf_besser( $perf, $bezug_perf ) ) {
+			$bezug      = $b;
+			$bezug_perf = $perf;
+		}
+	}
+
+	$zusatz  = '';
+	$doppelt = array();
+	if ( count( $bestand ) > 1 ) {
+		foreach ( $bestand as $b ) {
+			$doppelt[] = (int) $b['id'];
+		}
+		sort( $doppelt );
+		$zusatz = sprintf(
+			'Doppelzeile im Bestand (ids #%s) – bitte bereinigen',
+			implode( ', #', $doppelt )
+		);
+	}
+
+	$neu_perf = lsg_bl_parse_performance( $distanz, $zeit_neu );
+
+	if ( $neu_perf['sort'] === $bezug_perf['sort'] ) {
+		$status = 'gleich';
+	} elseif ( lsg_bl_perf_besser( $neu_perf, $bezug_perf ) ) {
+		$status = 'schneller';
+	} else {
+		$status = 'langsamer';
+	}
+
+	return array(
+		'status'   => $status,
+		'best_id'  => (int) $bezug['id'],
+		'time_alt' => (string) $bezug['time'],
+		'doppelt'  => $doppelt,
+		'zusatz'   => $zusatz,
+	);
+}
+
+/**
+ * Ist die eine Leistung besser als die andere?
+ *
+ * `better` kommt aus lsg_bl_parse_performance(): bei Zeiten ist kleiner
+ * besser, bei Zeitläufen größer. Im Import wird der Zeitlauf-Zweig nie
+ * erreicht – die Distanzen 6h/12h/24h stehen gar nicht erst im Select –,
+ * aber das Formular aus Abschnitt 7 benutzt dieselbe Funktion.
+ *
+ * @param array $a Ergebnis von lsg_bl_parse_performance().
+ * @param array $b Ergebnis von lsg_bl_parse_performance().
+ * @return bool
+ */
+function lsg_bl_perf_besser( array $a, array $b ) {
+	if ( 'higher' === $a['better'] ) {
+		return $a['sort'] > $b['sort'];
+	}
+	return $a['sort'] < $b['sort'];
+}
+
+/**
+ * Statustext einer Zeile im Klartext, mit alter und neuer Zeit im Vergleich.
+ *
+ * Nicht nur ein Icon: was gleich passiert, muss lesbar dastehen (Plan 6.6).
+ *
+ * @param array $zeile Zeile mit status, zeit, time_alt, zusatz, match_meldung.
+ * @return string
+ */
+function lsg_bl_status_text( array $zeile ) {
+	$status = isset( $zeile['status'] ) ? (string) $zeile['status'] : '';
+	$neu    = isset( $zeile['zeit'] ) ? (string) $zeile['zeit'] : '';
+	$alt    = isset( $zeile['time_alt'] ) ? (string) $zeile['time_alt'] : '';
+
+	switch ( $status ) {
+		case 'neu':
+			$text = 'Noch keine Zeit in der Datenbank vorhanden';
+			break;
+		case 'schneller':
+			$text = sprintf( 'Neue Zeit ist schneller (%1$s → %2$s)', $alt, $neu );
+			break;
+		case 'langsamer':
+			$text = sprintf( 'Neue Zeit ist langsamer (%s bleibt)', $alt );
+			break;
+		case 'gleich':
+			$text = 'Zeit bereits vorhanden';
+			break;
+		case 'offen':
+		case 'mehrdeutig':
+			$text = isset( $zeile['match_meldung'] ) && '' !== $zeile['match_meldung']
+				? (string) $zeile['match_meldung']
+				: 'Keine Zuordnung möglich – wird nicht importiert';
+			break;
+		default:
+			$text = $status;
+	}
+
+	if ( ! empty( $zeile['zusatz'] ) ) {
+		$text .= ' · ' . $zeile['zusatz'];
+	}
+
+	return $text;
+}
+
+/**
+ * Hat diese Zeile eine Checkbox?
+ *
+ * `offen` und `mehrdeutig` bekommen keine: dort gibt es kein Ziel zum
+ * Schreiben (Plan 6.6). Damit sind sie auch von einer künftigen
+ * „Alle"-Checkbox automatisch ausgenommen.
+ *
+ * @param string $status Status der Zeile.
+ * @return bool
+ */
+function lsg_bl_zeile_waehlbar( $status ) {
+	return ! in_array( $status, array( 'offen', 'mehrdeutig' ), true );
+}
+
+/**
+ * Innerhalb EINES Imports zweimal derselbe Athlet auf derselben Distanz?
+ *
+ * Kommt vor – Staffel plus Einzellauf, oder zwei Listen nacheinander. Dann
+ * gewinnt die bessere Leistung; die schlechtere wird als `langsamer`
+ * mitgeführt und ist abwählbar, nicht stillschweigend verworfen (Plan 6.5.4).
+ *
+ * @param array  $zeilen  Zeilen mit athletes_id, zeit, status.
+ * @param string $distanz Distanzcode.
+ * @return array Dieselben Zeilen, Status angepasst.
+ */
+function lsg_bl_p4_dubletten_im_import( array $zeilen, $distanz ) {
+	$beste = array();
+
+	foreach ( $zeilen as $i => $z ) {
+		$aid = isset( $z['athletes_id'] ) ? (int) $z['athletes_id'] : 0;
+		if ( ! $aid || ! lsg_bl_zeile_waehlbar( $z['status'] ) ) {
+			continue;
+		}
+		$perf = lsg_bl_parse_performance( $distanz, $z['zeit'] );
+		if ( ! isset( $beste[ $aid ] ) || lsg_bl_perf_besser( $perf, $beste[ $aid ]['perf'] ) ) {
+			$beste[ $aid ] = array(
+				'index' => $i,
+				'perf'  => $perf,
+			);
+		}
+	}
+
+	foreach ( $zeilen as $i => $z ) {
+		$aid = isset( $z['athletes_id'] ) ? (int) $z['athletes_id'] : 0;
+		if ( ! $aid || ! isset( $beste[ $aid ] ) || $beste[ $aid ]['index'] === $i ) {
+			continue;
+		}
+		// Diese Zeile ist die schlechtere von zweien im selben Vorgang.
+		$zeilen[ $i ]['status']   = 'langsamer';
+		$zeilen[ $i ]['time_alt'] = $zeilen[ $beste[ $aid ]['index'] ]['zeit'];
+		$zeilen[ $i ]['zusatz']   = trim(
+			$zeilen[ $i ]['zusatz'] . ' Derselbe Sportler steht in diesem Import mit einer besseren Zeit.'
+		);
+	}
+
+	return $zeilen;
+}
+
+/* -------------------------------------------------------------------------
  * Gesamtsieg (Plan 6.5.5 – erkennen und markieren, noch nicht schreiben)
  * ---------------------------------------------------------------------- */
 
@@ -543,6 +1112,13 @@ function lsg_bl_import_zustand( array $ctx ) {
 	}
 	if ( empty( $ctx['adapter_cls'] ) ) {
 		return 'unbekannt';
+	}
+	if ( ! empty( $ctx['uebernommen'] ) ) {
+		// „7 von 9 übernommen" darf weder wie ein glatter Erfolg aussehen
+		// noch wie ein Totalausfall – deshalb ein eigener Zustand (Plan 6.11).
+		$u = (array) $ctx['uebernommen'];
+		$schief = ( ! empty( $u['konflikte'] ) || ! empty( $u['fehler'] ) );
+		return $schief ? 'teilfehler' : 'gespeichert';
 	}
 	if ( ! empty( $ctx['vorschau'] ) ) {
 		return 'vorschau';

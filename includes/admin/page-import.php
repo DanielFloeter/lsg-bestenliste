@@ -63,7 +63,17 @@ function lsg_bl_admin_menu() {
 		'lsg_bl_admin_import_page'
 	);
 
+	$hook_log = add_submenu_page(
+		'lsg-bestenliste',
+		__( 'Import-Log', 'lsg-bestenliste' ),
+		__( 'Import-Log', 'lsg-bestenliste' ),
+		LSG_BL_CAP,
+		'lsg-bestenliste-log',
+		'lsg_bl_admin_log_page'
+	);
+
 	$GLOBALS['lsg_bl_import_hook'] = $hook;
+	$GLOBALS['lsg_bl_log_hook']    = $hook_log;
 }
 add_action( 'admin_menu', 'lsg_bl_admin_menu' );
 
@@ -74,8 +84,13 @@ add_action( 'admin_menu', 'lsg_bl_admin_menu' );
  * @return void
  */
 function lsg_bl_admin_assets( $hook ) {
-	$eigen = isset( $GLOBALS['lsg_bl_import_hook'] ) ? $GLOBALS['lsg_bl_import_hook'] : '';
-	if ( ! $eigen || $hook !== $eigen ) {
+	$eigene = array_filter(
+		array(
+			isset( $GLOBALS['lsg_bl_import_hook'] ) ? $GLOBALS['lsg_bl_import_hook'] : '',
+			isset( $GLOBALS['lsg_bl_log_hook'] ) ? $GLOBALS['lsg_bl_log_hook'] : '',
+		)
+	);
+	if ( ! in_array( $hook, $eigene, true ) ) {
 		return;
 	}
 
@@ -251,6 +266,90 @@ function lsg_bl_admin_import_post() {
 add_action( 'admin_post_lsg_bl_import', 'lsg_bl_admin_import_post' );
 
 /**
+ * Die angehakten Zeilen übernehmen.
+ *
+ * ⚠ Der Client schickt Zeilenindizes, keine Daten. Athlet, Zeit, Distanz,
+ * Datum und Status kommen ausschließlich aus dem Parse-Transient, den der
+ * Server selbst geschrieben hat – sonst wäre die Route mit einer Capability,
+ * die jeder angemeldete Benutzer hat, ein freier Schreibzugriff auf
+ * `lsg_best` (Plan 6.10).
+ *
+ * @return void
+ */
+function lsg_bl_admin_uebernehmen_post() {
+	if ( ! current_user_can( LSG_BL_CAP ) ) {
+		wp_die( esc_html__( 'Dafür fehlt dir die Berechtigung.', 'lsg-bestenliste' ), '', array( 'response' => 403 ) );
+	}
+	check_admin_referer( 'lsg_bl_uebernehmen' );
+
+	$args = array(
+		'url'     => isset( $_POST['url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['url'] ) ) ) : '',
+		'adapter' => isset( $_POST['adapter'] ) ? sanitize_key( wp_unslash( $_POST['adapter'] ) ) : '',
+		'contest' => isset( $_POST['contest'] ) ? sanitize_text_field( wp_unslash( $_POST['contest'] ) ) : '',
+		'list'    => isset( $_POST['list'] ) ? sanitize_text_field( wp_unslash( $_POST['list'] ) ) : '',
+		'distanz' => isset( $_POST['distanz'] ) ? sanitize_text_field( wp_unslash( $_POST['distanz'] ) ) : '',
+		'datum'   => isset( $_POST['datum'] ) ? sanitize_text_field( wp_unslash( $_POST['datum'] ) ) : '',
+		'ort'     => isset( $_POST['ort'] ) ? sanitize_text_field( wp_unslash( $_POST['ort'] ) ) : '',
+		'token'   => isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '',
+	);
+
+	$auswahl = array();
+	if ( isset( $_POST['zeilen'] ) && is_array( $_POST['zeilen'] ) ) {
+		foreach ( wp_unslash( $_POST['zeilen'] ) as $i ) {
+			$auswahl[] = (int) $i;
+		}
+	}
+
+	try {
+		$ergebnis = lsg_bl_uebernehmen( $args['token'], $auswahl );
+	} catch ( LSG_BL_Quelle_Exception $e ) {
+		lsg_bl_admin_notice_setzen( 'error', $e->getMessage() );
+		wp_safe_redirect( lsg_bl_import_url( $args ) );
+		exit;
+	}
+
+	$teile = array();
+	if ( $ergebnis['angelegt'] > 0 ) {
+		/* translators: %d: Anzahl */
+		$teile[] = sprintf( _n( '%d angelegt', '%d angelegt', $ergebnis['angelegt'], 'lsg-bestenliste' ), $ergebnis['angelegt'] );
+	}
+	if ( $ergebnis['aktualisiert'] > 0 ) {
+		/* translators: %d: Anzahl */
+		$teile[] = sprintf( _n( '%d aktualisiert', '%d aktualisiert', $ergebnis['aktualisiert'], 'lsg-bestenliste' ), $ergebnis['aktualisiert'] );
+	}
+	if ( $ergebnis['uebersprungen'] > 0 ) {
+		/* translators: %d: Anzahl */
+		$teile[] = sprintf( _n( '%d übersprungen', '%d übersprungen', $ergebnis['uebersprungen'], 'lsg-bestenliste' ), $ergebnis['uebersprungen'] );
+	}
+	if ( $ergebnis['konflikte'] > 0 ) {
+		/* translators: %d: Anzahl */
+		$teile[] = sprintf( _n( '%d Konflikt', '%d Konflikte', $ergebnis['konflikte'], 'lsg-bestenliste' ), $ergebnis['konflikte'] );
+	}
+	if ( $ergebnis['fehler'] > 0 ) {
+		/* translators: %d: Anzahl */
+		$teile[] = sprintf( _n( '%d Fehler', '%d Fehler', $ergebnis['fehler'], 'lsg-bestenliste' ), $ergebnis['fehler'] );
+	}
+
+	$typ = 'success';
+	if ( $ergebnis['fehler'] > 0 ) {
+		$typ = 'error';
+	} elseif ( $ergebnis['konflikte'] > 0 ) {
+		$typ = 'warning';
+	}
+
+	lsg_bl_admin_notice_setzen(
+		$typ,
+		$teile
+			? implode( ', ', $teile ) . '.'
+			: __( 'Es war nichts zu übernehmen.', 'lsg-bestenliste' )
+	);
+
+	wp_safe_redirect( lsg_bl_import_url( $args ) );
+	exit;
+}
+add_action( 'admin_post_lsg_bl_uebernehmen', 'lsg_bl_admin_uebernehmen_post' );
+
+/**
  * Datumseingabe lesen: ISO aus `<input type="date">` oder TT.MM.JJJJ aus dem
  * Textfeld-Fallback.
  *
@@ -326,6 +425,7 @@ function lsg_bl_admin_import_page() {
 	$datum     = isset( $_GET['datum'] ) ? sanitize_text_field( wp_unslash( $_GET['datum'] ) ) : '';
 	$ort       = isset( $_GET['ort'] ) ? sanitize_text_field( wp_unslash( $_GET['ort'] ) ) : '';
 	$token     = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : '';
+	$filter    = isset( $_GET['filter'] ) ? sanitize_key( wp_unslash( $_GET['filter'] ) ) : '';
 	// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 	$fehler   = '';
@@ -496,6 +596,7 @@ function lsg_bl_admin_import_page() {
 			'distanz'     => $distanz,
 			'datum'       => $datum,
 			'vorschau'    => $vorschau,
+			'uebernommen' => ( $vorschau && ! empty( $vorschau['uebernommen'] ) ) ? $vorschau['uebernommen'] : null,
 		)
 	);
 
@@ -508,6 +609,7 @@ function lsg_bl_admin_import_page() {
 		'datum'   => $datum,
 		'ort'     => $ort,
 		'token'   => $token,
+		'filter'  => $filter,
 	);
 
 	/* ---- Ausgabe ---- */
@@ -894,10 +996,13 @@ function lsg_bl_import_vorschau_anzeigen( array $v, array $w ) {
 	/* ---- Der Trichter ---- */
 	$stufen = lsg_bl_trichter_stufen( $v['trichter'] );
 	echo '<p class="lsg-bl-trichter">';
-	$erste = true;
+	$phase = null;
 	foreach ( $stufen as $s ) {
-		if ( ! $erste ) {
-			echo ' <span class="lsg-bl-pfeil">→</span> ';
+		if ( null !== $phase ) {
+			// Pfeil zwischen den Phasen, Komma innerhalb einer Phase.
+			echo ( $s['phase'] === $phase )
+				? '<span class="lsg-bl-komma">,</span> '
+				: ' <span class="lsg-bl-pfeil">→</span> ';
 		}
 		printf(
 			'<span class="lsg-bl-stufe lsg-bl-stufe-%1$s"><strong>%2$s</strong> %3$s</span>',
@@ -905,7 +1010,7 @@ function lsg_bl_import_vorschau_anzeigen( array $v, array $w ) {
 			esc_html( number_format_i18n( $s['wert'] ) ),
 			esc_html( $s['label'] )
 		);
-		$erste = false;
+		$phase = $s['phase'];
 	}
 	echo '</p>';
 
@@ -943,94 +1048,357 @@ function lsg_bl_import_vorschau_anzeigen( array $v, array $w ) {
 		);
 	}
 
-	// M2 endet hier: gelesen und gefiltert, nichts geschrieben.
-	echo '<div class="notice notice-info inline"><p>'
-		. esc_html__( 'Zuordnung zu den Sportlern und der Abgleich mit der Bestenliste kommen im nächsten Schritt. Bis dahin ist diese Vorschau reine Anzeige – es wird nichts gespeichert.', 'lsg-bestenliste' )
-		. '</p></div>';
+	// Nicht zuordenbare Zeilen: die Zahl steht zusätzlich als eigene Meldung
+	// über der Tabelle, damit sie bei vierzig Zeilen nicht untergeht.
+	$ohne = 0;
+	foreach ( $v['zeilen'] as $z ) {
+		if ( 0 === (int) $z['athletes_id'] ) {
+			++$ohne;
+		}
+	}
+	if ( $ohne > 0 ) {
+		printf(
+			'<div class="notice notice-warning inline"><p>%1$s <a href="%2$s">%3$s</a></p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %d: Anzahl */
+					_n(
+						'%d Teilnehmer ohne Zuordnung – wird nicht importiert.',
+						'%d Teilnehmer ohne Zuordnung – werden nicht importiert.',
+						$ohne,
+						'lsg-bestenliste'
+					),
+					$ohne
+				)
+			),
+			esc_url( lsg_bl_import_url( array_merge( $w, array( 'filter' => 'offen' ) ) ) ),
+			esc_html__( 'nur diese zeigen', 'lsg-bestenliste' )
+		);
+	}
 
-	/* ---- Die Tabelle ---- */
-	lsg_bl_import_tabelle( $v );
+	/* ---- Bilanz nach dem Übernehmen ---- */
+	if ( ! empty( $v['uebernommen'] ) ) {
+		lsg_bl_import_bilanz( $v['uebernommen'] );
+	}
+
+	/* ---- Tabelle und Übernahme ---- */
+	lsg_bl_import_tabelle( $v, $w );
 
 	/* ---- Nicht übernommene Vereine ---- */
 	lsg_bl_import_abgelehnte_vereine( $v, $w );
 }
 
 /**
- * Die Vorschautabelle.
+ * Die Bilanz nach dem Übernehmen, mit Link ins Log.
  *
- * Ohne Checkbox-Spalte: die kommt mit der Übernahme (Plan 6.6, M3). Was hier
- * steht, ist alles, was die Quelle geliefert hat.
- *
- * @param array $v Parse-Ergebnis.
+ * @param array $u Resultat von lsg_bl_uebernehmen().
  * @return void
  */
-function lsg_bl_import_tabelle( array $v ) {
+function lsg_bl_import_bilanz( array $u ) {
+	$typ = 'success';
+	if ( ! empty( $u['fehler'] ) ) {
+		$typ = 'error';
+	} elseif ( ! empty( $u['konflikte'] ) ) {
+		$typ = 'warning';
+	}
+
+	$zahlen = array(
+		__( 'angelegt', 'lsg-bestenliste' )      => (int) $u['angelegt'],
+		__( 'aktualisiert', 'lsg-bestenliste' )  => (int) $u['aktualisiert'],
+		__( 'übersprungen', 'lsg-bestenliste' )  => (int) $u['uebersprungen'],
+		__( 'Konflikte', 'lsg-bestenliste' )     => (int) $u['konflikte'],
+		__( 'Fehler', 'lsg-bestenliste' )        => (int) $u['fehler'],
+	);
+
+	$teile = array();
+	foreach ( $zahlen as $label => $wert ) {
+		if ( 0 === $wert && ! in_array( $label, array( __( 'angelegt', 'lsg-bestenliste' ), __( 'aktualisiert', 'lsg-bestenliste' ) ), true ) ) {
+			continue;
+		}
+		$teile[] = '<strong>' . esc_html( number_format_i18n( $wert ) ) . '</strong> ' . esc_html( $label );
+	}
+
+	printf(
+		'<div class="notice notice-%1$s"><p>%2$s',
+		esc_attr( $typ ),
+		wp_kses_post( implode( ' &middot; ', $teile ) )
+	);
+
+	if ( ! empty( $u['run_id'] ) ) {
+		printf(
+			' &middot; <a href="%1$s">%2$s</a>',
+			esc_url(
+				add_query_arg(
+					array(
+						'page' => 'lsg-bestenliste-log',
+						'run'  => (int) $u['run_id'],
+					),
+					admin_url( 'admin.php' )
+				)
+			),
+			esc_html__( 'im Log ansehen', 'lsg-bestenliste' )
+		);
+	}
+
+	echo '</p></div>';
+
+	if ( ! empty( $u['fehler'] ) ) {
+		echo '<div class="notice notice-error"><p>'
+			. esc_html__( 'Wegen des Fehlers wurde der ganze Vorgang zurückgerollt – in der Bestenliste steht nichts Halbes. Das Log hält fest, woran es lag.', 'lsg-bestenliste' )
+			. '</p></div>';
+	}
+}
+
+/**
+ * Der Statusfilter über der Tabelle.
+ *
+ * Damit man bei vierzig Zeilen die drei `offen`-Fälle findet (Plan 6.6).
+ *
+ * ⚠ Ohne JavaScript lädt der Filter die Seite neu und setzt damit die
+ * Auswahl auf die Vorbelegung zurück. Das steht auch so daneben – erst
+ * filtern, dann anhaken.
+ *
+ * @param array  $v      Parse-Ergebnis.
+ * @param array  $w      Formularwerte.
+ * @param string $aktiv  Aktiver Filter.
+ * @return void
+ */
+function lsg_bl_import_statusfilter( array $v, array $w, $aktiv ) {
+	$zaehler = array();
+	foreach ( $v['zeilen'] as $z ) {
+		$st = (string) $z['status'];
+		if ( ! isset( $zaehler[ $st ] ) ) {
+			$zaehler[ $st ] = 0;
+		}
+		++$zaehler[ $st ];
+	}
+
+	if ( count( $zaehler ) < 2 ) {
+		return;   // Ein einziger Status ist keine Auswahl.
+	}
+
+	$labels = array(
+		'neu'        => __( 'neu', 'lsg-bestenliste' ),
+		'schneller'  => __( 'schneller', 'lsg-bestenliste' ),
+		'langsamer'  => __( 'langsamer', 'lsg-bestenliste' ),
+		'gleich'     => __( 'gleich', 'lsg-bestenliste' ),
+		'offen'      => __( 'ohne Zuordnung', 'lsg-bestenliste' ),
+		'mehrdeutig' => __( 'mehrdeutig', 'lsg-bestenliste' ),
+	);
+
+	$teile = array();
+
+	$teile[] = sprintf(
+		'<a href="%1$s"%2$s>%3$s <span class="count">(%4$s)</span></a>',
+		esc_url( lsg_bl_import_url( array_merge( $w, array( 'filter' => '' ) ) ) ),
+		( '' === $aktiv ) ? ' class="current"' : '',
+		esc_html__( 'Alle', 'lsg-bestenliste' ),
+		esc_html( number_format_i18n( count( $v['zeilen'] ) ) )
+	);
+
+	foreach ( $labels as $key => $label ) {
+		if ( empty( $zaehler[ $key ] ) ) {
+			continue;
+		}
+		$teile[] = sprintf(
+			'<a href="%1$s"%2$s>%3$s <span class="count">(%4$s)</span></a>',
+			esc_url( lsg_bl_import_url( array_merge( $w, array( 'filter' => $key ) ) ) ),
+			( $key === $aktiv ) ? ' class="current"' : '',
+			esc_html( $label ),
+			esc_html( number_format_i18n( $zaehler[ $key ] ) )
+		);
+	}
+
+	echo '<ul class="subsubsub lsg-bl-statusfilter"><li>'
+		. wp_kses_post( implode( ' |</li><li>', $teile ) )
+		. '</li></ul><div class="clear"></div>';
+
+	if ( '' !== $aktiv ) {
+		echo '<p class="description">'
+			. esc_html__( 'Ohne JavaScript setzt ein Filterwechsel die Auswahl auf die Vorbelegung zurück – erst filtern, dann anhaken.', 'lsg-bestenliste' )
+			. '</p>';
+	}
+}
+
+/**
+ * Die Übernahme-Tabelle (Plan 6.6).
+ *
+ * Eine Zeile je Ergebnis, mit Checkbox – außer bei `offen` und `mehrdeutig`:
+ * dort steht keine, weil es kein Ziel zum Schreiben gibt. Vorausgewählt sind
+ * `neu` und `schneller`; `langsamer` und `gleich` sind leer. Die Vorauswahl
+ * ist eine Bequemlichkeit, keine Sperre – jede Zeile bleibt frei wählbar.
+ *
+ * ⚠ Nicht zugeordnete Teilnehmer stehen MITTEN unter den anderen, nicht in
+ * einem abgetrennten Block: gleiche Tabelle, gleiche Reihenfolge, nur ohne
+ * Checkbox. Wer die Liste von oben nach unten durchgeht, kann sie nicht
+ * übersehen. Die Zeilenzahl der Tabelle entspricht damit immer der LSG-Zahl
+ * aus dem Trichter (Plan 6.5.3).
+ *
+ * ⚠ Die Kopf-Checkbox „Alle" gibt es hier nicht: sie braucht JavaScript, und
+ * ohne JavaScript soll die Seite vollständig bedienbar bleiben. Sie kommt mit
+ * M6 (Plan 6.6).
+ *
+ * @param array $v Parse-Ergebnis.
+ * @param array $w Formularwerte.
+ * @return void
+ */
+function lsg_bl_import_tabelle( array $v, array $w ) {
 	if ( ! $v['zeilen'] ) {
 		echo '<p>' . esc_html__( 'Nichts zu zeigen.', 'lsg-bestenliste' ) . '</p>';
 		return;
 	}
 
+	$filter = isset( $w['filter'] ) ? (string) $w['filter'] : '';
+
+	// Nach dem Übernehmen bleibt die Tabelle stehen, aber ohne Checkboxen:
+	// jede Zeile bekommt stattdessen ihr Resultat angeheftet (Plan 6.6).
+	$fertig     = ! empty( $v['uebernommen'] );
+	$resultate  = array();
+	if ( $fertig ) {
+		foreach ( (array) $v['uebernommen']['ergebnisse'] as $e ) {
+			$resultate[ (int) $e['index'] ] = $e;
+		}
+	}
+
+	lsg_bl_import_statusfilter( $v, $w, $filter );
+
+	if ( ! $fertig ) {
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="lsg-bl-uebernahme">';
+		echo '<input type="hidden" name="action" value="lsg_bl_uebernehmen" />';
+		wp_nonce_field( 'lsg_bl_uebernehmen' );
+		foreach ( array( 'url', 'adapter', 'contest', 'list', 'distanz', 'datum', 'ort', 'token' ) as $feld ) {
+			printf(
+				'<input type="hidden" name="%1$s" value="%2$s" />',
+				esc_attr( $feld ),
+				esc_attr( isset( $w[ $feld ] ) ? $w[ $feld ] : '' )
+			);
+		}
+	}
+
 	echo '<table class="wp-list-table widefat fixed striped lsg-bl-vorschau">';
 	echo '<thead><tr>';
-	echo '<th scope="col" class="column-primary">' . esc_html__( 'Nachname, Vorname', 'lsg-bestenliste' ) . '</th>';
+	if ( ! $fertig ) {
+		echo '<td class="manage-column column-cb check-column"></td>';
+	}
+	echo '<th scope="col" class="column-primary">' . esc_html__( 'Sportler', 'lsg-bestenliste' ) . '</th>';
 	echo '<th scope="col">' . esc_html__( 'Jg', 'lsg-bestenliste' ) . '</th>';
-	echo '<th scope="col">' . esc_html__( 'Verein', 'lsg-bestenliste' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'AK', 'lsg-bestenliste' ) . '</th>';
 	echo '<th scope="col">' . esc_html__( 'Zeit', 'lsg-bestenliste' ) . '</th>';
-	echo '<th scope="col">' . esc_html__( 'Platz', 'lsg-bestenliste' ) . '</th>';
-	echo '<th scope="col">' . esc_html__( 'Stnr', 'lsg-bestenliste' ) . '</th>';
-	echo '<th scope="col">' . esc_html__( 'Hinweise', 'lsg-bestenliste' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Bestand', 'lsg-bestenliste' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Status', 'lsg-bestenliste' ) . '</th>';
+	if ( $fertig ) {
+		echo '<th scope="col">' . esc_html__( 'Resultat', 'lsg-bestenliste' ) . '</th>';
+	}
 	echo '</tr></thead><tbody>';
 
-	foreach ( $v['zeilen'] as $z ) {
-		$hinweise = array();
+	$gewaehlt  = 0;
+	$sichtbar  = 0;
+	$status_liste = lsg_bl_p4_status_liste();
 
-		if ( ! empty( $z['namen_unsicher'] ) ) {
-			$hinweise[] = __( 'Vor- und Nachname geraten – die Quelle schreibt sie nicht eindeutig.', 'lsg-bestenliste' );
-		}
-		if ( empty( $z['jahrgang'] ) ) {
-			$hinweise[] = __( 'Die Quelle nennt keinen Jahrgang. Ohne ihn lässt sich der Athlet nicht zuordnen.', 'lsg-bestenliste' );
-		}
-		if ( empty( $z['geschlecht'] ) ) {
-			$hinweise[] = __( 'Kein Geschlecht in der Quelle.', 'lsg-bestenliste' );
+	foreach ( $v['zeilen'] as $i => $z ) {
+		$status   = (string) $z['status'];
+		$waehlbar = lsg_bl_zeile_waehlbar( $status );
+		$vorwahl  = $waehlbar && ! empty( $status_liste[ $status ]['vorauswahl'] );
+
+		if ( $vorwahl ) {
+			++$gewaehlt;
 		}
 
-		$sieg = lsg_bl_ist_gesamtsieg( $z, $v['gesamtwertung'] );
+		if ( '' !== $filter && $status !== $filter ) {
+			// Gefilterte Zeilen bleiben als Hidden-Feld im Formular, damit ein
+			// Filter die Vorauswahl nicht heimlich abwählt.
+			if ( $vorwahl ) {
+				printf(
+					'<tr class="hidden"><td><input type="hidden" name="zeilen[]" value="%d" /></td></tr>',
+					(int) $i
+				);
+			}
+			continue;
+		}
+		++$sichtbar;
 
 		$name = trim( $z['nachname'] . ', ' . $z['vorname'], ', ' );
+		$sieg = lsg_bl_ist_gesamtsieg( $z, $v['gesamtwertung'] );
 
-		echo '<tr>';
-		echo '<td class="column-primary"><strong>' . esc_html( $name ) . '</strong>';
+		printf( '<tr class="lsg-bl-status-%s">', esc_attr( $status ) );
 
-		/*
-		 * Die Rohschreibweise der Quelle steht nur da, wenn sie etwas sagt:
-		 * bei „FLÖTER Daniel" → „FLÖTER, Daniel" hat der Splitter nichts
-		 * verändert außer dem Komma, und die Zeile zweimal zu zeigen macht
-		 * die Tabelle unlesbar. Mitgeführt wird das Feld immer – im Log
-		 * (`roh_teilnehmer`) steht es in jedem Fall (Plan 6.5.1).
-		 */
-		$roh_name = trim( (string) $z['teilnehmer'] );
-		if ( '' !== $roh_name
-			&& ( ! empty( $z['namen_unsicher'] )
-				|| lsg_bl_text_normalisieren( $roh_name ) !== lsg_bl_text_normalisieren( $name ) )
+		/* --- Checkbox --- */
+		if ( ! $fertig ) {
+			echo '<th scope="row" class="check-column">';
+			if ( $waehlbar ) {
+				printf(
+					'<input type="checkbox" name="zeilen[]" value="%1$d" id="lsg-bl-z%1$d"%2$s />',
+					(int) $i,
+					$vorwahl ? ' checked="checked"' : ''
+				);
+			}
+			echo '</th>';
+		}
+
+		/* --- Sportler --- */
+		echo '<td class="column-primary">';
+		if ( $z['athletes_id'] > 0 ) {
+			printf(
+				'<label for="lsg-bl-z%1$d"><strong>%2$s</strong></label>',
+				(int) $i,
+				esc_html( $z['athlet_label'] ? $z['athlet_label'] : $name )
+			);
+			if ( 'exakt' !== $z['match_type'] ) {
+				$typen = lsg_bl_match_types();
+				echo '<br /><span class="lsg-bl-roh">' . esc_html(
+					sprintf(
+						/* translators: %s: Art der Zuordnung */
+						__( 'zugeordnet %s', 'lsg-bestenliste' ),
+						isset( $typen[ $z['match_type'] ] ) ? $typen[ $z['match_type'] ] : $z['match_type']
+					)
+				) . '</span>';
+			}
+		} else {
+			echo '<strong>' . esc_html( $name ) . '</strong>';
+		}
+
+		// Rohdaten der Quelle – bei einer nicht zuordenbaren Person ist genau
+		// das die einzige Information, die überhaupt noch da ist.
+		$roh = array();
+		if ( '' !== trim( (string) $z['teilnehmer'] )
+			&& lsg_bl_text_normalisieren( $z['teilnehmer'] ) !== lsg_bl_text_normalisieren( $name )
 		) {
-			echo '<br /><span class="lsg-bl-roh">' . esc_html(
-				sprintf(
-					/* translators: %s: Rohschreibweise der Quelle */
-					__( 'Quelle: %s', 'lsg-bestenliste' ),
-					$roh_name
-				)
-			) . '</span>';
+			$roh[] = sprintf( __( 'roh: „%s"', 'lsg-bestenliste' ), $z['teilnehmer'] );
+		}
+		if ( 0 === (int) $z['athletes_id'] ) {
+			if ( '' !== trim( (string) $z['startnummer'] ) ) {
+				$roh[] = sprintf( __( 'Stnr %s', 'lsg-bestenliste' ), $z['startnummer'] );
+			}
+			if ( '' !== trim( (string) $z['platz'] ) ) {
+				$roh[] = sprintf( __( 'Platz %s', 'lsg-bestenliste' ), $z['platz'] );
+			}
+			if ( '' !== trim( (string) $z['verein'] ) ) {
+				$roh[] = (string) $z['verein'];
+			}
+		}
+		if ( $roh ) {
+			echo '<br /><span class="lsg-bl-roh">' . esc_html( implode( ' · ', $roh ) ) . '</span>';
 		}
 		echo '</td>';
-		echo '<td>' . lsg_bl_cell( $z['jahrgang'] ? $z['jahrgang'] : '' ) . '</td>';
-		echo '<td>' . lsg_bl_cell( $z['verein'] ) . '</td>';
-		echo '<td><strong>' . lsg_bl_cell( $z['zeit'] ) . '</strong>';
 
-		/*
-		 * Bei der Zeit dasselbe: eine führende Null oder eine fehlende
-		 * Stundenangabe zu ergänzen verliert keine Information. Zehntel
-		 * aufzurunden schon – nur dann wird die Originalzeit gezeigt.
-		 */
+		/* --- Jahrgang --- */
+		echo '<td>' . lsg_bl_cell( $z['jahrgang'] ? $z['jahrgang'] : '' ) . '</td>';
+
+		/* --- Altersklasse --- */
+		echo '<td>' . lsg_bl_cell( $z['ak'] );
+		if ( ! empty( $z['ak_fehlt'] ) ) {
+			echo '<br /><span class="lsg-bl-warnzeile" title="' . esc_attr(
+				sprintf(
+					/* translators: %s: AK-Code */
+					__( 'Die Altersklasse %s fehlt in lsg_ak – bis sie ergänzt ist, lässt sich im Frontend nicht danach filtern.', 'lsg-bestenliste' ),
+					$z['ak']
+				)
+			) . '">' . esc_html__( 'fehlt im Filter', 'lsg-bestenliste' ) . '</span>';
+		}
+		echo '</td>';
+
+		/* --- Zeit --- */
+		echo '<td><strong>' . lsg_bl_cell( $z['zeit'] ) . '</strong>';
 		if ( preg_match( '/[.,]\d/', (string) $z['roh_zeit'] ) ) {
 			echo '<br /><span class="lsg-bl-roh">' . esc_html(
 				sprintf(
@@ -1040,20 +1408,93 @@ function lsg_bl_import_tabelle( array $v ) {
 				)
 			) . '</span>';
 		}
-		echo '</td>';
-		echo '<td>' . lsg_bl_cell( $z['platz'] ) . ( $sieg ? ' <span class="lsg-bl-sieg" title="' . esc_attr__( 'Gesamtsieg', 'lsg-bestenliste' ) . '">🏆</span>' : '' ) . '</td>';
-		echo '<td>' . lsg_bl_cell( $z['startnummer'] ) . '</td>';
-		echo '<td>';
-		if ( $hinweise ) {
-			echo '<span class="lsg-bl-warnzeile">⚠ ' . esc_html( implode( ' ', $hinweise ) ) . '</span>';
-		} else {
-			echo '&#8211;';
+		if ( $sieg ) {
+			echo ' <span class="lsg-bl-sieg" title="' . esc_attr__( 'Gesamtsieg', 'lsg-bestenliste' ) . '">🏆</span>';
 		}
 		echo '</td>';
+
+		/* --- Bestand --- */
+		echo '<td>' . lsg_bl_cell( $z['time_alt'] ) . '</td>';
+
+		/* --- Status im Klartext --- */
+		echo '<td>' . esc_html( lsg_bl_status_text( $z ) );
+
+		if ( ! empty( $z['geschlecht_abweichung'] ) ) {
+			echo '<br /><span class="lsg-bl-warnzeile">'
+				. esc_html__( '⚠ Die Quelle nennt ein anderes Geschlecht als der zugeordnete Sportler – bitte prüfen.', 'lsg-bestenliste' )
+				. '</span>';
+		}
+
+		// Ähnliche Athleten: reine Lesehilfe, kein Auswahlfeld.
+		if ( ! empty( $z['aehnliche'] ) ) {
+			$teile = array();
+			foreach ( $z['aehnliche'] as $a ) {
+				$teile[] = trim( $a['name'] . ', ' . $a['firstname'], ', ' ) . ' (' . (int) $a['born'] . ')';
+			}
+			echo '<br /><span class="lsg-bl-roh">' . esc_html(
+				sprintf(
+					/* translators: %s: Liste ähnlicher Namen */
+					__( 'ähnlich in der Sportlerliste: %s', 'lsg-bestenliste' ),
+					implode( ' · ', $teile )
+				)
+			) . '</span>';
+		}
+		echo '</td>';
+
+		/* --- Resultat --- */
+		if ( $fertig ) {
+			$r        = isset( $resultate[ $i ] ) ? $resultate[ $i ] : null;
+			$aktionen = lsg_bl_log_aktionen();
+			echo '<td>';
+			if ( $r ) {
+				$label = isset( $aktionen[ $r['aktion'] ] ) ? $aktionen[ $r['aktion'] ] : $r['aktion'];
+				printf(
+					'<span class="lsg-bl-resultat lsg-bl-resultat-%1$s">%2$s</span>',
+					esc_attr( $r['aktion'] ),
+					esc_html( $label )
+				);
+				if ( '' !== $r['meldung'] ) {
+					echo '<br /><span class="lsg-bl-roh">' . esc_html( $r['meldung'] ) . '</span>';
+				}
+			} else {
+				echo '&#8211;';
+			}
+			echo '</td>';
+		}
+
 		echo '</tr>';
 	}
 
 	echo '</tbody></table>';
+
+	if ( '' !== $filter && 0 === $sichtbar ) {
+		echo '<p>' . esc_html__( 'Kein Ergebnis mit diesem Status.', 'lsg-bestenliste' ) . '</p>';
+	}
+
+	if ( $fertig ) {
+		echo '<p class="description">'
+			. esc_html__( 'Dieser Vorgang ist abgeschlossen. Für einen weiteren Import bitte erneut parsen – dieselbe Liste ein zweites Mal übernommen ändert nichts.', 'lsg-bestenliste' )
+			. '</p>';
+		return;
+	}
+
+	/* ---- Der Knopf ---- */
+	printf(
+		'<p class="submit"><button type="submit" class="button button-primary"%1$s>%2$s</button></p>',
+		( 0 === $gewaehlt ) ? ' disabled="disabled"' : '',
+		esc_html(
+			sprintf(
+				/* translators: %d: Anzahl */
+				_n( '%d Ergebnis übernehmen', '%d Ergebnisse übernehmen', $gewaehlt, 'lsg-bestenliste' ),
+				$gewaehlt
+			)
+		)
+	);
+	echo '<p class="description">'
+		. esc_html__( 'Angelegt wird nur, was angehakt ist. Eine langsamere Zeit überschreibt den Bestand auch dann nicht, wenn sie angehakt ist – dafür gibt es die Seite „Bestenliste".', 'lsg-bestenliste' )
+		. '</p>';
+
+	echo '</form>';
 }
 
 /**

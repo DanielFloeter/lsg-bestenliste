@@ -46,6 +46,25 @@ function lsg_bl_parse_url( $url ) {
  * ---------------------------------------------------------------------- */
 
 /**
+ * Kleinschreiben, multibyte-fest – und sonst nichts.
+ *
+ * Der Unterschied zu lsg_bl_text_normalisieren(): dort fallen auch Umlaute,
+ * Bindestriche und Punkte weg. Hier bleibt „Dr. Pfeiffer" „dr. pfeiffer" und
+ * ist damit von „Pfeiffer" unterscheidbar – genau das braucht die exakte
+ * Stufe der Athletenzuordnung (Plan 6.5.3).
+ *
+ * @param string $wert Rohwert.
+ * @return string
+ */
+function lsg_bl_kleinschreiben( $wert ) {
+	$wert = trim( (string) $wert );
+	if ( function_exists( 'mb_strtolower' ) ) {
+		return mb_strtolower( $wert, 'UTF-8' );
+	}
+	return strtolower( $wert );
+}
+
+/**
  * Gemeinsame Textnormalisierung für Vereins- und Namensvergleiche:
  * klein, Umlaute aufgelöst, alles außer a-z0-9 zu einem Leerzeichen.
  *

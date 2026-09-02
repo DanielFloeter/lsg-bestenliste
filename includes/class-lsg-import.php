@@ -328,10 +328,33 @@ function lsg_bl_parsen( array $args ) {
 	// P2: auf LSG Karlsruhe filtern.
 	$p2 = lsg_bl_p2_filtern( $zeilen, lsg_bl_verein_aliasse() );
 
+	// P3 + P4: zuordnen und gegen den Bestand abgleichen.
+	$jahr    = (int) substr( $datum, 0, 4 );
+	$geprueft = lsg_bl_p3_p4( $p2['lsg'], $distanz, $jahr );
+
 	$trichter              = lsg_bl_trichter_leer();
 	$trichter['gelesen']   = isset( $p1['gelesen'] ) ? (int) $p1['gelesen'] : count( $zeilen );
 	$trichter['verworfen'] = isset( $p1['verworfen'] ) ? (int) $p1['verworfen'] : 0;
 	$trichter['lsg']       = count( $p2['lsg'] );
+
+	foreach ( array( 'zugeordnet', 'offen', 'neu', 'schneller', 'langsamer', 'gleich' ) as $k ) {
+		$trichter[ $k ] = 0;
+	}
+	foreach ( $geprueft as $z ) {
+		// P3: zugeordnet oder nicht. `offen` und `mehrdeutig` landen beide in
+		// derselben Stufe – für den Trichter ist die Unterscheidung eine
+		// Begründung, keine Zahl.
+		if ( $z['athletes_id'] > 0 ) {
+			++$trichter['zugeordnet'];
+		} else {
+			++$trichter['offen'];
+			continue;
+		}
+		// P4: nur die vier Status, die eine zugeordnete Zeile haben kann.
+		if ( array_key_exists( $z['status'], $trichter ) ) {
+			++$trichter[ $z['status'] ];
+		}
+	}
 
 	$liste = lsg_bl_contest_liste( $disc, $args['contest_id'], $ref->list_id );
 
@@ -361,21 +384,22 @@ function lsg_bl_parsen( array $args ) {
 		'gesamtwertung' => $liste ? (bool) $liste['gesamtwertung'] : false,
 		'distanz'       => $distanz,
 		'datum'         => $datum,
+		// Woher der Wert stammt, wird mitgeführt und in lsg_import_run
+		// protokolliert – damit später nachvollziehbar ist, wie sicher er war
+		// (Plan 6.5.1). Hat der Mensch das Feld angefasst, ist die Herkunft
+		// „manuell", egal was die Quelle vorgeschlagen hatte.
+		'datum_quelle'  => lsg_bl_datum_quelle_bestimmen( $disc, $datum ),
 		'ort'           => isset( $args['ort'] ) ? (string) $args['ort'] : '',
 		'zeit_typ'      => isset( $p1['zeit_typ'] ) ? (string) $p1['zeit_typ'] : '',
 		'quelle_url'    => $adapter->quelleUrl( $ref, (string) $args['contest_id'], $ref->list_id ? $ref->list_id : null ),
 		'trichter'      => $trichter,
 		'warnungen'     => isset( $p1['warnungen'] ) ? (array) $p1['warnungen'] : array(),
+		'jahr'          => $jahr,
 		'abgelehnt'     => $p2['abgelehnt'],
 		'nahe'          => $p2['nahe'],
 		// ⚠ Nur die Zeilen, die P2 passiert haben. Die Nicht-LSG-Ergebnisse
 		// werden nicht gehalten – auch nicht im Transient (Plan 6.8).
-		'zeilen'        => array_map(
-			function ( $e ) {
-				return $e->to_array();
-			},
-			$p2['lsg']
-		),
+		'zeilen'        => $geprueft,
 	);
 
 	$token = lsg_bl_parse_token_neu();
@@ -385,6 +409,490 @@ function lsg_bl_parsen( array $args ) {
 		'token' => $token,
 		'daten' => $daten,
 	);
+}
+
+/* -------------------------------------------------------------------------
+ * P3 und P4 – verkettet, mit Datenbank
+ * ---------------------------------------------------------------------- */
+
+/**
+ * P3 und P4 über alle Zeilen laufen lassen.
+ *
+ * Die Entscheidungen selbst stehen in class-lsg-pipeline.php; hier werden nur
+ * die Kandidaten geholt und die Stufen verkettet.
+ *
+ * @param LSG_BL_Ergebnis[] $zeilen  Zeilen nach P2.
+ * @param string            $distanz Gewählter Distanzcode.
+ * @param int               $jahr    Kalenderjahr aus dem Veranstaltungsdatum.
+ * @return array<int,array> Zeilen als Array, um P3- und P4-Felder ergänzt.
+ */
+function lsg_bl_p3_p4( array $zeilen, $distanz, $jahr ) {
+	// Alle gebrauchten Jahrgänge in einer Abfrage – nicht eine je Zeile.
+	$jahrgaenge = array();
+	foreach ( $zeilen as $e ) {
+		if ( $e->jahrgang > 0 ) {
+			$jahrgaenge[] = (int) $e->jahrgang;
+		}
+	}
+
+	$athleten = lsg_bl_athleten_nach_jahrgang( $jahrgaenge );
+	$regeln   = lsg_bl_map_regeln( $jahrgaenge );
+	$ak_codes = lsg_bl_ak_codes();
+
+	$out = array();
+
+	foreach ( $zeilen as $e ) {
+		$z = $e->to_array();
+
+		/* ---- P3 ---- */
+		$p3 = lsg_bl_p3_zuordnen( $z, $athleten, $regeln );
+
+		$z['athletes_id']   = (int) $p3['athletes_id'];
+		$z['match_type']    = $p3['match_type'];
+		$z['match_meldung'] = $p3['meldung'];
+		$z['match_regeln']  = $p3['regeln'];
+		$z['athlet_label']  = '';
+		$z['ak']            = '';
+		$z['ak_fehlt']      = false;
+		$z['geschlecht_abweichung'] = false;
+		$z['aehnliche']     = array();
+		$z['time_alt']      = '';
+		$z['best_id']       = 0;
+		$z['doppelt']       = array();
+		$z['zusatz']        = '';
+
+		if ( 0 === $z['athletes_id'] ) {
+			$z['status'] = ( 'mehrdeutig' === $p3['match_type'] ) ? 'mehrdeutig' : 'offen';
+			// Reine Lesehilfe unter der Zeile – kein Auswahlfeld.
+			$z['aehnliche'] = lsg_bl_p3_aehnliche( $z, lsg_bl_athleten_aehnlich_kandidaten( $z ) );
+			$out[]          = $z;
+			continue;
+		}
+
+		$athlet            = lsg_bl_athlet( $z['athletes_id'] );
+		$z['athlet_label'] = lsg_bl_athlet_label( $athlet );
+
+		// Die Altersklasse wird selbst gerechnet, nicht aus der Quelle
+		// übernommen: die Portale benutzen eigene Klassenschemata, und der
+		// Bestand muss in sich konsistent bleiben (Plan 6.5.3).
+		$z['ak'] = lsg_bl_ak_berechnen(
+			$athlet ? $athlet['born'] : 0,
+			$jahr,
+			$athlet ? $athlet['cat'] : 'm'
+		);
+		if ( '' !== $z['ak'] && ! in_array( strtolower( $z['ak'] ), $ak_codes, true ) ) {
+			// ⚠ Kein Vorbehalt, kein Bestätigungsschritt: der Code wird
+			// geschrieben. `lsg_ak` ist die Anzeigeliste des AK-Dropdowns im
+			// Frontend, nicht die Instanz, die über die Richtigkeit eines
+			// Ergebnisses entscheidet (Plan 6.5.3).
+			$z['ak_fehlt'] = true;
+		}
+
+		// Weicht das Geschlecht der Quelle vom zugeordneten Athleten ab, ist
+		// das ein starker Hinweis auf eine Fehlzuordnung – „die Quelle sagt W,
+		// der zugeordnete Sportler ist m" trifft man selten zufällig. Die
+		// Zeile wird deshalb nicht abgelehnt, aber markiert (Plan 6.5.1).
+		if ( $athlet && '' !== $z['geschlecht'] ) {
+			$cat = ( 'f' === strtolower( (string) $athlet['cat'] ) ) ? 'f' : 'm';
+			if ( $cat !== $z['geschlecht'] ) {
+				$z['geschlecht_abweichung'] = true;
+			}
+		}
+
+		/* ---- P4 ---- */
+		$bestand = lsg_bl_best_zeilen( $z['athletes_id'], $distanz, $jahr );
+		$p4      = lsg_bl_p4_status( $distanz, $z['zeit'], $bestand );
+
+		$z['status']   = $p4['status'];
+		$z['best_id']  = $p4['best_id'];
+		$z['time_alt'] = $p4['time_alt'];
+		$z['doppelt']  = $p4['doppelt'];
+		$z['zusatz']   = $p4['zusatz'];
+
+		$out[] = $z;
+	}
+
+	// Zwei Zeilen desselben Athleten im selben Import: die bessere gewinnt.
+	return lsg_bl_p4_dubletten_im_import( $out, $distanz );
+}
+
+/**
+ * Kandidaten für die Ähnlichkeitsliste einer nicht zuordenbaren Zeile.
+ *
+ * Gesucht wird über den normalisierten Nachnamen und über den Jahrgang –
+ * beides in einer Abfrage, damit die Lesehilfe nicht teurer wird als die
+ * Zuordnung selbst.
+ *
+ * @param array $zeile nachname, vorname, jahrgang.
+ * @return array<int,array>
+ */
+function lsg_bl_athleten_aehnlich_kandidaten( array $zeile ) {
+	global $wpdb;
+
+	$nachname = trim( (string) $zeile['nachname'] );
+	$jahrgang = (int) $zeile['jahrgang'];
+
+	if ( '' === $nachname && $jahrgang <= 0 ) {
+		return array();
+	}
+
+	$t      = lsg_bl_table( 'lsg_athlete' );
+	$where  = array();
+	$params = array();
+
+	if ( '' !== $nachname ) {
+		// Nur die ersten Zeichen: „Weber" soll „Weiber" und „Webber" mit
+		// einfangen, ohne die halbe Tabelle zu lesen.
+		$where[]  = 'name LIKE %s';
+		$params[] = $wpdb->esc_like( mb_substr( $nachname, 0, 3 ) ) . '%';
+	}
+	if ( $jahrgang > 0 ) {
+		$where[]  = 'born = %d';
+		$params[] = $jahrgang;
+	}
+
+	$sql = $wpdb->prepare(
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		"SELECT id, name, firstname, born, cat FROM {$t} WHERE " . implode( ' OR ', $where ) . ' LIMIT 200',
+		$params
+	);
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+	$rows = $wpdb->get_results( $sql, ARRAY_A );
+	return $rows ? $rows : array();
+}
+
+/* -------------------------------------------------------------------------
+ * Übernehmen – der einzige Schreibvorgang des Imports
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Die angehakten Zeilen übernehmen.
+ *
+ * Was passiert (Plan 6.7):
+ *
+ *   neu         → INSERT in lsg_best
+ *   schneller   → UPDATE der gefundenen Zeile; die alte Zeit steht danach
+ *                 im Log (time_alt)
+ *   langsamer   → nichts schreiben, protokolliert als skip_langsamer
+ *   gleich      → nichts schreiben, protokolliert als skip_gleich
+ *   offen /
+ *   mehrdeutig  → hat keine Checkbox, wird nie geschrieben
+ *
+ * ⚠ Eine angehakte `langsamer`-Zeile schreibt hier NICHTS – anders als im
+ * Formular aus 7.3. Im Import stehen vierzig Zeilen zur Auswahl, und ein
+ * versehentlich gesetzter Haken darf keine Bestzeit verschlechtern.
+ *
+ * ⚠ Der Client bestimmt nur, WELCHE Zeilen übernommen werden – als Indizes,
+ * nicht als Daten. Athlet, Zeit, Distanz, Datum und Status kommen
+ * ausschließlich aus dem Parse-Transient, den der Server selbst geschrieben
+ * hat. Sonst wäre die Übernahme mit einer Capability, die jeder angemeldete
+ * Benutzer hat, ein freier Schreibzugriff auf `lsg_best` (Plan 6.10).
+ *
+ * @param string $token   Parse-Token.
+ * @param int[]  $auswahl Zeilenindizes der angehakten Zeilen.
+ * @return array{run_id:int,angelegt:int,aktualisiert:int,uebersprungen:int,konflikte:int,fehler:int,ergebnisse:array}
+ * @throws LSG_BL_Quelle_Exception Wenn der Token nicht (mehr) gilt.
+ */
+function lsg_bl_uebernehmen( $token, array $auswahl ) {
+	global $wpdb;
+
+	$daten = lsg_bl_parse_holen( $token );
+	if ( ! $daten ) {
+		throw new LSG_BL_Quelle_Exception(
+			__( 'Die Vorschau ist abgelaufen oder gehört zu einem anderen Benutzer. Bitte erneut parsen.', 'lsg-bestenliste' )
+		);
+	}
+
+	if ( ! empty( $daten['uebernommen'] ) ) {
+		// Ein Reload der Übernahme darf nicht noch einmal schreiben.
+		throw new LSG_BL_Quelle_Exception(
+			__( 'Dieser Vorgang ist bereits übernommen. Für einen weiteren Import bitte erneut parsen.', 'lsg-bestenliste' )
+		);
+	}
+
+	$t_best = lsg_bl_table( 'lsg_best' );
+	$jahr   = (int) $daten['jahr'];
+	$distanz = (string) $daten['distanz'];
+	$datum_ts = lsg_bl_datum_zu_timestamp( $daten['datum'] );
+
+	$auswahl = array_flip( array_map( 'intval', $auswahl ) );
+
+	/*
+	 * Reihenfolge: innerhalb einer Gruppe aus Athlet und Distanz zuerst die
+	 * beste Zeit. Sonst hinge das Ergebnis daran, in welcher Reihenfolge die
+	 * Zeilen in der Liste stehen – und ein Import mit Staffel plus Einzellauf
+	 * schriebe mal die eine, mal die andere Zeit.
+	 */
+	$reihenfolge = array_keys( $daten['zeilen'] );
+	usort(
+		$reihenfolge,
+		function ( $a, $b ) use ( $daten, $distanz ) {
+			$za = $daten['zeilen'][ $a ];
+			$zb = $daten['zeilen'][ $b ];
+			if ( (int) $za['athletes_id'] !== (int) $zb['athletes_id'] ) {
+				return $a - $b;   // Gruppen in Listenreihenfolge
+			}
+			$pa = lsg_bl_parse_performance( $distanz, $za['zeit'] );
+			$pb = lsg_bl_parse_performance( $distanz, $zb['zeit'] );
+			if ( $pa['sort'] === $pb['sort'] ) {
+				return $a - $b;
+			}
+			return lsg_bl_perf_besser( $pa, $pb ) ? -1 : 1;
+		}
+	);
+
+	$bilanz = array(
+		'angelegt'      => 0,
+		'aktualisiert'  => 0,
+		'uebersprungen' => 0,
+		'konflikte'     => 0,
+		'fehler'        => 0,
+	);
+	$log_zeilen = array();
+	$ergebnisse = array();
+	$eigene     = array();   // Athlet|Distanz|Jahr, die wir selbst geschrieben haben
+
+	// Alle Schreibvorgänge eines Klicks in einer Transaktion, damit ein Fehler
+	// in der Mitte keinen halben Import hinterlässt. Voraussetzung InnoDB –
+	// bei MyISAM greift das nicht, dann ist das Log der Rettungsanker.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+	$wpdb->query( 'START TRANSACTION' );
+
+	foreach ( $reihenfolge as $i ) {
+		$z          = $daten['zeilen'][ $i ];
+		$angehakt   = isset( $auswahl[ $i ] );
+		$aid        = (int) $z['athletes_id'];
+		$status_alt = (string) $z['status'];
+
+		$eintrag = array(
+			'index'   => $i,
+			'name'    => trim( $z['nachname'] . ', ' . $z['vorname'], ', ' ),
+			'aktion'  => '',
+			'meldung' => '',
+			'best_id' => 0,
+		);
+
+		/* ---- ohne Zuordnung: nie schreiben, aber immer protokollieren ---- */
+		if ( 0 === $aid || ! lsg_bl_zeile_waehlbar( $status_alt ) ) {
+			$eintrag['aktion']  = 'skip_offen';
+			$eintrag['meldung'] = (string) $z['match_meldung'];
+			++$bilanz['uebersprungen'];
+			$log_zeilen[] = lsg_bl_log_zeile( $z, 'skip_offen', 0, '', $eintrag['meldung'] );
+			$ergebnisse[] = $eintrag;
+			continue;
+		}
+
+		/* ---- nicht angehakt ---- */
+		if ( ! $angehakt ) {
+			/*
+			 * Warum nichts geschrieben wurde, sagt der Status genauer als
+			 * „nicht angehakt": `langsamer` und `gleich` sind gar nicht erst
+			 * vorausgewählt (Plan 6.6) – da hat niemand aktiv abgewählt, und
+			 * ein `skip_abgewaehlt` im Log läse sich wie eine Entscheidung,
+			 * die niemand getroffen hat.
+			 *
+			 * `skip_abgewaehlt` bleibt damit dem Fall vorbehalten, um den es
+			 * dem Plan geht: etwas, das geschrieben WORDEN WÄRE, und jemand
+			 * hat den Haken bewusst entfernt.
+			 */
+			if ( 'langsamer' === $status_alt ) {
+				$aktion  = 'skip_langsamer';
+				$meldung = __( 'Nicht vorausgewählt – der Bestand ist besser.', 'lsg-bestenliste' );
+			} elseif ( 'gleich' === $status_alt ) {
+				$aktion  = 'skip_gleich';
+				$meldung = __( 'Nicht vorausgewählt – diese Zeit steht bereits so in der Datenbank.', 'lsg-bestenliste' );
+			} else {
+				$aktion  = 'skip_abgewaehlt';
+				$meldung = __( 'Haken entfernt – gesehen und bewusst nicht übernommen.', 'lsg-bestenliste' );
+			}
+
+			$eintrag['aktion']  = $aktion;
+			$eintrag['meldung'] = $meldung;
+			++$bilanz['uebersprungen'];
+			$log_zeilen[] = lsg_bl_log_zeile( $z, $aktion, (int) $z['best_id'], (string) $z['time_alt'], $meldung );
+			$ergebnisse[] = $eintrag;
+			continue;
+		}
+
+		/*
+		 * Der Statusvergleich wird unmittelbar vor dem Schreiben wiederholt:
+		 * zwischen Parsen und Übernehmen liegt eine Benutzerentscheidung, in
+		 * der eine zweite Person denselben Import gemacht haben kann.
+		 *
+		 * ⚠ „Abweichung" heißt: von AUSSEN geändert. Innerhalb eines Vorgangs
+		 * ändert sich der Status planmäßig – hakt jemand zwei Zeilen desselben
+		 * Athleten an, steht die zweite nach dem Schreiben der ersten
+		 * zwangsläufig auf `langsamer` oder `gleich`. Das ist kein Konflikt,
+		 * sondern das erwartete Ergebnis. Verglichen wird deshalb gegen den
+		 * Stand zu Beginn PLUS die eigenen Schreibvorgänge (Plan 6.7).
+		 */
+		$key      = $aid . '|' . $distanz . '|' . $jahr;
+		$bestand  = lsg_bl_best_zeilen( $aid, $distanz, $jahr );
+		$p4_jetzt = lsg_bl_p4_status( $distanz, $z['zeit'], $bestand );
+
+		if ( $p4_jetzt['status'] !== $status_alt && ! isset( $eigene[ $key ] ) ) {
+			$eintrag['aktion']  = 'konflikt';
+			$eintrag['meldung'] = sprintf(
+				/* translators: 1: Status beim Parsen, 2: Status jetzt */
+				__( 'Der Bestand hat sich seit dem Parsen geändert (%1$s → %2$s). Die Zeile wurde nicht geschrieben.', 'lsg-bestenliste' ),
+				$status_alt,
+				$p4_jetzt['status']
+			);
+			++$bilanz['konflikte'];
+			$log_zeilen[] = lsg_bl_log_zeile( $z, 'konflikt', $p4_jetzt['best_id'], $p4_jetzt['time_alt'], $eintrag['meldung'] );
+			$ergebnisse[] = $eintrag;
+			continue;
+		}
+
+		$status = $p4_jetzt['status'];
+
+		/* ---- langsamer / gleich: nichts schreiben ---- */
+		if ( 'langsamer' === $status || 'gleich' === $status ) {
+			$aktion             = ( 'langsamer' === $status ) ? 'skip_langsamer' : 'skip_gleich';
+			$eintrag['aktion']  = $aktion;
+			$eintrag['meldung'] = ( 'langsamer' === $status )
+				? __( 'Der Bestand bleibt. Korrektur unter „Bestenliste".', 'lsg-bestenliste' )
+				: __( 'Diese Zeit steht bereits so in der Datenbank.', 'lsg-bestenliste' );
+			++$bilanz['uebersprungen'];
+			$log_zeilen[] = lsg_bl_log_zeile( $z, $aktion, $p4_jetzt['best_id'], $p4_jetzt['time_alt'], $eintrag['meldung'] );
+			$ergebnisse[] = $eintrag;
+			continue;
+		}
+
+		/* ---- schreiben ---- */
+		$werte = array(
+			'tstamp'      => time(),
+			'distance'    => $distanz,
+			'time'        => (string) $z['zeit'],
+			'town'        => mb_substr( (string) $daten['ort'], 0, 30 ),
+			'date'        => $datum_ts,
+			'athletes_id' => $aid,
+			'ak'          => (string) $z['ak'],
+		);
+		$formate = array( '%d', '%s', '%s', '%s', '%d', '%d', '%s' );
+
+		if ( 'neu' === $status ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$ok = $wpdb->insert( $t_best, $werte, $formate );
+			if ( false === $ok ) {
+				$eintrag['aktion']  = 'fehler';
+				$eintrag['meldung'] = $wpdb->last_error ? $wpdb->last_error : __( 'Die Zeile ließ sich nicht anlegen.', 'lsg-bestenliste' );
+				++$bilanz['fehler'];
+				$log_zeilen[] = lsg_bl_log_zeile( $z, 'fehler', 0, '', $eintrag['meldung'] );
+				$ergebnisse[] = $eintrag;
+				continue;
+			}
+			$best_id            = (int) $wpdb->insert_id;
+			$eintrag['aktion']  = 'insert';
+			$eintrag['best_id'] = $best_id;
+			$eintrag['meldung'] = __( 'angelegt', 'lsg-bestenliste' );
+			++$bilanz['angelegt'];
+			$eigene[ $key ] = true;
+			$log_zeilen[]   = lsg_bl_log_zeile( $z, 'insert', $best_id, '', $eintrag['meldung'] );
+			$ergebnisse[]   = $eintrag;
+			continue;
+		}
+
+		// 'schneller'
+		$best_id = (int) $p4_jetzt['best_id'];
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$ok = $wpdb->update(
+			$t_best,
+			array(
+				'tstamp' => time(),
+				'time'   => (string) $z['zeit'],
+				'town'   => mb_substr( (string) $daten['ort'], 0, 30 ),
+				'date'   => $datum_ts,
+				'ak'     => (string) $z['ak'],
+			),
+			array( 'id' => $best_id ),
+			array( '%d', '%s', '%s', '%d', '%s' ),
+			array( '%d' )
+		);
+
+		if ( false === $ok ) {
+			$eintrag['aktion']  = 'fehler';
+			$eintrag['meldung'] = $wpdb->last_error ? $wpdb->last_error : __( 'Die Zeile ließ sich nicht aktualisieren.', 'lsg-bestenliste' );
+			++$bilanz['fehler'];
+			$log_zeilen[] = lsg_bl_log_zeile( $z, 'fehler', $best_id, $p4_jetzt['time_alt'], $eintrag['meldung'] );
+			$ergebnisse[] = $eintrag;
+			continue;
+		}
+
+		$eintrag['aktion']  = 'update';
+		$eintrag['best_id'] = $best_id;
+		$eintrag['meldung'] = sprintf(
+			/* translators: 1: alte Zeit, 2: neue Zeit */
+			__( 'aktualisiert (%1$s → %2$s)', 'lsg-bestenliste' ),
+			$p4_jetzt['time_alt'],
+			$z['zeit']
+		);
+		++$bilanz['aktualisiert'];
+		$eigene[ $key ] = true;
+		$log_zeilen[]   = lsg_bl_log_zeile( $z, 'update', $best_id, $p4_jetzt['time_alt'], $eintrag['meldung'] );
+		$ergebnisse[]   = $eintrag;
+	}
+
+	if ( $bilanz['fehler'] > 0 ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( 'ROLLBACK' );
+	} else {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( 'COMMIT' );
+	}
+
+	$run_id = lsg_bl_log_schreiben( $daten, $bilanz, $log_zeilen );
+
+	// Zeilen in Listenreihenfolge zurückgeben, nicht in Schreibreihenfolge.
+	usort(
+		$ergebnisse,
+		function ( $a, $b ) {
+			return $a['index'] - $b['index'];
+		}
+	);
+
+	/*
+	 * Der Vorgang bleibt im Transient stehen, aber mit seinem Resultat: nach
+	 * dem Übernehmen bleibt die Tabelle sichtbar, jede Zeile bekommt ihr
+	 * Ergebnis angeheftet (Plan 6.6). Das `uebernommen`-Feld ist zugleich die
+	 * Sperre gegen einen zweiten Klick auf denselben Token – ein Reload darf
+	 * nicht noch einmal schreiben.
+	 */
+	$daten['uebernommen'] = array_merge(
+		$bilanz,
+		array(
+			'run_id'     => $run_id,
+			'zeitpunkt'  => time(),
+			'ergebnisse' => $ergebnisse,
+		)
+	);
+	set_transient( 'lsg_bl_parse_' . $token, $daten, LSG_BL_CACHE_PARSE );
+
+	return array_merge(
+		$bilanz,
+		array(
+			'run_id'     => $run_id,
+			'ergebnisse' => $ergebnisse,
+		)
+	);
+}
+
+/**
+ * Herkunft des Veranstaltungsdatums bestimmen.
+ *
+ * @param array  $disc  Discovery-Daten.
+ * @param string $datum 'JJJJ-MM-TT', wie er ins Formular ging.
+ * @return string liste|ausschreibung|api|name|jahr|manuell
+ */
+function lsg_bl_datum_quelle_bestimmen( array $disc, $datum ) {
+	$vorschlag = isset( $disc['datum']['datum'] ) ? (string) $disc['datum']['datum'] : '';
+	$quelle    = isset( $disc['datum']['quelle'] ) ? (string) $disc['datum']['quelle'] : '';
+
+	if ( '' !== $vorschlag && $vorschlag === (string) $datum && '' !== $quelle ) {
+		return $quelle;
+	}
+	return 'manuell';
 }
 
 /**

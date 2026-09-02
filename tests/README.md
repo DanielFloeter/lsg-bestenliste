@@ -4,7 +4,7 @@ Zwei Lagen, wie in `plan.md`, Abschnitt 8 (Verifikation) festgelegt.
 
 | Lage | Braucht | Prüft |
 |---|---|---|
-| `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields`, Datumserkennung, AK-Berechnung, URL-Erkennung |
+| `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields`, Datumserkennung, AK-Berechnung, URL-Erkennung, P2, P3, P4, Trichter, Zustände |
 | `tests/integration/` | WordPress-Testsuite + MySQL | `dbDelta()`-Schema, P3/P4 gegen echte Tabellen, REST-Routen, Capability, SSRF-Allowlist |
 
 ## Unit-Lage laufen lassen
@@ -24,11 +24,36 @@ Plugin-Header nennt `Requires PHP: 7.4`, und PHPUnit 10+ verlangt PHP 8.1.
 Unabhängig davon unterstützt die WordPress-Testsuite PHPUnit 10+ nicht – sie
 erwartet die `yoast/phpunit-polyfills`.
 
+### Was in der Unit-Lage steht
+
+| Datei | Prüft |
+|---|---|
+| `zeit-test.php` | die vier Zeitschreibweisen und ihre Fallstricke |
+| `namen-test.php` | Namenssplitter (inkl. `GEIßLER`), Vereinsfilter, Normalisierung |
+| `distanz-test.php` | Wettbewerbsname → Distanzcode, geschlossenes Select |
+| `datum-ak-test.php` | Datumserkennung, Geschlecht aus dem Klassen-Code, AK-Berechnung |
+| `raceresult-adapter-test.php` | Erkennung, `config`, Feld-Mapping über `DataFields`, 658 Zeilen |
+| `pipeline-test.php` | P2, Trichter samt Phasen, Vorbelegung, Zustände, Fingerabdruck |
+| `p3-p4-test.php` | Zuordnungsstufen, die drei Startregeln, Statusbildung, Doppelzeilen |
+
 ## Integrationslage
 
-Noch nicht eingerichtet – sie kommt mit M3 (erster Schreibvorgang). Dafür
-fehlt `install-wp-tests.sh` aus dem WordPress-Develop-Repository (dieselbe
-Datei, die `wp scaffold plugin-tests` erzeugt).
+Noch nicht eingerichtet. Dafür fehlt `install-wp-tests.sh` aus dem
+WordPress-Develop-Repository (dieselbe Datei, die `wp scaffold plugin-tests`
+erzeugt).
+
+⚠ **Was dort als Erstes hingehört**, weil es heute nur außerhalb des
+Repositories geprüft ist:
+
+- ein Import landet in `lsg_best`, zweimal ausgeführt ändert nichts
+- die Übernahme schreibt `lsg_import_run` und `lsg_import_log` vollständig,
+  auch die Nicht-Aktionen
+- der von außen geänderte Bestand wird als `konflikt` gemeldet und nicht
+  überschrieben
+- eine Doppelzeile im Bestand: beste als Bezug, nur dorthin schreiben
+- `dbDelta()` zweimal hintereinander erzeugt beim zweiten Mal kein
+  `ALTER TABLE`
+- REST-Routen ohne Login oder ohne Nonce → 401/403
 
 ⚠ Sie legt eine eigene Testdatenbank an und leert sie bei jedem Lauf –
 **niemals auf die Datenbank der Installation zeigen**, in der die 6 000

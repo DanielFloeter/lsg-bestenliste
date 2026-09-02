@@ -12,7 +12,7 @@
 > Abschnitt 8 aufgenommen und im Skript
 > `maintenance/2026-09-01-bestand-bereinigung.sql` ausformuliert.
 >
-> Stand der Umsetzung: 2026-09-01 – **M1 und M2 sind fertig und geprüft.**
+> Stand der Umsetzung: 2026-09-02 – **M1, M2 und M3 sind fertig und geprüft.**
 > Datenmodell samt Schema-Version, Interface, Value-Objects, Registry,
 > HTTP-Torwächter, `RaceResultAdapter`, die gesamte Normalisierung und die
 > Unit-Lage der Tests stehen; die Unit-Suite ist grün (148 Tests,
@@ -27,6 +27,15 @@
 > nichts. Die Unit-Suite hat 196 Tests; dazu ist die Seite in allen ohne
 > JavaScript erreichbaren Zuständen gegen die Ettlinger Fixture gerendert
 > worden (658 gelesen → 1 ohne Zeit → 11 LSG, zwei Abrufe je Import).
+>
+> Mit M3 schreibt der Import. P3 (Zuordnung über exakt → Regel →
+> normalisiert), P4 (Jahresabgleich), die Übernahme-Oberfläche mit Checkboxen
+> und Statusspalte, die Schreiblogik in einer Transaktion, das Log und die
+> Log-Ansicht stehen. Die Unit-Suite hat 224 Tests; der Schreibweg ist
+> zusätzlich gegen eine echte Datenbank geprüft, inklusive des
+> Abnahmekriteriums „zweimal ausgeführt ändert nichts", der
+> Konflikterkennung, der Doppelzeile im Bestand und des Wegs aus einer
+> offenen Zeile heraus.
 >
 > Stand der Bereinigung: 2026-09-01 – V1 und der Pflichtteil von V2 sind von
 > Hand ausgeführt. Die Dumps in `assets/*.sql` bleiben absichtlich auf dem
@@ -309,12 +318,15 @@ includes/adapters/class-event-ref.php          EventRef, Wettbewerb, Liste, Erge
 includes/adapters/class-raceresult-adapter.php
 includes/adapters/class-runtix-adapter.php
 includes/class-lsg-normalize.php               Normalisierung, ohne WordPress
-includes/class-lsg-pipeline.php                P2, Trichter, Zustände – ohne WordPress
+includes/class-lsg-pipeline.php                P2, P3/P4-Logik, Trichter, Zustände – ohne WordPress
+includes/class-lsg-athlete.php                 Athleten, Regeln, Bestandszeilen
+includes/class-lsg-log.php                     lsg_import_run + lsg_import_log
 includes/class-lsg-import.php                  Discovery, Caches, Parse-Orchestrierung
 includes/class-lsg-http.php                    Torwächter, Allowlist, Rate-Limit
 includes/class-lsg-adapters.php                Registry
 includes/class-lsg-schema.php                  die drei neuen Tabellen
 includes/admin/page-import.php                 Abschnitt 6
+includes/admin/page-log.php                    6.8
 includes/admin/page-log.php                    6.8
 includes/admin/page-map.php                    6.5.3
 includes/admin/page-best.php                   Abschnitt 7
@@ -2645,7 +2657,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 |---|---|---|
 | M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures, `tests/unit/` | ✅ **erledigt 2026-09-01** – `phpunit --testsuite unit` ist grün (148 Tests) und die Ettlingen-Liste kommt normalisiert aus dem Adapter |
 | M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | ✅ **erledigt 2026-09-01** – die Vorschau zeigt den Trichter `658 gelesen → 1 ohne Zeit → 11 LSG`, geschrieben wird nichts |
-| M3 | P3, P4, Übernahme, Log + Log-Ansicht | ein Import landet nachvollziehbar in `lsg_best`, zweimal ausgeführt ändert nichts |
+| M3 | P3, P4, Übernahme, Log + Log-Ansicht | ✅ **erledigt 2026-09-02** – der Ettlinger Halbmarathon landet als `7 angelegt, 1 aktualisiert, 3 übersprungen` in `lsg_best`; ein zweiter Durchlauf zeigt lauter `gleich` und schreibt nichts |
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | derselbe Ablauf mit einer Runtix-URL |
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | Zeitläufe und Korrekturen sind erfassbar |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | derselbe Ablauf ohne Reload |
@@ -2807,55 +2819,105 @@ prüft am Ende keinen von beiden.
           Verein ist, und dort können Mitglieder stecken.
           ⚠ Ein neuer Alias verwirft die Vorschau, wie Datum und Distanz – der Filter
           hat sich geändert. Eine leere Vereinsangabe wird als Alias abgelehnt.
-  - [ ] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
-  - [ ] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 377)
-  - [ ] P3 Jede `athletes_id` des Startdatensatzes gegen Name und Jahrgang
+  - [x] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
+        → ⚠ Stufe 1 vergleicht mit `mb_strtolower()`, nicht mit `strcasecmp()`: das
+          arbeitet byteweise und faltet keine Umlaute. „KÖRNER" gegen „Körner" liefe
+          sonst durch Stufe 1 hindurch und stünde im Log als `normalisiert`, obwohl
+          der Treffer exakt war.
+  - [x] P3 Tabelle `lsg_athlete_map` + Startdatensatz (171, 183, 377)
+        → Die Tabelle steht seit M1; der Startdatensatz wird beim Schema-Upgrade
+          geschrieben – jede `athletes_id` vorher gegen Name und Jahrgang gegengelesen,
+          und was nicht passt, wird mit Meldung übersprungen statt geschrieben.
+  - [x] P3 Jede `athletes_id` des Startdatensatzes gegen Name und Jahrgang
         in `lsg_athlete` gegenlesen, bevor sie geschrieben wird
-  - [ ] P3 Regel-Lookup: Modus `feld`/`egal`, leeres Feld = beliebig
-  - [ ] P3 Mehrfachtreffer → `mehrdeutig`, Zeile bleibt offen
-  - [ ] P3 Regel ohne Vor- und Nachname beim Anlegen ablehnen
-  - [ ] P3 Nicht zugeordnete Teilnehmer anzeigen, aber **nicht** importieren
-  - [ ] P3 Keine Checkbox an `offen`/`mehrdeutig`-Zeilen
-  - [ ] P3 Grund im Klartext (drei Fälle), Rohdaten der Quelle an der Zeile
-  - [ ] P3 Vorschlagsliste ähnlicher Athleten mit Jahrgang (nur Lesehilfe)
-  - [ ] P3 Meldung über der Tabelle: „N Teilnehmer ohne Zuordnung"
-  - [ ] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
+  - [x] P3 Regel-Lookup: Modus `feld`/`egal`, leeres Feld = beliebig
+  - [x] P3 Mehrfachtreffer → `mehrdeutig`, Zeile bleibt offen
+  - [x] P3 Regel ohne Vor- und Nachname beim Anlegen ablehnen
+  - [x] P3 Nicht zugeordnete Teilnehmer anzeigen, aber **nicht** importieren
+  - [x] P3 Keine Checkbox an `offen`/`mehrdeutig`-Zeilen
+  - [x] P3 Grund im Klartext (drei Fälle), Rohdaten der Quelle an der Zeile
+  - [x] P3 Vorschlagsliste ähnlicher Athleten mit Jahrgang (nur Lesehilfe)
+        → vier Ränge: Name passt aber Jahrgang nicht, Nachname + Jahrgang passen,
+          Jahrgang passt und Nachname ist ähnlich (Levenshtein ≤ 2), nur Nachname.
+          ⚠ Sie ordnet NIE zu – eine vierte Zuordnungsstufe „wahrscheinlich dieselbe
+          Person" gibt es bewusst nicht.
+  - [x] P3 Meldung über der Tabelle: „N Teilnehmer ohne Zuordnung"
+  - [x] Der Import legt **keine** Athleten an und schreibt **keine** Regeln
   - [ ] Untermenü „Zuordnungen" zum Pflegen der Regeln
   - [x] P3 AK-Berechnung aus Jahrgang + Veranstaltungsjahr; Code immer
         schreiben, fehlender `lsg_ak`-Eintrag nur als Hinweis auf den Filter
-        → `lsg_bl_ak_berechnen()` steht. Der Hinweis auf einen in `lsg_ak`
-          fehlenden Code gehört in die Oberfläche und kommt mit M2/M5
-  - [ ] P4 Abgleich Athlet + Distanz + Kalenderjahr gegen `lsg_best`
-  - [ ] P4 Jahr aus dem Veranstaltungsdatum, nie aus `date('Y')`
-  - [ ] P4 Über Jahresgrenzen hinweg wird nie überschrieben
-  - [ ] P4 Vergleich über `lsg_bl_parse_performance()`, nicht per String-Vergleich
-  - [ ] P4 Status neu / schneller / langsamer / gleich / offen
-  - [ ] P4 Mehr als eine Bestandszeile: beste als Bezug, nur dorthin schreiben,
+        → `lsg_bl_ak_berechnen()`; der Code wird ohne Vorbehalt geschrieben,
+          und fehlt er in `lsg_ak`, steht „fehlt im Filter" an der AK-Spalte
+          der Vorschau. In der Ettlinger Liste trifft das `w75` (van
+          Wees-Snel, 1948) – geprüft im Schreibtest
+  - [x] P4 Abgleich Athlet + Distanz + Kalenderjahr gegen `lsg_best`
+  - [x] P4 Jahr aus dem Veranstaltungsdatum, nie aus `date('Y')`
+  - [x] P4 Über Jahresgrenzen hinweg wird nie überschrieben
+  - [x] P4 Vergleich über `lsg_bl_parse_performance()`, nicht per String-Vergleich
+  - [x] P4 Status neu / schneller / langsamer / gleich / offen
+  - [x] P4 Mehr als eine Bestandszeile: beste als Bezug, nur dorthin schreiben,
         Zusatz „Doppelzeile im Bestand" – **kein** stilles `LIMIT 1` (6.5.4)
-- [ ] Gesamtsieg (Abschnitt 6.5.5) – **nur Erkennung und Markierung**
+        → geprüft mit einer künstlich angelegten Doppelzeile: Bezug ist 01:33:00 von
+          zwei Zeilen, geschrieben wird nur dorthin, die schlechtere bleibt
+          unangetastet, und der Vorgang meldet es in `lsg_import_run.note`.
+- [x] Gesamtsieg (Abschnitt 6.5.5) – **nur Erkennung und Markierung**
+      → in der Ettlinger Liste gewinnt kein LSG-Läufer (bester Platz 20), die
+        Erkennung meldet also richtigerweise nichts. Der Gesamtsieger der
+        Liste ist aber sehr wohl als solcher erkennbar – geprüft.
   - [x] Platz 1 erkennen, aber ausschließlich in der Gesamtwertung
   - [x] 🏆 in der Übernahme-Tabelle + Hinweis über der Tabelle
         → Erkannt und markiert, ohne Wirkung. In der Ettlinger Liste gewinnt kein
           LSG-Läufer – bester LSG-Karlsruhe-Platz ist 20 –, die Erkennung meldet also
           richtigerweise nichts.
-  - [ ] Spalten `roh_platz`, `gesamtsieg` im Log anlegen (leer nutzen)
-  - [ ] **Nicht** nach `lsg_win` schreiben – späterer Ausbaustand
+  - [x] Spalten `roh_platz`, `gesamtsieg` im Log anlegen (leer nutzen)
+  - [x] **Nicht** nach `lsg_win` schreiben – späterer Ausbaustand
 - [ ] Übernahme-Oberfläche (Abschnitt 6.6)
-  - [ ] Checkbox je Zeile, Vorauswahl nur `neu` + `schneller`
+  - [x] Checkbox je Zeile, Vorauswahl nur `neu` + `schneller`
   - [ ] Kopf-Checkbox „Alle" (`offen`-Zeilen ausgenommen)
-  - [ ] Statusspalte im Klartext mit alter und neuer Zeit
-  - [ ] Button mit Anzahl im Label, bei 0 Auswahl deaktiviert
-- [ ] Schreiblogik (Abschnitt 6.7)
-  - [ ] INSERT bei `neu`, UPDATE bei `schneller`, nichts bei `langsamer`/`gleich`
-  - [ ] Statusvergleich unmittelbar vor dem Schreiben wiederholen → `konflikt`
-  - [ ] Alles in einer Transaktion, `$wpdb->insert()/update()` mit Formaten
-- [ ] Import-Log (Abschnitt 6.8)
-  - [ ] Tabellen `lsg_import_run` + `lsg_import_log` in `lsg_bl_install_schema()`
-  - [ ] Auch die Nicht-Aktionen protokollieren (`skip_*`, `konflikt`)
-  - [ ] Log-Ansicht als `WP_List_Table`: Suche, Filter, zwei Ebenen
+        → ⚠ kommt mit M6, und zwar aus dem Grund, den 6.6 selbst nennt: sie
+          braucht JavaScript („Ohne JavaScript ist die Kopf-Checkbox schlicht
+          nicht da"), und bis dahin soll die Seite vollständig ohne
+          JavaScript bedienbar sein. Die Vorauswahl aus `neu` + `schneller`
+          deckt den Normalfall ohnehin ab.
+  - [x] Statusspalte im Klartext mit alter und neuer Zeit
+  - [x] Button mit Anzahl im Label, bei 0 Auswahl deaktiviert
+- [x] Schreiblogik (Abschnitt 6.7)
+  - [x] INSERT bei `neu`, UPDATE bei `schneller`, nichts bei `langsamer`/`gleich`
+  - [x] Statusvergleich unmittelbar vor dem Schreiben wiederholen → `konflikt`
+        → verglichen wird gegen den Stand zu Beginn PLUS die eigenen Schreibvorgänge.
+          Damit die Reihenfolge nicht über das Ergebnis entscheidet, werden die
+          angehakten Zeilen einer Gruppe aus Athlet und Distanz vor dem Schreiben
+          nach Leistung sortiert – die beste zuerst.
+  - [x] Alles in einer Transaktion, `$wpdb->insert()/update()` mit Formaten
+        → ⚠ Die Formatliste wird aus den Feldnamen abgeleitet, nicht von Hand
+          gepflegt: `$wpdb->insert()` liest sie POSITIONSWEISE (`array_shift`). Eine
+          Handliste steht falsch da, sobald jemand ein Feld einfügt – und der Fehler
+          ist still. Ein Fehler in der Mitte rollt den ganzen Vorgang zurück; das Log
+          wird danach trotzdem geschrieben.
+- [x] Import-Log (Abschnitt 6.8)
+  - [x] Tabellen `lsg_import_run` + `lsg_import_log` in `lsg_bl_install_schema()`
+  - [x] Auch die Nicht-Aktionen protokollieren (`skip_*`, `konflikt`)
+        → ⚠ Feiner als im Plan notiert: `skip_abgewaehlt` bleibt dem Fall vorbehalten,
+          um den es 6.7 geht – etwas, das geschrieben WORDEN WÄRE, und jemand hat den
+          Haken entfernt. Eine `langsamer`- oder `gleich`-Zeile ist gar nicht erst
+          vorausgewählt; sie als „abgewählt" zu protokollieren läse sich wie eine
+          Entscheidung, die niemand getroffen hat. Sie bekommt deshalb
+          `skip_langsamer` bzw. `skip_gleich`, auch ohne Haken.
+  - [x] Log-Ansicht als `WP_List_Table`: Suche, Filter, zwei Ebenen
+        → ⚠ Ohne `WP_List_Table` gebaut: die Klasse bringt vor allem Bulk-Actions,
+          Spaltensortierung und Screen-Options mit, von denen das Log keins braucht.
+          Was es braucht – zwei Ebenen, Suche, Filter, Paginierung – sind dreißig
+          Zeilen. Der Einstieg über das Suchfeld führt direkt in die Zeilenebene,
+          weil „warum steht bei X diese Zeit" die häufigere Frage ist als „was ist in
+          Vorgang 12 passiert".
 - [ ] REST-Routen `lsg/v1/import/*` mit
       `permission_callback => fn() => current_user_can( LSG_BL_CAP )` –
       **nie** eine hart notierte Capability und **nie** `__return_true` (6.10)
+      → die Routen selbst kommen mit M6. Die Unterpunkte darunter sind
+        trotzdem erledigt: sie sind keine REST-Eigenschaften, sondern
+        Eigenschaften des Abrufs und des Caches, und die brauchte schon der
+        Formularweg. Die REST-Schicht ruft dieselben Funktionen (6.10) und
+        erbt sie damit.
   - [x] `wp_safe_remote_get()`, Host-Allowlist aus der Registry, Redirect-Prüfung
         → Redirects werden von Hand verfolgt (`redirection => 0`), damit jeder
           Zwischenschritt erneut durch die Allowlist läuft
@@ -2903,7 +2965,7 @@ prüft am Ende keinen von beiden.
         `aktion` insert/update/**delete**, Rohfelder aus dem Formular
   - [ ] Beim Löschen den vollständigen Datensatz protokollieren, nicht nur die ID
   - [ ] Log-Ansicht: Filter „von Hand erfasst"
-- [ ] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log und
+- [x] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log und
       „Bestenliste" jetzt, Sportler- und Gesamtsieger-Pflege aus Phase 4 danach
 - [ ] **Keine** Event-Verwaltung: Läufe kommen ausschließlich über die URL
 - [x] ~~Frontend: Shortcode und/oder Block für die Bestenliste~~ – erledigt,
@@ -3059,8 +3121,12 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [x] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
 - [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
 - [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
-- [ ] Zweimal derselbe Import → alle Zeilen `gleich`, keine Duplikate
-- [ ] Künstlich angelegte Doppelzeile (Athlet + Distanz + Jahr): P4 nimmt die
+- [x] Zweimal derselbe Import → alle Zeilen `gleich`, keine Duplikate
+      → geprüft: nach dem zweiten Durchlauf ist `lsg_best` Zeichen für Zeichen
+        unverändert, und nichts ist vorausgewählt. Ein zweiter Klick auf denselben
+        Token wird zusätzlich abgelehnt – ein Reload darf nicht noch einmal
+        schreiben.
+- [x] Künstlich angelegte Doppelzeile (Athlet + Distanz + Jahr): P4 nimmt die
       bessere als Bezug, schreibt nur dorthin, meldet „Doppelzeile im Bestand"
       mit beiden ids – dasselbe im Formular (7.3)
 - [x] Namens-Splitter: „Körner, Holger", „BORGHARDT Lukas", „von Hoff Anna-Maria",
@@ -3071,33 +3137,37 @@ Schreibvorgang) und wächst mit M6 (REST).
       `LG Region Karlsruhe` und ein leeres Vereinsfeld treffen **nicht**
       → ebenso nicht getroffen: `LSG Weiher`, `(Karlsruhe)` und
         `Karlsruher Lemminge e.V.`
-- [ ] Athletenzuordnung: `Koerner` findet `Körner`, gleicher Name mit anderem
+- [x] Athletenzuordnung: `Koerner` findet `Körner`, gleicher Name mit anderem
       Jahrgang findet **nicht**
 - [x] Distanz-Mapping: `21 KM Sparkasse Kraichgau-Lauf` → `HM`,
       `42,195 km` → `Marathon`, `5. Ettlinger Marathon` → `Marathon` (nicht `5km`),
       `10 Meilen` → kein Treffer
       → dazu alle neun Ettlinger Wettbewerbsnamen aus der Fixture
-- [ ] Regel 171: `Pfeiffer, Wolfram` + 1961 → 171; anderer Jahrgang → kein Treffer
-- [ ] Regel 183: beliebiger Nachname + `Harry` + 1943 → 183
-- [ ] Regel 377: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 377
+- [x] Regel 171: `Pfeiffer, Wolfram` + 1961 → 171; anderer Jahrgang → kein Treffer
+- [x] Regel 183: beliebiger Nachname + `Harry` + 1943 → 183
+- [x] Regel 377: `Gudrun, Meier` und `Meier, Gudrun` + 1955 → beide 377
       (= Schlippe-Schrieber, Gudrun; **nicht** 337 = Österle, Hans-Jörg, 1967)
-- [ ] Zwei passende Regeln → `mehrdeutig`, Zeile bleibt offen, beide IDs genannt
-- [ ] Regel nur mit Jahrgang lässt sich nicht anlegen
+- [x] Zwei passende Regeln → `mehrdeutig`, Zeile bleibt offen, beide IDs genannt
+- [x] Regel nur mit Jahrgang lässt sich nicht anlegen
 - [x] Invariante: Zeilenzahl der Tabelle == LSG-Zahl aus P2, bei jedem Import
-- [ ] Unbekannter Teilnehmer erscheint in der Tabelle, nicht nur in den Zahlen
-- [ ] Unbekannter Teilnehmer hat keine Checkbox und wird auch von „Alle" nicht
+- [x] Unbekannter Teilnehmer erscheint in der Tabelle, nicht nur in den Zahlen
+- [x] Unbekannter Teilnehmer hat keine Checkbox und wird auch von „Alle" nicht
       angehakt; nach dem Übernehmen steht kein neuer `lsg_athlete`-Datensatz da
-- [ ] Nach dem Anlegen einer Regel und erneutem Import: die vorher offene Zeile
+- [x] Nach dem Anlegen einer Regel und erneutem Import: die vorher offene Zeile
       ist zugeordnet, die übrigen stehen auf `gleich`
-- [ ] Jeder `offen`-Grund erzeugt seinen eigenen Meldungstext (drei Fälle)
-- [ ] Zeile ohne Jahrgang in der Quelle → „nennt keinen Jahrgang", nicht
+      → geprüft mit dem echten Fall: SIEBERT Fridtjof (1971) fehlt in `lsg_athlete`
+        und bleibt offen; nach dem Anlegen sind alle elf zugeordnet, genau eine
+        Zeile ist `neu`, die übrigen stehen auf `gleich` bzw. `langsamer`.
+- [x] Jeder `offen`-Grund erzeugt seinen eigenen Meldungstext (drei Fälle)
+- [x] Zeile ohne Jahrgang in der Quelle → „nennt keinen Jahrgang", nicht
       „kein Athlet gefunden"
-- [ ] `skip_offen` steht mit Rohdaten im Log, auch wenn nichts geschrieben wurde
+- [x] `skip_offen` steht mit Rohdaten im Log, auch wenn nichts geschrieben wurde
 - [x] AK-Berechnung: Jahrgang 1993 bei Lauf 2026 → `m30`; unter 30 → `hk`;
       Code nicht in `lsg_ak` → wird geschrieben, Hinweis auf den fehlenden
       Frontend-Filter erscheint
-      → der Hinweis auf den fehlenden Frontend-Filter kommt mit der
-        Oberfläche (M2/M5)
+      → beides geprüft: 1993 bei Lauf 2026 → `m30`, 1948 → `w75`, und weil
+        `w75` in `lsg_ak` fehlt, erscheint „fehlt im Filter" – der Code wird
+        trotzdem geschrieben
 - [x] Distanz-Select bietet `6h`/`12h`/`24h` **nicht** an; ein Zeitlauf-Wettbewerb
       erzeugt die Meldung statt eines Imports
       → das Select ist geschlossen; die Meldung bei einem Zeitlauf-Wettbewerb
@@ -3124,14 +3194,16 @@ Schreibvorgang) und wächst mit M6 (REST).
       richtigen Jahr zugeordnet (Regressionstest für die sechs Altfälle)
 - [ ] Frontend und Import sind sich einig: für dieselbe Zeile nennt die
       Jahres-Bestenliste dasselbe Jahr wie der Vergleich in P4
-- [ ] Schnellere Zeit im Folgejahr → zweite Zeile, Vorjahr unverändert
+- [x] Schnellere Zeit im Folgejahr → zweite Zeile, Vorjahr unverändert
 - [ ] Datum nach dem Parsen geändert → Vorschau verworfen, Button zurück auf „Parsen"
-- [ ] Gespeicherter Timestamp wird als der eingegebene Tag ausgegeben
+- [x] Gespeicherter Timestamp wird als der eingegebene Tag ausgegeben
       (kein Vortag durch Zeitzone)
-- [ ] `38:57` gegen `01:38:57` wird korrekt verglichen (kein String-Vergleich)
-- [ ] Übernahme: `langsamer` angehakt → Bestand unverändert, Log-Eintrag da
-- [ ] Konflikterkennung: Bestand zwischen Parsen und Übernehmen von außen geändert
-- [ ] Log-Suche findet einen Athleten über die Rohschreibweise der Quelle
+- [x] `38:57` gegen `01:38:57` wird korrekt verglichen (kein String-Vergleich)
+- [x] Übernahme: `langsamer` angehakt → Bestand unverändert, Log-Eintrag da
+- [x] Konflikterkennung: Bestand zwischen Parsen und Übernehmen von außen geändert
+      → geprüft: der von außen geänderte Bestand wird als `konflikt` gemeldet, die
+        Zeile nicht geschrieben, und der Konflikt steht im Log.
+- [x] Log-Suche findet einen Athleten über die Rohschreibweise der Quelle
 
 Manuelle Erfassung (Abschnitt 7):
 

@@ -157,3 +157,59 @@
 	margin-top: 1em;
 	font-size: 13px;
 }
+
+/* --- Uebernahme-Tabelle und Log --------------------------------------- */
+
+.lsg-bl-statusfilter {
+	margin: 1em 0 .5em;
+}
+
+.lsg-bl-vorschau tr.lsg-bl-status-offen td,
+.lsg-bl-vorschau tr.lsg-bl-status-mehrdeutig td {
+	background: #fcf9e8;
+}
+
+.lsg-bl-vorschau tr.lsg-bl-status-gleich td,
+.lsg-bl-vorschau tr.lsg-bl-status-langsamer td {
+	color: #646970;
+}
+
+.lsg-bl-resultat {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 3px;
+	background: #f0f0f1;
+	font-size: 12px;
+}
+
+.lsg-bl-resultat-insert,
+.lsg-bl-resultat-update {
+	background: #e6f4ea;
+	color: #0a5c2e;
+}
+
+.lsg-bl-resultat-konflikt,
+.lsg-bl-resultat-fehler {
+	background: #fcf0f1;
+	color: #8a2424;
+}
+
+.lsg-bl-logsuche,
+.lsg-bl-logfilter {
+	display: inline-block;
+	margin: 0 0 1em 1em;
+}
+
+.lsg-bl-logsuche {
+	float: right;
+	margin-right: 0;
+}
+
+.lsg-bl-log .lsg-bl-quelle {
+	margin-bottom: 1.5em;
+}
+
+.lsg-bl-trichter .lsg-bl-komma {
+	margin-left: -.35em;
+	color: #8c8f94;
+}

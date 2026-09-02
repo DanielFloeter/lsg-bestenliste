@@ -69,6 +69,8 @@ require_once LSG_BL_PATH . 'includes/adapters/class-raceresult-adapter.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-http.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-adapters.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-pipeline.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-athlete.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-log.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-import.php';
 
 /*
@@ -78,6 +80,7 @@ require_once LSG_BL_PATH . 'includes/class-lsg-import.php';
  */
 if ( is_admin() ) {
 	require_once LSG_BL_PATH . 'includes/admin/page-import.php';
+	require_once LSG_BL_PATH . 'includes/admin/page-log.php';
 }
 
 /**
