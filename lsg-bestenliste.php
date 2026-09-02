@@ -66,6 +66,7 @@ require_once LSG_BL_PATH . 'includes/class-lsg-rest.php';
 require_once LSG_BL_PATH . 'includes/adapters/interface-ergebnis-quelle.php';
 require_once LSG_BL_PATH . 'includes/adapters/class-event-ref.php';
 require_once LSG_BL_PATH . 'includes/adapters/class-raceresult-adapter.php';
+require_once LSG_BL_PATH . 'includes/adapters/class-runtix-adapter.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-http.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-adapters.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-pipeline.php';

@@ -82,6 +82,30 @@ Für den aktuellen Umfang nicht erforderlich.
 
 ## 3. Quelle A: Runtix (HTML-Parsing)
 
+> ⚠ **Nachtrag 2026-09-02, nach dem Bau des Adapters (M4).** Vier Dinge sind
+> anders, als dieser Abschnitt sie beschreibt. Alle vier sind live gegen Event
+> 3152 geprüft, alle vier stehen als Test fest:
+>
+> 1. **Die drei Listentypen liefern dieselben elf Spalten.** `total` (234
+>    Zeilen), `sex` (73) und `ac` (23) haben je Zeile elf Zellen, keinen
+>    colspan, keine Gruppenzeilen. Die Annahme, `ac` lasse den Gesamtplatz und
+>    `sex` den AK-Platz weg, war falsch. Gelesen wird trotzdem nach Klasse: es
+>    kostet nichts und trägt auch, wenn Runtix die Reihenfolge doch ändert.
+> 2. **`sex` und `ac` sind Teillisten** – ein Geschlecht bzw. eine
+>    Altersklasse, nicht dieselbe Menge anders sortiert. Wer dort importiert,
+>    holt einen Ausschnitt. Deshalb ist `gesamtwertung` nur bei `total` gesetzt.
+> 3. **Auf der Ergebnisseite steht kein Datum**, in keiner Form. Und die
+>    Veranstaltungsseite `/sts/10021/{id}` nennt gleich **vier** – Lauftag
+>    16.08., Meldeschluss 15.08., Lastschrifteinzug 19.08. und „Stand der
+>    Ausschreibung 12.03.". Von dort ein Datum zu greifen heißt raten;
+>    maßgeblich ist die Jahresübersicht.
+> 4. **Der Eintrag in der Übersicht wird über den Datums-Link gefunden**, nicht
+>    über den Ergebnis-Link: 58 der 157 Zeilen des Jahres 2026 haben keine
+>    Ergebnisse und verlinken auch mit dem Namen auf `/sts/10021/`.
+>
+> Die Einzelheiten stehen an den Haken in Abschnitt 8 und im Kopf von
+> `includes/adapters/class-runtix-adapter.php`.
+
 ### 3.1 Befund
 
 - Beim Seitenaufruf: 29 Netzwerk-Requests, **0 davon XHR/fetch**.
@@ -737,6 +761,14 @@ race result   „von Hoff Anna-Maria"   →  Namenspartikel, mehrteiliger Vornam
 ```
 
 Regel, in dieser Reihenfolge:
+
+**Vorgeschaltet, ergänzt am 2026-09-02:** doppelte Kommas werden zu einem
+zusammengezogen, danach fallen Kommas an den Rändern weg. Der Anlass ist echt –
+in der Runtix-Liste zu Event 3152 steht `Michalewski,, Patrick`. Ohne diesen
+Schritt liefert Regel 1 den Vornamen `, Patrick`, mit führendem Komma. Der
+passt dann auf keinen Athleten in der Datenbank, und zwar **ohne** dass
+irgendwo ein Fehler auftaucht: die Zeile bliebe still als „nicht zugeordnet"
+liegen, und man sucht den Grund in P3, wo er nicht ist.
 
 1. Enthält der String ein Komma → `Nachname, Vorname`. Eindeutig, fertig.
 2. Sonst: zusammenhängender Block aus komplett großgeschriebenen Wörtern am
@@ -2148,6 +2180,22 @@ oder mitlesen kann, öffnet dieselbe Lücke wieder.
   und Ziel-Host erneut prüfen).
 - Rate-Limit pro Benutzer: max. 30 Abrufe / 10 min (Transient-Zähler).
 
+⚠ **Aufgefallen am 2026-09-02, bewusst so gelassen:** `http` auf einem
+erlaubten Host ist zugelassen – `http://runtix.com/sts/10050/3152` läuft durch.
+Das folgt aus der ersten Regel („nur http/https"), war so aber nirgends
+ausgesprochen. Beide Adapter bauen ausschließlich `https`; betroffen ist nur
+eine von Hand eingegebene oder von der Quelle weitergeleitete `http`-Adresse,
+und die holt eine öffentliche Ergebnisliste ohne Anmeldung. Ein Angreifer in
+der Leitung könnte dort Ergebniszeilen unterschieben – nicht mehr, aber auch
+nicht weniger.
+
+**Wer das zuschnüren will**, streicht `http` aus der Schema-Prüfung in
+`lsg_bl_url_erlaubt()`. Das ist eine Zeile. Nicht getan wurde es, weil es eine
+M1-Entscheidung nachträglich ändert und eine eingegebene `http`-URL dann ohne
+erkennbaren Grund abgelehnt würde. Die Regel steht jetzt als Test fest
+(`rendertest.php`, Abschnitt runtix-Allowlist) – sie kann also nicht mehr
+unbemerkt kippen, in keine Richtung.
+
 ⚠ **Die Allowlist gilt für jede abgerufene Adresse, nicht nur für die
 eingegebene.** Das ist bei race result kein Nebensatz, sondern die einzige
 Stelle, an der die Absicherung sonst ins Leere liefe: Der zweite Request geht
@@ -2658,7 +2706,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M1 | Datenmodell inkl. Schema-Version, Interface, Registry, `RaceResultAdapter`, Fixtures, `tests/unit/` | ✅ **erledigt 2026-09-01** – `phpunit --testsuite unit` ist grün (148 Tests) und die Ettlingen-Liste kommt normalisiert aus dem Adapter |
 | M2 | Admin-Seite Schritt 1–3 ohne JavaScript, P1 + P2, Distanz-/Datums-Controls | ✅ **erledigt 2026-09-01** – die Vorschau zeigt den Trichter `658 gelesen → 1 ohne Zeit → 11 LSG`, geschrieben wird nichts |
 | M3 | P3, P4, Übernahme, Log + Log-Ansicht | ✅ **erledigt 2026-09-02** – der Ettlinger Halbmarathon landet als `7 angelegt, 1 aktualisiert, 3 übersprungen` in `lsg_best`; ein zweiter Durchlauf zeigt lauter `gleich` und schreibt nichts |
-| M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | derselbe Ablauf mit einer Runtix-URL |
+| M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | ✅ **erledigt 2026-09-02** – derselbe Ablauf mit `https://runtix.com/sts/10050/3152/21/total`: erkannt als runtix, Datum `16.08.2026` aus der Veranstaltungsübersicht, Distanz „Halbmarathon" aus dem Wettbewerbsnamen, Trichter `22 gelesen → 1 LSG`. Die Oberfläche hat dafür keine Zeile Sonderbehandlung |
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | Zeitläufe und Korrekturen sind erfassbar |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | derselbe Ablauf ohne Reload |
 
@@ -2722,12 +2770,35 @@ prüft am Ende keinen von beiden.
         → über die Expression aufgelöst, Positionsversatz nur als letzte
           Rückfallebene. Dazu: `data` kommt bei gruppierten Listen (AK-Liste)
           als Objekt statt als Array – im Plan nicht vorgesehen, kommt aber vor
-- [ ] `RuntixAdapter`
-  - [ ] URL-Builder (ohne trailing slash!)
-  - [ ] Contest-IDs als String, `"w"`-Fall berücksichtigen
-  - [ ] DOMXPath-Parser nach CSS-Klassen
-  - [ ] `col-ageclass` vs. `col-place-ageclass` exakt trennen
-  - [ ] Umlaut-/Encoding-Test (Körner, Häffner, Säckingen)
+- [x] `RuntixAdapter`
+  - [x] URL-Builder (ohne trailing slash!)
+        → eine einzige Funktion `url_bauen()`, die nie ein `/` anhängt. `url_zerlegen()`
+          verträgt umgekehrt einen eingegebenen Schrägstrich am Ende.
+  - [x] Contest-IDs als String, `"w"`-Fall berücksichtigen
+        → am 2026-09-02 bestätigt: Event 3152 hat die Keys `21`, `10`, `5` und `w`
+  - [x] DOMXPath-Parser nach CSS-Klassen
+  - [x] `col-ageclass` vs. `col-place-ageclass` exakt trennen
+        → über `hat_klasse()`: das class-Attribut wird an Whitespace zerlegt und
+          exakt verglichen. Nötig für zwei Fälle zugleich – `col-ageclass` darf
+          nicht in `col-place-ageclass` treffen, und `col-time` muss trotz des
+          Leerzeichens in `class="col-time "` treffen.
+  - [x] Umlaut-/Encoding-Test (Körner, Häffner, Säckingen)
+        → acht Schreibweisen aus der echten Liste: `Jürgen`, `Pählke`, `Geißler`,
+          `KRÜGER`, `SEIDER, FRANK`, `weschenfelder, andreas`, `Nees, Dr. Corinna`,
+          `Michalewski,, Patrick`. ⚠ Der `<?xml encoding="UTF-8">`-Vorspann vor
+          `loadHTML()` ist Pflicht: ohne ihn nimmt libxml Latin-1 an und macht aus
+          „Lußhardtlauf" „LuÃŸhardtlauf".
+        → ⚠ **Zwei Korrekturen gegenüber Abschnitt 3:**
+          (a) Die drei Listentypen liefern **dieselben elf Spalten**. Geprüft am
+              2026-09-02: `total` (234 Zeilen), `sex` (73) und `ac` (23) haben je
+              Zeile elf Zellen, keinen colspan, keine Gruppenzeilen. Der Plan nahm
+              an, `ac` lasse den Gesamtplatz und `sex` den AK-Platz weg – tun sie
+              nicht. Am Lesen nach Klasse ändert das nichts; es kostet nichts und
+              trägt auch dann, wenn Runtix die Reihenfolge doch einmal ändert.
+          (b) `sex` und `ac` sind **Teillisten** (ein Geschlecht bzw. eine
+              Altersklasse), nicht andere Darstellungen derselben Menge. Wer dort
+              importiert, holt einen Ausschnitt – deshalb ist `gesamtwertung`
+              ausschließlich bei `total` gesetzt.
 - [x] Zeit-Parser: `01:11:54.9`, `1:13:08`, evtl. `MM:SS` → einheitlich Sekunden
 - [x] Normalisierung: `lsg_bl_verein_normalisieren()` + Namens-Normalisierung
       (Umlaute, Bindestriche, Groß/Klein) – Basis für P2 und P3
@@ -2768,11 +2839,43 @@ prüft am Ende keinen von beiden.
           Unterschied zwischen „noch nicht angefasst" und „bewusst geleert" steht in
           der Query: fasst jemand das Feld an, ist der Parameter da – auch leer.
   - [x] P1 Datum ermitteln: Adapter-Metadaten → Datum im Namen → Jahr → leer
-  - [ ] P1 Runtix: `/sts/10021/{id}` für den Einstieg, `/sts/10020/{jahr}` als
+  - [x] P1 Runtix: `/sts/10021/{id}` für den Einstieg, `/sts/10020/{jahr}` als
         maßgebliche Quelle, Eintrag über den Link `/sts/10050/{id}` finden
-  - [ ] P1 Runtix: höchstens zwei Jahres-Versuche, dann Feld leer lassen
-  - [ ] P1 Runtix: Jahreszahl der Fußzeile (`Copyright … 2001 - 2026`) ignorieren
-  - [ ] P1 Veranstaltungsübersicht je Jahr cachen (Transient, 15 min)
+        → ⚠ **Korrektur:** der Eintrag wird über den **Datums-Link** `/sts/10021/{id}`
+          gefunden, nicht über den Ergebnis-Link. Grund: 58 der 157 Zeilen der
+          Übersicht 2026 haben noch keine Ergebnisse, und dort zeigt auch der Name
+          auf `/sts/10021/`. Über `/sts/10050/{id}` allein wären die nicht zu finden.
+          Der Datums-Link steht in jeder Zeile.
+        → ⚠ Und gelesen wird **zeilenweise** (`div.row.competition` → `div.description`),
+          nicht über einen flachen Link-Scan: der „Ergebnisse"-Knopf zeigt auf
+          dieselbe `/sts/10050/{id}`, trägt aber das Wort „Ergebnisse" als Text –
+          ein flacher Scan schriebe das als Veranstaltungsnamen fort.
+        → Gefunden wird über die **ID**, niemals über den Namen. Bestätigt:
+          3152 → 16.08.2026, und das deckt sich mit dem „Sonntag, den 16. August 2026"
+          der Ausschreibung.
+  - [x] P1 Runtix: höchstens zwei Jahres-Versuche, dann Feld leer lassen
+        → `array_slice( $jahre, 0, 2 )`. Test `test_hoechstens_zwei_jahresversuche`
+          zählt die Abrufe mit und prüft, dass das Feld leer bleibt statt zu raten.
+  - [x] P1 Runtix: Jahreszahl der Fußzeile (`Copyright … 2001 - 2026`) ignorieren
+        → das `<footer>` wird aus dem DOM entfernt, bevor irgendein Text gelesen wird.
+  - [x] P1 Veranstaltungsübersicht je Jahr cachen (Transient, 15 min)
+        → `lsg_bl_runtix_jahr_cache()`. ⚠ Auch ein **leeres** Ergebnis wird gecacht,
+          sonst wird bei jedem Seitenaufruf erneut vergeblich abgerufen. Und: läuft
+          das Rate-Limit an, gibt die Funktion leer zurück statt zu werfen – das
+          Datum ist eine Zugabe, kein Pflichtfeld.
+        → ⚠ **Neu gegenüber dem Plan:** die Veranstaltungsseite `/sts/10021/{id}`
+          nennt **vier** Daten. Am 2026-09-02 standen dort: Lauftag 16.08.,
+          Meldeschluss 15.08., Lastschrifteinzug 19.08. und „Stand der Ausschreibung
+          12.03.". Von dort ein Datum zu greifen heißt raten. Der Adapter nimmt aus
+          dieser Seite deshalb nur **Jahreszahlen**; das vollständige Datum kommt aus
+          der Übersicht. Nur als Rückfall (Übersicht schweigt) wird das Datum aus dem
+          `<strong>` mit dem Wochentag genommen – und dann als Quelle `ausschreibung`
+          ausgewiesen, damit die Oberfläche zur Bestätigung auffordert.
+        → ⚠ **Und:** auf der Ergebnisseite steht **kein** Datum. Kein einziges
+          `TT.MM.JJJJ` im ganzen Seitentext (geprüft). Das ist der Grund für den
+          ganzen zweistufigen Aufwand und steht als Test fest
+          (`test_ergebnisseite_nennt_kein_datum`) – findet Runtix dort eines Tages
+          doch ein Datum, fällt der Test um und der Weg gehört vereinfacht.
   - [x] P1 race result: kein Datum in `config` – Feld leer lassen, Hinweis zeigen
   - [x] P1 race result: `Tab.ActiveFrom` **nicht** als Veranstaltungsdatum lesen
         → und der Wettbewerbsname wird für das Datum gar nicht gelesen: dort
@@ -2798,7 +2901,13 @@ prüft am Ende keinen von beiden.
           sofort mehrdeutig, Ordnungszahlen (`5.`) und fremde Einheiten
           (`10 Meilen`, `500m`) zählen nicht, und widersprechen sich Name und
           Zahl, bleibt das Feld leer
-  - [ ] P1 Distanz-Select geschlossen: kein Freitext, keine neuen Distanzen
+  - [x] P1 Distanz-Select geschlossen: kein Freitext, keine neuen Distanzen
+        → war mit M2 gebaut und hier nur nicht abgehakt. Das Select wird aus
+          `lsg_bl_import_distanzen()` erzeugt, und derselbe Aufruf prüft den
+          eingehenden Wert an **zwei** Stellen gegen: `lsg_bl_parsen()` bricht mit
+          Klartext ab, und `lsg_bl_import_vorbelegung()` verwirft einen unbekannten
+          Code. Ein handgeschriebenes `?distanz=42km` in der Adresszeile kommt also
+          nicht durch.
   - [x] P1 Distanz-Select **ohne** `6h`/`12h`/`24h` – Zeitläufe halten in
         `lsg_best.time` eine Strecke, keine Zeit (6.5.1)
   - [x] P1 `platz` mitlesen (nur für 6.5.5)
@@ -2807,6 +2916,14 @@ prüft am Ende keinen von beiden.
           Lemminge e.V.` als eigene Vereine (je 1 Zeile). Beide fallen durch den
           Filter. **Offen: sind das eigene Leute?** Wenn ja, ist der Alias der Weg,
           nicht eine Änderung der UND-Regel.
+        → ⚠ **Zum zweiten Mal, 2026-09-02:** in der Runtix-Liste zu Event 3152
+          stehen sie wieder – `Karlsruher Lemminge e.V.` (Körner, Theresa, 1991)
+          und `Karlsruher Lemminge` (Pählke, Frank, 1973). Zwei unabhängige
+          Quellen, zwei Läufe, dieselben zwei Schreibweisen. Das ist keine
+          Eigenheit einer Ergebnisliste, sondern wie diese Leute sich melden.
+          **Die Frage gehört beantwortet, bevor M5 kommt** – bis dahin wandern
+          diese Zeilen bei jedem Import in den Block „nicht übernommene Vereine"
+          und müssen von Hand angesehen werden.
         → die Ettlingen-Fixture belegt den Zweck der UND-Regel: sie enthält
           22 Zeilen `LSG Weiher` neben 11 Zeilen `LSG Karlsruhe`, dazu
           `(Karlsruhe)` als Wohnort und `Karlsruher Lemminge e.V.`
@@ -3068,8 +3185,19 @@ Schreibvorgang) und wächst mit M6 (REST).
       die Portale zu treffen
       → race result ist da (`raceresult-375768-config.json`,
         `raceresult-375768-contest2.json`, 658 Datensätze, abgerufen 2026-09-01).
-        Die drei Runtix-Fixtures fehlen noch – Vorarbeit für **M4**, die
-        `curl`-Zeilen stehen in `tests/README.md`
+      → Die drei Runtix-Fixtures liegen jetzt auch da (2026-09-02).
+        ⚠ Sie sind **nachgebaut, keine Byte-Kopien**: in der Umgebung, in der sie
+        entstanden, war runtix.com nur über einen Browser erreichbar, und der gab
+        rohes Markup nicht heraus. Extrahiert wurden Klassennamen und Textinhalte,
+        daraus sind die Dateien geschrieben. Was daran live geprüft ist und was
+        nicht, steht ausführlich in `tests/README.md` – kurz: alle elf
+        Spaltenklassen samt `col-time ` mit Leerzeichen, alle Kopftexte, alle
+        übernommenen Werte, die Optionen beider Selects, der Aufbau der
+        Übersichtszeilen und die Fußzeile. Nicht geprüft: Einrückung, Script- und
+        Style-Blöcke, und Sonderzustände, die an dem Tag nicht auf der Seite
+        standen (eine DNF-Zeile etwa).
+        Die `curl`-Zeilen für den Tag, an dem jemand sie echt ziehen kann, stehen
+        weiter in `tests/README.md`.
 - [x] `composer.json` mit `require-dev` (PHPUnit ^9.6, phpunit-polyfills ^2.0),
       `vendor/` in `.gitignore` – **kein** Composer-Autoloader im Plugin
 - [x] `phpunit.xml.dist` mit den zwei Suites, `tests/bootstrap.php`
@@ -3081,8 +3209,21 @@ Schreibvorgang) und wächst mit M6 (REST).
       WordPress und ohne Netz
 
 - [x] Unit-Test `RaceResultAdapter` gegen Referenz-Fixture (658 Zeilen Ettlingen)
-- [ ] Unit-Test `RuntixAdapter` gegen gespeicherte HTML-Fixture
-- [ ] Beide Adapter → identisches Zielschema (Contract-Test)
+- [x] Unit-Test `RuntixAdapter` gegen gespeicherte HTML-Fixture
+      → `tests/unit/runtix-adapter-test.php`, 22 Zeilen aus der Liste zu Event 3152
+- [x] Beide Adapter → identisches Zielschema (Contract-Test)
+      → `tests/unit/adapter-contract-test.php`. Geprüft wird je Adapter: Feldnamen
+        und Typen jeder Zeile, die Zusagen des Schemas (Zeit `HH:MM:SS` oder Zeile
+        verworfen, Nach- und Vorname nicht leer, Geschlecht in `m|f|''`, Jahrgang 0
+        oder plausibel, Platz ohne Punkt), die Trichter-Kennzahlen
+        (`gelesen === verworfen + geliefert`), Wettbewerbs- und Listen-Objekte
+        (String-Keys, höchstens **eine** Gesamtwertung), die Struktur von `datum()`
+        auch im Leerfall, `quelleUrl()` (https und vom eigenen Adapter wiedererkannt),
+        die Form der Allowlist (keine nackte Wildcard, kein `*.com`) und dass Müll
+        als `LSG_BL_Quelle_Exception` mit einem Satz für Menschen herauskommt.
+      → ⚠ Der erste Test der Datei zählt die Adapterdateien im Verzeichnis und
+        vergleicht mit der Liste im Test. Ohne das wäre der Contract-Test wertlos:
+        ein dritter Adapter würde einfach nicht mitgeprüft.
 - [ ] Zeit-Parser: `01:11:54.9` → `01:11:55`, `01:11:54.0` → `01:11:54`
       (kein Float-Rundungsfehler), `1:13:08` → `01:13:08`, `38:57` → `00:38:57`
 - [x] Zeit-Parser: `18:57.3` und `18:57,3` → `00:18:58` (MM:SS mit Zehntel –
@@ -3104,7 +3245,15 @@ Schreibvorgang) und wächst mit M6 (REST).
         alten Daten in der Ausgabe.
 - [x] Erkennung: Tabelle aus 6.2 als Testfälle, inkl. URL mit/ohne trailing slash,
       `#2_B45FAB`-Fragment, `runtix.com`-URL ohne `/sts/`
-      → der race-result-Teil ist geprüft, der Runtix-Teil kommt mit M4
+      → beide Teile sind geprüft. Runtix: 90 mit Event-ID, 40 ohne, 0 bei fremdem
+        Host – und 0 bei `runtix.com.angreifer.example`. Zusätzlich prüft der
+        Contract-Test, dass kein Adapter die URL eines anderen beansprucht.
+      → ⚠ **Neu:** die Vorauswahl steht bei Runtix im **Pfad**
+        (`/sts/10050/3152/21/total`), nicht in einem Fragment. Dafür gibt es jetzt
+        `vorauswahl_aus_url()`, und `lsg_bl_discovery_vorauswahl()` fragt die
+        Methode vor `fragment_lesen()`. Ohne das ginge die Vorauswahl auf dem
+        Cache-Treffer-Weg verloren – die Seite hätte beim zweiten Aufruf derselben
+        Adresse plötzlich keinen Wettbewerb mehr vorbelegt.
 - [x] Erkennung: unbekannter Host → kein Adapter, saubere Meldung statt Fehler
 - [ ] SSRF: `http://127.0.0.1/`, `file://`, Redirect auf fremden Host → alle geblockt
 - [ ] SSRF: manipulierte `config`-Antwort mit `server: "angreifer.example"` →
@@ -3117,7 +3266,10 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [x] race result: Liste mit `Contest: 0` erscheint bei jedem Wettbewerb
       → im Adapter umgesetzt; die Ettlingen-Fixture enthält keinen solchen
         Eintrag, geprüft ist also die Regel, nicht der Fall
-- [ ] Runtix: Wettbewerb `"w"` überlebt den Weg durch Attribut, REST und Parser
+- [x] Runtix: Wettbewerb `"w"` überlebt den Weg durch Attribut, REST und Parser
+      → Attribut und Parser sind geprüft (Unit-Test plus ein Durchlauf der
+        Import-Seite mit `contest=w`, der „Interstick-Walk" und `value="w"` zeigt).
+        Der REST-Weg fehlt noch – die Routen kommen mit M6.
 - [x] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
 - [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
 - [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
@@ -3429,19 +3581,31 @@ https://my4.raceresult.com/375768/results/list?key={KEY}
 
 ### Testdaten
 
-Die früher hier liegenden Referenzdateien `zieleinlauf.csv` / `zieleinlauf.json`
-(658 Datensätze, Ettlingen 2026) sind aktuell nicht mehr im Projektordner.
-→ Für die Contract-Tests neu erzeugen oder wieder einlegen. **Das ist Vorarbeit
-für M1**, keine Aufgabe am Ende.
-
-Gebraucht werden zwei Rohantworten unter `tests/fixtures/`:
+**Stand 2026-09-02: erledigt.** Unter `tests/fixtures/` liegen fünf Dateien:
 
 ```
-raceresult-375768-contest2.json   Antwort von /results/list, r=all&l=0 (658 Zeilen)
-runtix-3152-21-total.html         Antwort von /sts/10050/3152/21/total
+raceresult-375768-config.json     Antwort von /results/config                    (Byte-Kopie)
+raceresult-375768-contest2.json   Antwort von /results/list, r=all&l=0 (658)     (Byte-Kopie)
+runtix-3152-21-total.html         /sts/10050/3152/21/total, 22 von 234 Zeilen    (nachgebaut)
+runtix-10020-2026.html            /sts/10020/2026, 5 von 157 Zeilen              (nachgebaut)
+runtix-10021-3152.html            /sts/10021/3152, Datum im Ausschreibungstext   (nachgebaut)
 ```
 
-Dazu je eine erwartete Ausgabe im Zielformat aus 5.1, damit der Contract-Test
-nicht nur durchläuft, sondern etwas vergleicht. Für den Runtix-Datumsweg
-zusätzlich `/sts/10020/2026` und `/sts/10021/3152` mitschneiden – sonst ist
-genau der Teil ungetestet, der zwei Fremdrequests auslöst.
+Die früher hier gesuchten Referenzdateien `zieleinlauf.csv` /
+`zieleinlauf.json` braucht es nicht mehr: die JSON-Rohantwort ist die
+Referenz, und der Contract-Test vergleicht nicht gegen eine erwartete Ausgabe,
+sondern gegen die **Zusagen** des Zielformats aus 5.1 – Feldnamen, Typen,
+Wertebereiche, `gelesen === verworfen + geliefert`. Das ist der robustere
+Schnitt: eine erwartete Ausgabe müsste bei jeder neuen Fixture-Zeile
+nachgezogen werden und ginge dann als Erstes ein, wenn niemand Zeit hat.
+
+⚠ **Die drei Runtix-Dateien sind nachgebaut, keine Mitschnitte.** In der
+Umgebung, in der sie entstanden, war runtix.com nur über einen Browser
+erreichbar, und der gab rohes Markup nicht heraus. Extrahiert wurden
+Klassennamen und Textinhalte, daraus sind die Dateien geschrieben. Was daran
+live geprüft ist – alle elf Spaltenklassen samt `col-time ` mit Leerzeichen,
+alle Kopftexte, alle übernommenen Werte, die Optionen beider Selects, der
+Aufbau der Übersichtszeilen, die Fußzeile – und was nicht, steht in
+`tests/README.md`. Dort stehen auch die `curl`-Zeilen für den Tag, an dem
+jemand sie echt ziehen kann; danach sind die Erwartungswerte `22` in
+`runtix-adapter-test.php` anzuheben.

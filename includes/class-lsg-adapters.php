@@ -19,13 +19,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string[] Klassennamen, die LSG_BL_Ergebnis_Quelle implementieren.
  */
 function lsg_bl_adapter_registry() {
+	// Reihenfolge ohne Bedeutung: welcher Adapter zuständig ist, entscheidet
+	// erkennt(), nicht die Position in dieser Liste.
 	$adapter = array(
 		'LSG_BL_RaceResult_Adapter',
+		'LSG_BL_Runtix_Adapter',
 	);
-
-	if ( class_exists( 'LSG_BL_Runtix_Adapter' ) ) {
-		$adapter[] = 'LSG_BL_Runtix_Adapter';
-	}
 
 	/**
 	 * Filter: weitere Adapter registrieren – auch aus einem anderen Plugin,

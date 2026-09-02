@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!--
+  Nachgebaute Fixture. Struktur am 2026-09-02 live gegen
+  https://runtix.com/sts/10020/2026 geprueft: 157 Zeilen div.row.competition
+  in div#competitions, Datum ausnahmslos TT.MM.JJJJ (157 von 157).
+
+  ACHTUNG, der Fallstrick dieser Seite:
+  Der Name verlinkt NICHT immer auf /sts/10050/. Live waren es
+    99 x  /sts/10021/{id} + /sts/10050/{id}   (Ergebnisse vorhanden)
+    58 x  /sts/10021/{id} + /sts/10021/{id}   (noch keine Ergebnisse)
+  Wer den Eintrag nur ueber a[href*="/sts/10050/{id}"] sucht, findet die
+  58 anderen nicht. Der Datumslink /sts/10021/{id} ist dagegen immer da.
+  Zeile 3190 hier ist so ein Fall.
+
+  Die Jahreszahl gehoert in den Pfad, nicht in einen Parameter:
+  /sts/10020/2026. Das Formular oben schickt sie zwar als select name="year",
+  die Seite ist aber ueber den Pfad erreichbar.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>runtix.com &ndash; Veranstaltungen</title>
+</head>
+<body>
+<div id="body">
+<noscript>Bitte JavaScript einschalten.</noscript>
+<header>
+	<div class="upper"><div class="container">
+		<div class="three columns logo"><a href="https://runtix.com/"><img src="/img/logo.png" alt="runtix"></a></div>
+		<div class="thirteen columns header-right"></div>
+	</div></div>
+	<div class="lower"><div class="globalmenu"><ul class="menu">
+		<li><a href="https://runtix.com/sts/10020">Veranstaltungen</a></li>
+	</ul></div></div>
+</header>
+<div class="content">
+<form id="form_post" method="post" action="">
+<input type="hidden" name="token" value="x">
+<div class="container">
+
+	<div class="three columns competitions-filter">
+		<select name="year" id="year">
+			<option value=""></option>
+			<option value="2025">2025</option>
+			<option value="2026" selected>2026</option>
+		</select>
+	</div>
+	<div class="four columns competitions-filter">
+		<select name="month" id="month">
+			<option value=""></option>
+			<option value="0" selected>alle Monate</option>
+			<option value="8">August</option>
+		</select>
+	</div>
+	<div class="seven columns competitions-filter">
+		<input type="text" name="query" id="query" value="">
+	</div>
+	<div class="two columns competitions-filter">
+		<a class="button" href="#">Suchen</a>
+	</div>
+
+	<div id="competitions" class="sixteen columns">
+
+		<div class="row competition">
+			<div class="ten columns alpha description">
+				<div class="two columns alpha"><a href="https://runtix.com/sts/10021/3183">01.01.2026</a></div>
+				<div class="eight columns omega"><a href="https://runtix.com/sts/10050/3183">27. Energie&shy;S&uuml;dwest Cup - Serienwertung</a></div>
+			</div>
+			<div class="six columns omega buttons">
+				<div class="two columns alpha"><span class="disabled">Anmelden</span></div>
+				<div class="two columns"><span class="disabled">Teilnehmer</span></div>
+				<div class="two columns omega"><a class="nowrap" href="https://runtix.com/sts/10050/3183">Ergebnisse</a></div>
+			</div>
+		</div>
+
+		<div class="row competition">
+			<div class="ten columns alpha description">
+				<div class="two columns alpha"><a href="https://runtix.com/sts/10021/3190">01.01.2026</a></div>
+				<div class="eight columns omega"><a href="https://runtix.com/sts/10021/3190">Sch&ouml;nbuch-Cup 2026</a></div>
+			</div>
+			<div class="six columns omega buttons">
+				<div class="two columns alpha"><span class="disabled">Anmelden</span></div>
+				<div class="two columns"><span class="disabled">Teilnehmer</span></div>
+				<div class="two columns omega"><span class="disabled">Ergebnisse</span></div>
+			</div>
+		</div>
+
+		<div class="row competition">
+			<div class="ten columns alpha description">
+				<div class="two columns alpha"><a href="https://runtix.com/sts/10021/3187">15.08.2026</a></div>
+				<div class="eight columns omega"><a href="https://runtix.com/sts/10050/3187">Speyerer Flugplatzlauf 10km und Staffel</a></div>
+			</div>
+			<div class="six columns omega buttons">
+				<div class="two columns alpha"><span class="disabled">Anmelden</span></div>
+				<div class="two columns"><a class="nowrap" href="https://runtix.com/sts/10040/3187">Teilnehmer</a></div>
+				<div class="two columns omega"><a class="nowrap" href="https://runtix.com/sts/10050/3187">Ergebnisse</a></div>
+			</div>
+		</div>
+
+		<div class="row competition">
+			<div class="ten columns alpha description">
+				<div class="two columns alpha"><a href="https://runtix.com/sts/10021/3152">16.08.2026</a></div>
+				<div class="eight columns omega"><a href="https://runtix.com/sts/10050/3152">19. Hambr&uuml;cker Lu&szlig;hardtlauf</a></div>
+			</div>
+			<div class="six columns omega buttons">
+				<div class="two columns alpha"><span class="disabled">Anmelden</span></div>
+				<div class="two columns"><a class="nowrap" href="https://runtix.com/sts/10040/3152">Teilnehmer</a></div>
+				<div class="two columns omega"><a class="nowrap" href="https://runtix.com/sts/10050/3152">Ergebnisse</a></div>
+			</div>
+		</div>
+
+		<div class="row competition">
+			<div class="ten columns alpha description">
+				<div class="two columns alpha"><a href="https://runtix.com/sts/10021/3161">20.09.2026</a></div>
+				<div class="eight columns omega"><a href="https://runtix.com/sts/10050/3161">Baden-Marathon Karlsruhe</a></div>
+			</div>
+			<div class="six columns omega buttons">
+				<div class="two columns alpha"><a class="nowrap" href="https://runtix.com/sts/10030/3161">Anmelden</a></div>
+				<div class="two columns"><a class="nowrap" href="https://runtix.com/sts/10040/3161">Teilnehmer</a></div>
+				<div class="two columns omega"><a class="nowrap" href="https://runtix.com/sts/10050/3161">Ergebnisse</a></div>
+			</div>
+		</div>
+
+		<a href="#top">nach oben</a>
+	</div>
+</div>
+<br>
+</form>
+</div>
+<footer><div class="container">
+	<div class="eight columns footer-left">Copyright &copy; CODERESEARCH 2001 - 2026</div>
+	<div class="eight columns footer-right align-content-right"><div class="footermenu"></div></div>
+</div></footer>
+</div>
+</body>
+</html>

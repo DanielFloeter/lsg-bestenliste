@@ -33,6 +33,15 @@ class Namen_Test extends TestCase {
 			'Runtix, Komma'          => array( 'Körner, Holger', 'Körner', 'Holger', false ),
 			'Komma ohne Leerzeichen' => array( 'Körner,Holger', 'Körner', 'Holger', false ),
 
+			// ⚠ Echte Tippfehler in der Quelle, gefunden am 2026-09-02 in
+			// der Runtix-Liste zu Event 3152. Ohne das Zusammenziehen
+			// doppelter Kommas kommt der Vorname als „, Patrick" heraus –
+			// und passt dann auf keinen Athleten in der Datenbank, ohne
+			// dass irgendwo ein Fehler auftaucht.
+			'Doppelkomma'            => array( 'Michalewski,, Patrick', 'Michalewski', 'Patrick', false ),
+			'Komma am Ende'          => array( 'Körner, Holger,', 'Körner', 'Holger', false ),
+			'Komma am Anfang'        => array( ', Holger', 'Holger', '', true ),
+
 			// Regel 2: führender GROSSBUCHSTABEN-Block.
 			'race result'            => array( 'BORGHARDT Lukas', 'BORGHARDT', 'Lukas', false ),
 			'Namenspartikel gross'   => array( 'VON HOFF Anna-Maria', 'VON HOFF', 'Anna-Maria', false ),

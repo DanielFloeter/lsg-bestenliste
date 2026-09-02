@@ -228,6 +228,16 @@ function lsg_bl_discovery( $adapter_cls, $url, $neu_laden = false ) {
  * @return array{contest:string,list:string}
  */
 function lsg_bl_discovery_vorauswahl( $adapter_cls, $url ) {
+	// Bei runtix steht die Vorauswahl im Pfad (/sts/10050/3152/21/total),
+	// bei race result im Fragment (#2_B45FAB). Der Pfad-Weg hat Vorrang,
+	// weil er der allgemeinere ist.
+	if ( method_exists( $adapter_cls, 'vorauswahl_aus_url' ) ) {
+		$v = (array) call_user_func( array( $adapter_cls, 'vorauswahl_aus_url' ), $url );
+		return array(
+			'contest' => isset( $v['contest'] ) ? (string) $v['contest'] : '',
+			'list'    => isset( $v['list'] ) ? (string) $v['list'] : '',
+		);
+	}
 	if ( method_exists( $adapter_cls, 'fragment_lesen' ) ) {
 		$f = (array) call_user_func( array( $adapter_cls, 'fragment_lesen' ), $url );
 		return array(
@@ -250,6 +260,56 @@ function lsg_bl_discovery_vorauswahl( $adapter_cls, $url ) {
  */
 function lsg_bl_discovery_verwerfen( $adapter_cls, $event_id ) {
 	delete_transient( lsg_bl_discovery_key( $adapter_cls, $event_id ) );
+}
+
+/**
+ * Die runtix-Veranstaltungsübersicht eines Jahres, gecacht (Plan 4.2).
+ *
+ * Warum überhaupt gecacht: die Übersicht ist die maßgebliche Datumsquelle
+ * für JEDE runtix-Veranstaltung dieses Jahres. Wer an einem Abend fünf
+ * Läufe importiert, holte sie sonst fünfmal – dieselben 157 Zeilen.
+ *
+ * ⚠ Hier wird nichts Rotierendes gecacht: die Übersicht enthält IDs, Daten
+ * und Namen, alles langlebig. Die 15 Minuten sind trotzdem knapp gewählt,
+ * damit ein am selben Tag nachgetragener Lauf nicht stundenlang fehlt.
+ *
+ * @param string        $jahr Jahreszahl.
+ * @param callable|null $get  HTTP-Getter; null = lsg_bl_http_get.
+ * @return array<string,array{datum:string,name:string}> Schlüssel = Event-ID.
+ */
+function lsg_bl_runtix_jahr_cache( $jahr, $get = null ) {
+	$jahr = (string) (int) $jahr;
+	if ( '0' === $jahr ) {
+		return array();
+	}
+
+	$key   = 'lsg_bl_rtx_jahr_' . $jahr;
+	$cache = get_transient( $key );
+	if ( is_array( $cache ) ) {
+		return $cache;
+	}
+
+	if ( ! lsg_bl_rate_limit_ok() ) {
+		// Kein Fehler: das Datum ist eine Zugabe, kein Pflichtfeld. Die
+		// Oberfläche verlangt es dann eben von Hand.
+		return array();
+	}
+
+	$get = ( null !== $get ) ? $get : 'lsg_bl_http_get';
+
+	try {
+		$url   = LSG_BL_Runtix_Adapter::url_bauen( '10020', $jahr );
+		$html  = call_user_func( $get, $url, 'LSG_BL_Runtix_Adapter' );
+		$liste = LSG_BL_Runtix_Adapter::parse_jahr( $html );
+	} catch ( LSG_BL_Quelle_Exception $e ) {
+		return array();
+	}
+
+	// Auch ein leeres Ergebnis wird gecacht – sonst wird bei jedem
+	// Seitenaufruf erneut vergeblich abgerufen.
+	set_transient( $key, $liste, LSG_BL_CACHE_DISCOVERY );
+
+	return $liste;
 }
 
 /*

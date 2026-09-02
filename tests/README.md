@@ -35,6 +35,8 @@ erwartet die `yoast/phpunit-polyfills`.
 | `raceresult-adapter-test.php` | Erkennung, `config`, Feld-Mapping über `DataFields`, 658 Zeilen |
 | `pipeline-test.php` | P2, Trichter samt Phasen, Vorbelegung, Zustände, Fingerabdruck |
 | `p3-p4-test.php` | Zuordnungsstufen, die drei Startregeln, Statusbildung, Doppelzeilen |
+| `runtix-adapter-test.php` | URL-Zerlegung, Contest `w`, DOM-Parser nach Klasse, Umlaute, Datumsauflösung |
+| `adapter-contract-test.php` | beide Adapter → identisches Zielschema, Allowlist-Form, `datum()`-Struktur |
 
 ## Integrationslage
 
@@ -71,11 +73,40 @@ LSG_BL_SUITE=integration WP_TESTS_DIR=/tmp/wordpress-tests-lib \
 |---|---|---|
 | `fixtures/raceresult-375768-config.json` | Antwort von `/results/config`, Ettlingen 375768 | ✅ 2026-09-01 |
 | `fixtures/raceresult-375768-contest2.json` | Antwort von `/results/list?r=all&l=0`, Hauptlauf 21,1km, **658 Datensätze** | ✅ 2026-09-01 |
-| `fixtures/runtix-3152-21-total.html` | Antwort von `/sts/10050/3152/21/total` | ❌ fehlt |
-| `fixtures/runtix-10020-2026.html` | Veranstaltungsübersicht mit Datum je Lauf | ❌ fehlt |
-| `fixtures/runtix-10021-3152.html` | Veranstaltungsseite, Datum im Ausschreibungstext | ❌ fehlt |
+| `fixtures/runtix-3152-21-total.html` | `/sts/10050/3152/21/total`, **22 ausgewählte Zeilen** von 234 | ⚠ nachgebaut, geprüft 2026-09-02 |
+| `fixtures/runtix-10020-2026.html` | Veranstaltungsübersicht, **5 Zeilen** von 157 | ⚠ nachgebaut, geprüft 2026-09-02 |
+| `fixtures/runtix-10021-3152.html` | Veranstaltungsseite mit dem Datum im Ausschreibungstext | ⚠ nachgebaut, geprüft 2026-09-02 |
 
-Die drei Runtix-Fixtures werden erst für **M4** gebraucht. Zu beschaffen mit
+### ⚠ Warum die Runtix-Fixtures nachgebaut sind
+
+Die race-result-Fixtures sind Byte-Kopien der API-Antworten. Die drei
+Runtix-Dateien sind es **nicht**: sie wurden aus live gelesenen DOM-Daten
+neu geschrieben. Der Grund ist die Umgebung, in der sie entstanden – dort
+war runtix.com nur über einen Browser erreichbar, und der gab rohes Markup
+nicht heraus. Extrahiert wurden Klassennamen und Textinhalte; daraus ist
+die Datei gebaut.
+
+**Geprüft und übernommen** (2026-09-02, Event 3152 „19. Hambrücker
+Lußhardtlauf"):
+
+- die elf Spaltenklassen in ihrer Reihenfolge, einschließlich `col-time `
+  **mit Leerzeichen am Ende**
+- die Kopftexte `Pl., m/w, AK, Nr., Teilnehmer, Team / Verein, Jahrg.,
+  Altersklasse, Nat., Zeit`
+- alle Werte der 22 aufgenommenen Zeilen, Zeichen für Zeichen
+- die Optionen von `select[name=contest]` samt `w` für den Walk und von
+  `select[name=rlt]`
+- der Aufbau von `div#competitions > div.row.competition` samt beider
+  Link-Formen
+- die Fußzeile `Copyright © CODERESEARCH 2001 - 2026`
+
+**Nicht darin und deshalb ungeprüft:** Zeilenumbrüche und Einrückung des
+Originals, `<script>`- und `<style>`-Blöcke, Tracking-Markup, sowie
+Sonderzustände, die an dem Tag nicht auf der Seite standen (eine
+DNF-Zeile in einer Runtix-Liste zum Beispiel).
+
+⚠ Wer die Dateien einmal wirklich frisch ziehen kann, sollte es tun – und
+dann prüfen, ob die Tests weiter durchlaufen:
 
 ```bash
 curl -A 'LSG-Bestenliste/1.0 (+https://www.lsg-ka.de/)' \
@@ -88,6 +119,43 @@ curl -A 'LSG-Bestenliste/1.0 (+https://www.lsg-ka.de/)' \
   -o tests/fixtures/runtix-10021-3152.html \
   'https://runtix.com/sts/10021/3152'
 ```
+
+Danach zählen die Tests andere Zeilenzahlen – die Erwartungswerte 22 und
+`gelesen === 22` in `runtix-adapter-test.php` sind dann anzuheben.
+
+### Was in den Runtix-Fixtures steckt
+
+Auch hier keine Beispieldaten, sondern die Fallstricke:
+
+- **`col-ageclass` neben `col-place-ageclass`.** Zwei Spalten, deren Namen
+  ineinander enthalten sind. Ein `contains(@class,'col-ageclass')` trifft
+  beide und liest den AK-Platz als Klassencode – und findet dann kein
+  Geschlecht mehr.
+- **`class="col-time "`** mit Leerzeichen. Ein Vergleich auf Gleichheit
+  des rohen Attributs findet die Spalte nicht, und dann gilt jede Zeile
+  als „ohne verwertbare Zeit".
+- **Contest `w`** für den Walk. Jedes `(int)`-Cast macht daraus 0.
+- **`Michalewski,, Patrick`** – doppeltes Komma. Ohne Bereinigung heißt
+  der Vorname `, Patrick` und passt auf keinen Athleten.
+- **`LSG Weiher` (4) neben `LSG Karlsruhe` (1)**, dazu `Karlsruhe`,
+  `Karlsruher Lemminge` und `Karlsruher Lemminge e.V.` – derselbe Beleg
+  wie bei race result, in einer zweiten Quelle.
+- **Platz 163 zweimal** – ein echter Zeitgleichstand. Wer nach Platz
+  indexiert, verliert eine Zeile.
+- **`GEIßLER`-Verwandtschaft:** `Geißler`, `KRÜGER`, `SEIDER, FRANK`,
+  `weschenfelder, andreas`, `Nees, Dr. Corinna` – fünf Schreibweisen, an
+  denen der Namenssplitter und die Zeichenkodierung zugleich hängen.
+- **Alle Zeiten als `HH:MM:SS.t`** – der Zehntel-Rundungsfall, in dieser
+  Quelle nicht die Ausnahme, sondern die Regel.
+- **Kein Datum auf der Ergebnisseite.** Kein einziges `TT.MM.JJJJ` im
+  ganzen Seitentext. Deshalb die Zweistufen-Auflösung, und deshalb die
+  beiden anderen Fixtures.
+- **Drei falsche Daten auf der Veranstaltungsseite:** Meldeschluss
+  15.08., Lastschrifteinzug 19.08., Stand der Ausschreibung 12.03. – der
+  Lauftag ist der 16.08.
+- **58 von 157 Übersichtszeilen ohne Ergebnisse**, deren Name auf
+  `/sts/10021/` zeigt statt auf `/sts/10050/`. Zeile 3190 in der Fixture
+  ist so eine.
 
 ### Was in den race-result-Fixtures steckt
 

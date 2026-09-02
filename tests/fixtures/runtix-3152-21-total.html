@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<!--
+  Nachgebaute Fixture, keine Byte-Kopie. Klassennamen, Spaltenreihenfolge,
+  Kopftexte und Werte sind am 2026-09-02 live gegen
+  https://runtix.com/sts/10050/3152/21/total geprueft (235 Zeilen: 1 Kopf,
+  234 Daten). Hier stehen 22 ausgewaehlte Datenzeilen - jede wegen eines
+  Fallstricks, nicht als Beispiel.
+
+  ACHTUNG, absichtlich so uebernommen:
+  - class="col-time " mit Leerzeichen am Ende. Genau so liefert Runtix es.
+  - col-place-ageclass (Platz in der AK) und col-ageclass (der Code selbst)
+    sind zwei verschiedene Spalten. Wer mit contains(@class,'col-ageclass')
+    sucht, trifft beide und liest den Platz als Klassencode.
+  - Auf dieser Seite steht kein Datum. Nirgends. Darum die Zweistufen-
+    Aufloesung ueber /sts/10021/{id} und /sts/10020/{jahr}.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>runtix.com &ndash; Ergebnislisten - 19. Hambr&uuml;cker Lu&szlig;hardtlauf</title>
+</head>
+<body>
+<div id="body">
+<header>
+	<div class="upper"><div class="container">
+		<div class="three columns logo"><a href="https://runtix.com/"><img src="/img/logo.png" alt="runtix"></a></div>
+		<div class="thirteen columns header-right">
+			<select name="lang"><option value="de">deutsch</option><option value="en">english</option></select>
+		</div>
+	</div></div>
+	<div class="lower"><div class="globalmenu"><ul class="menu">
+		<li><a href="https://runtix.com/sts/10020">Veranstaltungen</a></li>
+	</ul></div></div>
+</header>
+<div class="content">
+<form id="form_post" method="post" action="">
+<div class="container">
+<article>
+<div class="sixteen columns">
+<h1 class="eleven columns">Ergebnislisten - 19. Hambr&uuml;cker Lu&szlig;hardtlauf</h1>
+<select class="menu" name="nav">
+	<option value="https://runtix.com/sts/10021/3152">Veranstaltung</option>
+	<option value="https://runtix.com/sts/10040/3152">Teilnehmer</option>
+	<option value="https://runtix.com/sts/10050/3152" selected>Ergebnisse</option>
+	<option value="https://runtix.com/sts/10080/3152">Statistiken</option>
+</select>
+</div>
+
+<div class="four columns">
+	<label>Wettbewerb:</label>
+	<select name="contest" id="contest">
+		<option value=""> --- </option>
+		<option value="21" selected>21 KM Sparkasse Kraichgau-Lauf (21.1km)</option>
+		<option value="10">10 KM Linhardt-Lauf (10km)</option>
+		<option value="5">5 KM HUK-Coburg-Lauf (5km)</option>
+		<option value="w">5 KM - Interstick-Walk (5km)</option>
+	</select>
+</div>
+<div class="four columns">
+	<label>Listentyp:</label>
+	<select name="rlt" id="rlt">
+		<option value="total" selected>Gesamt</option>
+		<option value="sex">Geschlecht</option>
+		<option value="ac">Altersklasse</option>
+	</select>
+</div>
+<div class="eight columns">
+	<input type="text" name="query" id="query" value="">
+	<a class="button" href="#">Suchen</a>
+	<a class="button" href="#">Drucken</a>
+</div>
+
+<div class="sixteen columns">
+<h2>21 KM Sparkasse Kraichgau-Lauf (21.1km)</h2>
+
+<table class="results">
+<thead>
+<tr>
+	<th class="col-place-total">Pl.</th>
+	<th class="col-place-sex">m/w</th>
+	<th class="col-place-ageclass">AK</th>
+	<th class="col-number">Nr.</th>
+	<th class="col-competitor">Teilnehmer</th>
+	<th class="col-team">Team / Verein</th>
+	<th class="col-birth">Jahrg.</th>
+	<th class="col-ageclass">Altersklasse</th>
+	<th class="col-nationality">Nat.</th>
+	<th class="col-time ">Zeit</th>
+	<th class="col-buttons"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+	<td class="col-place-total">1</td>
+	<td class="col-place-sex">1</td>
+	<td class="col-place-ageclass">1</td>
+	<td class="col-number">1126</td>
+	<td class="col-competitor">K&ouml;rner, Holger</td>
+	<td class="col-team">LG Region Karlsruhe</td>
+	<td class="col-birth">1993</td>
+	<td class="col-ageclass">M 30</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:11:54.9</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">5</td>
+	<td class="col-place-sex">5</td>
+	<td class="col-place-ageclass">1</td>
+	<td class="col-number">1188</td>
+	<td class="col-competitor">Rau, Darian</td>
+	<td class="col-team"></td>
+	<td class="col-birth">2002</td>
+	<td class="col-ageclass">M HK</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:20:57.7</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">6</td>
+	<td class="col-place-sex">6</td>
+	<td class="col-place-ageclass">2</td>
+	<td class="col-number">1159</td>
+	<td class="col-competitor">Michalewski,, Patrick</td>
+	<td class="col-team"></td>
+	<td class="col-birth">1989</td>
+	<td class="col-ageclass">M 35</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:21:00.3</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">9</td>
+	<td class="col-place-sex">1</td>
+	<td class="col-place-ageclass">1</td>
+	<td class="col-number">1253</td>
+	<td class="col-competitor">Wunsch, Sophia</td>
+	<td class="col-team">LG Region Karlsruhe</td>
+	<td class="col-birth">1996</td>
+	<td class="col-ageclass">W 30</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:23:16.0</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">12</td>
+	<td class="col-place-sex">11</td>
+	<td class="col-place-ageclass">3</td>
+	<td class="col-number">1193</td>
+	<td class="col-competitor">Ronecker, Robin</td>
+	<td class="col-team">LSG Weiher</td>
+	<td class="col-birth">1994</td>
+	<td class="col-ageclass">M 30</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:26:48.9</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">18</td>
+	<td class="col-place-sex">17</td>
+	<td class="col-place-ageclass">2</td>
+	<td class="col-number">1163</td>
+	<td class="col-competitor">Moritz, Philipp</td>
+	<td class="col-team">Musikverein Hambr&uuml;cken</td>
+	<td class="col-birth">2005</td>
+	<td class="col-ageclass">M HK</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:29:51.0</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">23</td>
+	<td class="col-place-sex">3</td>
+	<td class="col-place-ageclass">1</td>
+	<td class="col-number">1265</td>
+	<td class="col-competitor">K&ouml;rner, Theresa</td>
+	<td class="col-team">Karlsruher Lemminge e.V.</td>
+	<td class="col-birth">1991</td>
+	<td class="col-ageclass">W 35</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:31:41.8</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">24</td>
+	<td class="col-place-sex">21</td>
+	<td class="col-place-ageclass">3</td>
+	<td class="col-number">1037</td>
+	<td class="col-competitor">Dahringer, Marcell</td>
+	<td class="col-team">LSG Weiher</td>
+	<td class="col-birth">1978</td>
+	<td class="col-ageclass">M 45</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:32:22.1</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">41</td>
+	<td class="col-place-sex">35</td>
+	<td class="col-place-ageclass">9</td>
+	<td class="col-number">1272</td>
+	<td class="col-competitor">Ziereisen, Philipp</td>
+	<td class="col-team">Karlsruhe</td>
+	<td class="col-birth">1983</td>
+	<td class="col-ageclass">M 40</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:36:25.9</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">51</td>
+	<td class="col-place-sex">43</td>
+	<td class="col-place-ageclass">2</td>
+	<td class="col-number">1176</td>
+	<td class="col-competitor">P&auml;hlke, Frank</td>
+	<td class="col-team">Karlsruher Lemminge</td>
+	<td class="col-birth">1973</td>
+	<td class="col-ageclass">M 50</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:38:33.6</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">55</td>
+	<td class="col-place-sex">46</td>
+	<td class="col-place-ageclass">3</td>
+	<td class="col-number">1014</td>
+	<td class="col-competitor">Bensching Klaus, Bensching</td>
+	<td class="col-team">LSG Weiher</td>
+	<td class="col-birth">1965</td>
+	<td class="col-ageclass">M 60</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:39:47.7</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">71</td>
+	<td class="col-place-sex">59</td>
+	<td class="col-place-ageclass">4</td>
+	<td class="col-number">1082</td>
+	<td class="col-competitor">Harrer, J&uuml;rgen</td>
+	<td class="col-team">LSG Karlsruhe</td>
+	<td class="col-birth">1966</td>
+	<td class="col-ageclass">M 60</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:43:40.6</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">142</td>
+	<td class="col-place-sex">112</td>
+	<td class="col-place-ageclass">2</td>
+	<td class="col-number">1174</td>
+	<td class="col-competitor">OBrien, Patrick</td>
+	<td class="col-team">South London Harriers</td>
+	<td class="col-birth">1957</td>
+	<td class="col-ageclass">M 65</td>
+	<td class="col-nationality">IRL</td>
+	<td class="col-time ">01:59:32.8</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">146</td>
+	<td class="col-place-sex">115</td>
+	<td class="col-place-ageclass">11</td>
+	<td class="col-number">1250</td>
+	<td class="col-competitor">weschenfelder, andreas</td>
+	<td class="col-team">Lauftreff Wiesental</td>
+	<td class="col-birth">1980</td>
+	<td class="col-ageclass">M 45</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">01:59:57.7</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">150</td>
+	<td class="col-place-sex">119</td>
+	<td class="col-place-ageclass">10</td>
+	<td class="col-number">1214</td>
+	<td class="col-competitor">SEIDER, FRANK</td>
+	<td class="col-team">Lauftreff Graben-Neudorf</td>
+	<td class="col-birth">1964</td>
+	<td class="col-ageclass">M 60</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:01:51.2</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">163</td>
+	<td class="col-place-sex">130</td>
+	<td class="col-place-ageclass">21</td>
+	<td class="col-number">1258</td>
+	<td class="col-competitor">Zorzit, Patrick</td>
+	<td class="col-team"></td>
+	<td class="col-birth">1990</td>
+	<td class="col-ageclass">M 35</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:08:04.6</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">163</td>
+	<td class="col-place-sex">34</td>
+	<td class="col-place-ageclass">10</td>
+	<td class="col-number">1228</td>
+	<td class="col-competitor">Stein, Lisa</td>
+	<td class="col-team"></td>
+	<td class="col-birth">1994</td>
+	<td class="col-ageclass">W 30</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:08:04.6</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">179</td>
+	<td class="col-place-sex">39</td>
+	<td class="col-place-ageclass">6</td>
+	<td class="col-number">1167</td>
+	<td class="col-competitor">Nees, Dr. Corinna</td>
+	<td class="col-team">LG Kurpfalz</td>
+	<td class="col-birth">1983</td>
+	<td class="col-ageclass">W 40</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:13:02.4</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">189</td>
+	<td class="col-place-sex">45</td>
+	<td class="col-place-ageclass">12</td>
+	<td class="col-number">1068</td>
+	<td class="col-competitor">Gei&szlig;ler, Franziska</td>
+	<td class="col-team">LSG Weiher</td>
+	<td class="col-birth">1994</td>
+	<td class="col-ageclass">W 30</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:16:37.8</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">225</td>
+	<td class="col-place-sex">157</td>
+	<td class="col-place-ageclass">16</td>
+	<td class="col-number">1133</td>
+	<td class="col-competitor">KR&Uuml;GER, Hilmar</td>
+	<td class="col-team"></td>
+	<td class="col-birth">1968</td>
+	<td class="col-ageclass">M 55</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:35:30.6</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">230</td>
+	<td class="col-place-sex">72</td>
+	<td class="col-place-ageclass">5</td>
+	<td class="col-number">1259</td>
+	<td class="col-competitor">Zsuzsanna Demmel-Gehlert, Zsuzsanna</td>
+	<td class="col-team"></td>
+	<td class="col-birth">1967</td>
+	<td class="col-ageclass">W 55</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:37:57.7</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+<tr>
+	<td class="col-place-total">234</td>
+	<td class="col-place-sex">161</td>
+	<td class="col-place-ageclass">27</td>
+	<td class="col-number">1151</td>
+	<td class="col-competitor">Martin, Dominik</td>
+	<td class="col-team"></td>
+	<td class="col-birth">1986</td>
+	<td class="col-ageclass">M 40</td>
+	<td class="col-nationality">GER</td>
+	<td class="col-time ">02:51:33.3</td>
+	<td class="col-buttons"><a href="#" class="button">Urkunde</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</article>
+</div>
+</form>
+</div>
+<footer><div class="container">
+	<div class="eight columns footer-left">Copyright &copy; CODERESEARCH 2001 - 2026</div>
+	<div class="eight columns footer-right align-content-right"><div class="footermenu"></div></div>
+</div></footer>
+</div>
+</body>
+</html>

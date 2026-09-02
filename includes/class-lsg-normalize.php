@@ -217,6 +217,19 @@ function lsg_bl_wort_ist_gross( $wort ) {
 function lsg_bl_name_splitten( $teilnehmer ) {
 	$roh = trim( preg_replace( '/\s+/u', ' ', (string) $teilnehmer ) );
 
+	/*
+	 * Doppelte Kommas zu einem zusammenziehen, danach Kommas an den
+	 * Raendern weg.
+	 *
+	 * Der Anlass ist echt: „Michalewski,, Patrick" stand am 2026-09-02 so
+	 * in der Runtix-Liste zu Event 3152. Ohne diesen Schritt liefert
+	 * Regel 1 den Vornamen „, Patrick" – mit fuehrendem Komma, und damit
+	 * ungleich jedem Athleten in der Datenbank. Der Import haette die
+	 * Zeile still als „nicht zugeordnet" liegen lassen.
+	 */
+	$roh = preg_replace( '/\s*,(?:\s*,)+\s*/u', ', ', $roh );
+	$roh = trim( $roh, " ,\t\n\r" );
+
 	if ( '' === $roh ) {
 		return array(
 			'nachname' => '',
@@ -227,11 +240,13 @@ function lsg_bl_name_splitten( $teilnehmer ) {
 
 	// Regel 1: Komma trennt Nachname von Vorname.
 	if ( false !== strpos( $roh, ',' ) ) {
-		$teile = explode( ',', $roh, 2 );
+		$teile    = explode( ',', $roh, 2 );
+		$nachname = trim( $teile[0], " ,\t\n\r" );
+		$vorname  = isset( $teile[1] ) ? trim( $teile[1], " ,\t\n\r" ) : '';
 		return array(
-			'nachname' => trim( $teile[0] ),
-			'vorname'  => isset( $teile[1] ) ? trim( $teile[1] ) : '',
-			'unsicher' => '' === trim( $teile[0] ) || '' === trim( isset( $teile[1] ) ? $teile[1] : '' ),
+			'nachname' => $nachname,
+			'vorname'  => $vorname,
+			'unsicher' => '' === $nachname || '' === $vorname,
 		);
 	}
 
