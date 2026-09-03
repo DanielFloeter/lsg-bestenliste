@@ -205,6 +205,89 @@ function lsg_bl_log_schreiben( array $daten, array $bilanz, array $log_zeilen ) 
 	return $run_id;
 }
 
+/**
+ * Eine Log-Zeile aus einer Bestenlisten-Zeile bauen (7.5) - das Gegenstueck
+ * zu lsg_bl_log_zeile() fuer Formularaktionen statt Import: der Athlet wurde
+ * von Hand gewaehlt, nicht zugeordnet, daher immer match_type = 'manuell'.
+ *
+ * @param array  $zeile    Zeile wie in lsg_bl_best_protokollieren() gebaut
+ *                         (athletes_id, name, firstname, born, time, town, ak).
+ * @param string $aktion   Wert aus lsg_bl_log_aktionen(), zusaetzlich 'delete'.
+ * @param string $time_alt Ueberschriebene Zeit, leer bei insert.
+ * @param string $meldung  Klartext, wie in der Oberflaeche.
+ * @param int    $best_id  Betroffene Zeile in lsg_best.
+ * @param string $roh_zeit Die Eingabe vor der Normalisierung.
+ * @return array
+ */
+function lsg_bl_log_manuell_zeile( array $zeile, $aktion, $time_alt, $meldung, $best_id, $roh_zeit ) {
+	$jahrgang = (int) $zeile['born'];
+
+	return array(
+		'athletes_id'    => (int) $zeile['athletes_id'],
+		'best_id'        => (int) $best_id,
+		'match_type'     => 'manuell',
+		'aktion'         => (string) $aktion,
+		'ak'             => (string) $zeile['ak'],
+		'time_neu'       => (string) $zeile['time'],
+		'time_alt'       => (string) $time_alt,
+		'roh_teilnehmer' => lsg_bl_athlete_display_name( (string) $zeile['name'], (string) $zeile['firstname'] ),
+		'roh_name'       => (string) $zeile['name'],
+		'roh_vorname'    => (string) $zeile['firstname'],
+		'roh_verein'     => '',
+		'roh_jahrgang'   => ( $jahrgang > 0 ) ? $jahrgang : null,
+		'roh_zeit'       => (string) $roh_zeit,
+		'roh_startnr'    => '',
+		'roh_platz'      => '',
+		'gesamtsieg'     => 0,
+		'meldung'        => (string) $meldung,
+	);
+}
+
+/**
+ * Aufsatz auf lsg_bl_log_schreiben() fuer manuelle Formularaktionen (7.5) -
+ * keine zweite Implementierung des Loggens, nur die Uebersetzung der
+ * schlankeren Formular-Daten in die Struktur, die der Import mitbringt
+ * (adapter/quelle/contest/list-Felder bleiben leer, der Trichter aus 6.5
+ * bleibt bewusst auf 0, siehe 7.5).
+ *
+ * @param array $daten      datum (JJJJ-MM-TT), jahr, distanz, ort, doppelt (optional).
+ * @param array $bilanz     angelegt, aktualisiert (je 0|1) - geloescht zaehlt
+ *                          in lsg_import_run absichtlich nicht mit, siehe 7.5.
+ * @param array $log_zeilen Zeilen von lsg_bl_log_manuell_zeile().
+ * @return int run_id, oder 0 wenn das Log nicht geschrieben werden konnte.
+ */
+function lsg_bl_log_manuell( array $daten, array $bilanz, array $log_zeilen ) {
+	$import_daten = array(
+		'adapter'      => 'manuell',
+		'quelle_url'   => '',
+		'event_id'     => '',
+		'event_name'   => '',
+		'datum'        => (string) $daten['datum'],
+		'datum_quelle' => 'manuell',
+		'jahr'         => (int) $daten['jahr'],
+		'contest_id'   => '',
+		'contest_name' => '',
+		'list_id'      => '',
+		'list_name'    => '',
+		'distanz'      => (string) $daten['distanz'],
+		'ort'          => (string) $daten['ort'],
+		'zeit_typ'     => '',
+		'zeilen'       => array(
+			array( 'doppelt' => isset( $daten['doppelt'] ) ? $daten['doppelt'] : array() ),
+		),
+	);
+
+	$import_bilanz = array(
+		'angelegt'      => isset( $bilanz['angelegt'] ) ? (int) $bilanz['angelegt'] : 0,
+		'aktualisiert'  => isset( $bilanz['aktualisiert'] ) ? (int) $bilanz['aktualisiert'] : 0,
+		'uebersprungen' => 0,
+		'konflikte'     => 0,
+		'fehler'        => 0,
+	);
+
+	return lsg_bl_log_schreiben( $import_daten, $import_bilanz, $log_zeilen );
+}
+
 /* -------------------------------------------------------------------------
  * Lesen
  * ---------------------------------------------------------------------- */

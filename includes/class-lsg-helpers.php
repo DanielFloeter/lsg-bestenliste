@@ -365,6 +365,19 @@ function lsg_bl_format_date( $timestamp ) {
 }
 
 /**
+ * Formatiert einen Unix-Timestamp als ISO-Datum (JJJJ-MM-TT), z. B. für das
+ * value-Attribut von <input type="date">. Leere/ungültige Werte ergeben
+ * einen leeren String.
+ */
+function lsg_bl_format_date_iso( $timestamp ) {
+	$timestamp = (int) $timestamp;
+	if ( $timestamp <= 0 ) {
+		return '';
+	}
+	return date_i18n( 'Y-m-d', $timestamp );
+}
+
+/**
  * Jahr aus einem Unix-Timestamp.
  */
 function lsg_bl_year_from_timestamp( $timestamp ) {
