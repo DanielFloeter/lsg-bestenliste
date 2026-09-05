@@ -37,6 +37,11 @@
 > Konflikterkennung, der Doppelzeile im Bestand und des Wegs aus einer
 > offenen Zeile heraus.
 >
+> Stand der Planung: 2026-09-05 – M1 bis M6 sind gebaut und geprüft. Neu
+> ausgeplant ist **Abschnitt 11, „Sportler pflegen"** (Milestone M7), der
+> erste Teil der Phase 4 aus der README. Der zweite – die Gesamtsieger-Pflege
+> – bleibt in 9.2, bis die offenen Punkte aus 6.5.5 entschieden sind.
+>
 > Stand der Bereinigung: 2026-09-01 – V1 und der Pflichtteil von V2 sind von
 > Hand ausgeführt. Die Dumps in `assets/*.sql` bleiben absichtlich auf dem
 > Stand **davor**: sie sind der Ausgangszustand, gegen den dieser Plan geprüft
@@ -1514,7 +1519,7 @@ mit Link auf den Filter „nur ohne Zuordnung".
 
 ```
 1. Ursache beheben
-   Athlet fehlt      →  Untermenü „Sportler" (Phase 4) bzw. direkt in lsg_athlete
+   Athlet fehlt      →  Untermenü „Sportler" (Abschnitt 11, M7)
    Schreibweise      →  Untermenü „Zuordnungen": Regel in lsg_athlete_map
    Regeln kollidieren→  Untermenü „Zuordnungen": eine der beiden abschalten
 2. Import erneut ausführen
@@ -2466,9 +2471,10 @@ jemandem gehören, der inzwischen ausgetreten ist. Sie zu verstecken würde
 genau die Nachträge verhindern, für die es diese Seite gibt.
 
 ⚠ **Das Formular legt keinen Athleten an.** Gleiche Regel wie beim Import
-(6.5.3): Wer fehlt, wird im Untermenü „Sportler" (Phase 4) angelegt. Solange
-das nicht existiert, steht unter dem Dropdown der Hinweis, wo Athleten gepflegt
-werden – nicht ein Feld, das still einen zweiten „Müller, Peter" erzeugt.
+(6.5.3): Wer fehlt, wird im Untermenü „Sportler" angelegt – ausgeplant in
+Abschnitt 11, gebaut mit M7. Solange das nicht existiert, steht unter dem
+Dropdown der Hinweis, wo Athleten gepflegt werden – nicht ein Feld, das still
+einen zweiten „Müller, Peter" erzeugt. Mit M7 wird aus dem Hinweis ein Link.
 
 **Das Leistungsfeld wechselt mit der Distanz.** Das ist der eigentliche Grund,
 warum diese Seite die Zeitläufe kann und der Import nicht:
@@ -2684,7 +2690,8 @@ Vorgangsübersicht so aussehen, als wäre etwas gelesen und gefiltert worden.
 
 ### 7.6 Was diese Seite ausdrücklich nicht tut
 
-- **Keine Athleten anlegen** – Untermenü „Sportler", Phase 4 (7.2).
+- **Keine Athleten anlegen** – Untermenü „Sportler" (7.2), ausgeplant in
+  Abschnitt 11.
 - **Nicht nach `lsg_win` schreiben.** Gesamtsiege bleiben vorerst Handarbeit,
   wie in 6.5.5 entschieden. Wenn dieser Ausbaustand kommt, bekommt er ein
   eigenes Formular auf derselben Seite – die Felder sind fast dieselben, aber
@@ -2731,6 +2738,14 @@ Abschnitt 3b ist entschieden – **keine führenden Nullen bei den Zeitläufen**
 die 23 Altzeilen werden angeglichen. Der Block ist deshalb nicht mehr
 optional, sondern aktiver Bestandteil des Skripts.
 
+⚠ **Nachtrag 2026-09-05: der `DELETE` aus Abschnitt 5 ist nicht angekommen.**
+Die Leerzeile id 6556 steht noch in `lsg_best` – nachgesehen bei der
+Bestandsaufnahme zu Abschnitt 11. Der Satz oben und die Zeile in der Tabelle
+weiter unten beschreiben eine Absicht, keinen Zustand. Bemerkenswert ist
+weniger der vergessene `DELETE` als das, was er über die Abnahme sagt: die
+vier V1-Gegenproben stehen bis heute ungeprüft in der Verifikationsliste, und
+die erste, die tatsächlich gelaufen ist, schlägt fehl.
+
 ⚠ **Ein Punkt bleibt: die Dublettenprüfung gehört wiederholt.** Die Liste in
 Abschnitt 1 wurde gegen `date = 0` erzeugt, id 1649 bekam ihr Datum erst
 danach. Athlet 288 (Scholz, Steffen, 1970) hat 10-km-Jahresbestzeiten in fünf
@@ -2762,7 +2777,7 @@ Was V1 im Einzelnen umfasste (Ausgangsstand 2026-09-01, 5 951 Zeilen):
 | Strecke nicht als `N,NNN km` (führendes Leerzeichen, zu wenig Nachkommastellen) | 3 Zeilen (ids 4194, 4242, 6296) | korrigieren |
 | Strecke mit führender Null (`096,723 km`) | 23 Zeilen | Null entfernen – keine führenden Nullen bei Zeitläufen (7.2) |
 | `date = 0` → Jahr 1970, in keiner Jahresauswahl sichtbar | 1 Zeile (id 1649) | Datum von Hand nachgetragen |
-| Leerzeile (`distance = ''`, `00:00:00`) | 1 Zeile (id 6556) | gelöscht |
+| Leerzeile (`distance = ''`, `00:00:00`) | 1 Zeile (id 6556) | gelöscht – ⚠ steht am 2026-09-05 noch da |
 | Lauf am 1. Januar, als 00:00 Ortszeit gespeichert → bei UTC-Session im Vorjahr | 6 Zeilen (ids 1073, 1532, 1535, 3356, 3396, 3972) | auf 12:00 Ortszeit ziehen, wie 6.5.1 es für neue Zeilen vorschreibt |
 
 ⚠ Die 26 Doppelzeilen sind **Erfassungsfehler, keine zweite Lesart der
@@ -2781,6 +2796,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | ✅ **erledigt 2026-09-02** – derselbe Ablauf mit `https://runtix.com/sts/10050/3152/21/total`: erkannt als runtix, Datum `16.08.2026` aus der Veranstaltungsübersicht, Distanz „Halbmarathon" aus dem Wettbewerbsnamen, Trichter `22 gelesen → 1 LSG`. Die Oberfläche hat dafür keine Zeile Sonderbehandlung |
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | ✅ **erledigt 2026-09-02** – ein 24-Stunden-Ergebnis (`112,737 km`) ist von Hand erfassbar, landet mit `ak = m45` in `lsg_best` und als `adapter = 'manuell'` im Log; eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg, und Löschen protokolliert den vollständigen Datensatz, bevor die Zeile weg ist |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | ✅ **erledigt 2026-09-05** – derselbe Ablauf ohne einen einzigen Seitenaufbau: Adresse prüfen, Wettbewerb wählen, parsen, übernehmen. Die drei laufenden Zustände (`erkenne`, `parse`, `uebernahme`) sind jetzt sichtbar, die Kopf-Checkbox ist da, das Knopf-Label zählt mit, und der Statusfilter kostet die gesetzten Haken nicht mehr. Mit deaktiviertem JavaScript verhält sich die Seite unverändert wie nach M5 |
+| M7 | Seite „Sportler" (Abschnitt 11) | ein fehlender Athlet ist aus der Oberfläche heraus anzulegen, ohne phpMyAdmin; ein geänderter Jahrgang zieht die betroffenen `lsg_best.ak` nach Rückfrage mit, und jeder Schritt steht im Log; ein Sportler mit Ergebnissen lässt sich nicht löschen, einer ohne schon |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
 Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
@@ -2794,7 +2810,10 @@ prüft am Ende keinen von beiden.
         vereinheitlichen~~
   - [x] ~~Datum für id 1649 aus der Vereinsablage nachtragen~~
   - [x] ~~Die sechs Neujahrsläufe auf 12:00 Ortszeit ziehen~~ (6.5.4)
-  - [x] ~~Leerzeile id 6556 löschen~~ (Abschnitt 5)
+  - [ ] Leerzeile id 6556 löschen (Abschnitt 5) – ⚠ **war abgehakt, ist es
+        aber nicht.** Am 2026-09-05 steht die Zeile noch in `lsg_best`
+        (Befund in Abschnitt 11). Die Gegenprobe des Skripts liefert sie
+        zurück statt der leeren Menge
   - [ ] Abschnitt 3b ausführen: die 23 führenden Nullen bei den Zeitläufen
         entfernen – entschieden, nicht mehr optional (7.2)
   - [ ] **Dublettenprüfung wiederholen**, weil id 1649 erst nach der Erzeugung
@@ -3323,6 +3342,9 @@ prüft am Ende keinen von beiden.
 - [x] Weitere Untermenüs unter `lsg-bestenliste` (6.2) – Import-Log,
       „Zuordnungen" und „Bestenliste" stehen; Sportler- und
       Gesamtsieger-Pflege bleiben Phase 4
+      → „Sportler" ist mit Abschnitt 11 ausgeplant und wird M7;
+        „Gesamtsiege" folgt als M8, sobald die offenen Punkte aus 6.5.5
+        entschieden sind
 - [ ] **Keine** Event-Verwaltung: Läufe kommen ausschließlich über die URL
 - [x] ~~Frontend: Shortcode und/oder Block für die Bestenliste~~ – erledigt,
       die drei Blöcke stehen (Phase 3 der README)
@@ -3341,6 +3363,42 @@ prüft am Ende keinen von beiden.
         `var_dump`, kein `print_r` und kein `console.log`. Fehler der Quelle
         reisen als `LSG_BL_Quelle_Exception` und landen im Klartext in einer
         Notice; was beim Schreiben passiert ist, steht im Import-Log.
+- [ ] **Admin-Seite „Sportler" (Abschnitt 11) – M7**
+  - [ ] Untermenü `lsg-bestenliste-athleten` hinter „Bestenliste",
+        `LSG_BL_CAP` wie überall, Hook in `lsg_bl_admin_assets()` eintragen
+  - [ ] `includes/admin/page-athlet.php`, Liste in
+        `includes/admin/class-lsg-athlet-table.php` – letztere erst beim
+        Rendern nachladen, `WP_List_Table` gibt es beim Plugin-Start nicht
+  - [ ] Vier Ansichten über `?action=`; gelöscht wird per POST, der Link
+        führt nur auf die Rückfrage (wie in 7.4 nachgezogen)
+  - [ ] Fünf Felder: Nachname, Vorname, Jahrgang, Geschlecht, Status –
+        Jahrgang ohne Vorgabewert und Pflicht
+  - [ ] Dublettensperre auf Nachname + Vorname + Jahrgang, normalisiert
+        verglichen, mit Link auf die vorhandene Zeile. **Gesperrt, nicht
+        gewarnt** (11.2)
+  - [ ] Jahrgangswechsel: betroffene `lsg_best.ak` auflisten (alt → neu),
+        nach Rückfrage mitschreiben; ohne Haken wird der Jahrgang trotzdem
+        gespeichert
+  - [ ] Dieselbe Liste ohne Vorhaken, wenn der Jahrgang gleich bleibt, aber
+        Abweichungen da sind – heute 59 Zeilen im Bestand
+  - [ ] Löschen nur bei null Referenzen in `lsg_best`, `lsg_win` und
+        `lsg_athlete_map`; sonst kein Knopf, sondern die Zahlen und der
+        Verweis auf „ehemalig"
+  - [ ] Liste: acht Spalten, Filter Status/Geschlecht, Suche, 100 je Seite,
+        die drei Zählspalten verlinkt
+  - [ ] Protokollierung mit `athlet_insert`, `athlet_update`, `athlet_delete`
+        und `ak_update` – je nachgerechneter Zeile eine Log-Zeile, alle am
+        selben `run_id` wie die auslösende Änderung
+  - [ ] Speichern ohne Änderung schreibt nichts und loggt nichts (wie 7.5)
+  - [ ] Die Hinweise in 6.5.3 und 7.2 bekommen die Adresse der neuen Seite –
+        bisher verweisen sie auf ein Menü, das es nicht gibt
+- [ ] **Sortierbare Spalten in `LSG_BL_Best_Table` reparieren.** Drei
+      Spaltenköpfe sind als sortierbar ausgezeichnet, aber `prepare_items()`
+      liest `orderby`/`order` nicht und `lsg_bl_best_liste()` kennt keinen
+      Sortierparameter – die Links sehen aus wie Sortierung und tun nichts.
+      Entweder durchreichen (mit Whitelist) oder die Auszeichnung entfernen.
+      Gehört zu M7, weil die neue Liste denselben Bauplan hat und den Fehler
+      sonst erbt.
 
 ### Verifikation
 
@@ -3628,6 +3686,24 @@ Schreibvorgang) und wächst mit M6 (REST).
       verworfen, mit derselben Meldung wie beim Reload
       → geprüft: Token weg, Tabelle weg, Zustand zurück auf „Bereit zum
         Parsen", Meldung wortgleich mit der des Reload-Wegs.
+- [ ] M7: der Weg, den 6.5.3 verspricht, geht durch – eine offene Zeile im
+      Import, Athlet über „Sportler" angelegt, Import erneut, Zeile ist
+      zugeordnet. Ohne einen einzigen Griff in die Datenbank
+- [ ] M7: derselbe Name mit demselben Jahrgang lässt sich kein zweites Mal
+      anlegen; derselbe Name mit anderem Jahrgang schon („Becker, Klaus")
+- [ ] M7: Jahrgang eines Athleten mit Ergebnissen ändern → die Liste nennt
+      genau die Zeilen, deren `ak` sich ändert; mit Haken stehen sie danach
+      neu in `lsg_best` **und** je eine `ak_update`-Zeile im Log; ohne Haken
+      ist nur der Jahrgang neu und keine Ergebniszeile angefasst
+- [ ] M7: Sportler mit Ergebnissen bietet keinen Löschknopf, sondern die
+      Zahlen; einer der 33 ohne Ergebnisse lässt sich löschen, und der
+      vollständige Datensatz steht vorher im Log
+- [ ] M7: „ehemalig" setzen → der Sportler verschwindet aus der Gruppe
+      „Aktiv" des Athleten-Dropdowns (7.2), seine Zeiten stehen im Frontend
+      unverändert
+- [ ] M7: Speichern ohne Änderung erzeugt keine Log-Zeile
+- [ ] M7: mit deaktiviertem JavaScript ist die Seite vollständig bedienbar –
+      Liste, Formular, Dublettenmeldung, AK-Liste, Rückfrage, Löschen
 - [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
       → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
         `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
@@ -3975,6 +4051,25 @@ vorbereitet, damit später keine Migration nötig wird:
 - [ ] **Phase 4 der README**: Pflege-Oberflächen für Sportler und Gesamtsiege.
       Die Bestenlisten-Pflege ist mit Abschnitt 7 vorgezogen und damit
       erledigt.
+      → Die Sportler-Pflege ist seit 2026-09-05 nicht mehr nur vorgemerkt,
+        sondern ausgeplant: **Abschnitt 11**, Milestone **M7**. Was hier
+        stehenbleibt, ist die Gesamtsieger-Pflege – sie hängt an den offenen
+        Punkten aus 6.5.5 und wird als M8 geführt, sobald die entschieden sind.
+        ⚠ Dabei ist zu beachten, was die Bestandsaufnahme zu Abschnitt 11
+        gezeigt hat: `lsg_win.distance` ist **Freitext**, keine Distanzcodes.
+        Unter 96 Zeilen stehen „5 km" und „5km" nebeneinander, dazu
+        „90 Minuten", „6-Stunden-Lauf", „3 x 10 km", „187,796 km/28 Loops"
+        und „Pforzheim nach Basel"; `time` ebenso („48 Runden" neben
+        `44:21:00`). Ein Auswahlfeld mit den zwölf Codes aus
+        `lsg_bl_distance_map()` wäre dort also falsch – die Gesamtsiege sind
+        eine Chronik, keine normalisierte Tabelle. Das ist vor dem Bau von M8
+        zu entscheiden, nicht dabei.
+- [ ] **Zwei Sportler zusammenführen.** Wurde dieselbe Person zweimal
+      angelegt und hängen an beiden Einträgen Ergebnisse, ist das Verschieben
+      der Zeilen plus Dublettenprüfung je Distanz und Jahr ein eigener
+      Vorgang – nicht der Löschknopf aus 11.3, der genau dann keinen anbietet.
+      Die Dublettensperre aus 11.2 sorgt dafür, dass der Fall nicht neu
+      entsteht; im Bestand gibt es ihn heute nicht.
 
 ### 9.3 Offen
 
@@ -4025,6 +4120,35 @@ Zur Wahl:
 *Vorschlag:* das zweite. Der Wettbewerb ist die Quelle des Vorschlags; wechselt
 er, ist ein ungefragt stehengebliebener Vorschlag schlicht falsch – eine
 eingetippte Entscheidung wegzuwerfen aber auch.
+
+**Zwei Zeilen in `lsg_best` gehören niemandem.** Aufgefallen bei der
+Bestandsaufnahme zu Abschnitt 11 (2026-09-05):
+
+- id 6556 – `athletes_id = 0`, `distance` leer, `00:00:00`, `ak` leer. Das ist
+  die Leerzeile, die V1 als gelöscht führt: Abschnitt 5 des
+  Bereinigungsskripts trägt „ERLEDIGT am 2026-09-01", die Zeile steht aber
+  noch da. Der `DELETE` ist nie angekommen.
+- id 6652 – `athletes_id = 465`, `15km`, `01:02:09`, Karlsruhe, `m50`,
+  15.03.2026. `lsg_athlete` reicht bis id 469, 465 fehlt darin. Der
+  Zeitstempel liegt auf 00:00 Ortszeit statt auf den 12:00 aus 6.5.1, die
+  Zeile ist also nicht über das Formular aus Abschnitt 7 entstanden.
+
+Zur Wahl:
+
+- beide löschen – id 6556 trägt nichts, und id 6652 nennt niemanden, dem
+  sie zuzuordnen wäre;
+- oder id 6652 stehen lassen, bis jemand nachgesehen hat, wer 465 war. Der
+  Import-Log weiß es unter Umständen noch – `lsg_import_log.roh_name`
+  überlebt das Löschen eines Athleten genau für diesen Fall (6.8).
+
+*Vorschlag:* erst im Log nachsehen, dann entscheiden. id 6556 kann in jedem
+Fall weg – dafür steht die Zeile im Bereinigungsskript schon geschrieben.
+
+⚠ Der eigentliche Befund ist nicht die Zeile, sondern die Abnahme: Die vier
+V1-Gegenproben stehen seit dem 2026-09-01 ungeprüft in der
+Verifikationsliste, und die erste davon, die jemand tatsächlich ausgeführt
+hat, schlägt fehl. Solange sie offen sind, ist „V1 ist erledigt" eine
+Behauptung.
 
 Was hier neu auftaucht, gehört auch wirklich entschieden, bevor es in
 Abschnitt 8 wandert.
@@ -4092,3 +4216,299 @@ Aufbau der Übersichtszeilen, die Fußzeile – und was nicht, steht in
 `tests/README.md`. Dort stehen auch die `curl`-Zeilen für den Tag, an dem
 jemand sie echt ziehen kann; danach sind die Erwartungswerte `22` in
 `runtix-adapter-test.php` anzuheben.
+
+---
+
+## 11. Backend-Oberfläche: Sportler pflegen
+
+> Der Abschnitt steht hinter dem Anhang, nicht zwischen 7 und 8. Der Grund ist
+> nüchtern: „Abschnitt 8" steht an Dutzenden Stellen in diesem Dokument, im
+> Code und in `tests/README.md`. Eine Einfügung in der Mitte würde jede dieser
+> Verweise falsch machen, um eine Zahl schöner zu sein.
+
+Drei Stellen in diesem Plan zeigen auf ein Untermenü, das es nicht gibt. P3
+schickt eine offene Zeile mit *„Athlet fehlt → Untermenü ‚Sportler'"* weiter
+(6.5.3). Das Erfassungsformular legt bewusst keinen Athleten an und
+verweist auf dieselbe Seite (7.2). Und 7.6 zählt es unter dem auf, was die
+Bestenlisten-Pflege ausdrücklich nicht tut.
+
+Solange die Seite fehlt, enden alle drei Wege in phpMyAdmin. Das ist der
+Anlass: nicht ein neues Feature, sondern das Ende einer Sackgasse, die der
+Plan an drei Stellen selbst aufgemacht hat.
+
+### Befund am Bestand (2026-09-05)
+
+Gelesen mit einem temporären Probe-Aufruf, nur `SELECT`, danach gelöscht.
+
+- **427 Sportler**, davon 256 aktiv und 171 ehemalig; 300 `m`, 127 `f`.
+  Andere Werte in `cat` oder `active` gibt es nicht.
+- **Kein Jahrgang 0**, Spanne 1929 bis 2006. Kein leerer Name, kein leerer
+  Vorname.
+- Längster Nachname 18, längster Vorname 15 Zeichen – `varchar(30)` hat Luft.
+- **Auf Nachname + Vorname + Jahrgang ist der Bestand dublettenfrei.** Genau
+  ein Namenspaar kommt doppelt vor: „Becker, Klaus", Jahrgang 1963 und 1969 –
+  zwei Personen, und für P3 unterscheidbar.
+- **33 Sportler haben keine einzige Zeile in `lsg_best`.**
+- An einem Athleten hängen im Schnitt 15 Zeilen, am meisten 131.
+- `lsg_athlete_map` ist leer – bisher kam jede Zuordnung ohne Regel aus.
+- **59 der 5 922 prüfbaren Zeilen tragen eine Altersklasse, die nicht zu
+  Jahrgang und Veranstaltungsjahr passt.** Kein Ergebnis dieses Abschnitts,
+  sondern der Anlass für einen Teil davon.
+- **Zwei Zeilen in `lsg_best` zeigen auf eine `athletes_id`, die es nicht
+  gibt.** Die eine ist id 6556 (`athletes_id = 0`, alle Felder leer,
+  `00:00:00`) – **genau die Leerzeile, die V1 als gelöscht führt.**
+  Abschnitt 5 des Bereinigungsskripts trägt „ERLEDIGT am 2026-09-01", seine
+  Gegenprobe `SELECT * FROM lsg_best WHERE id = 6556` erwartet die leere
+  Menge – und die Zeile steht noch da. Der `DELETE` ist nie angekommen. Die
+  Checkliste in Abschnitt 8 ist entsprechend zurückgesetzt.
+- Die andere ist id 6652 (`athletes_id = 465`, `15km`, `01:02:09`, Karlsruhe,
+  `m50`, Datum 15.03.2026 um 00:00 Ortszeit). `lsg_athlete` reicht bis id 469,
+  465 fehlt darin – der Athlet ist weg, die Zeile geblieben. Der Zeitstempel
+  um Mitternacht statt der 12:00 aus 6.5.1 spricht dafür, dass sie nicht über
+  das Formular aus Abschnitt 7 entstanden ist. Beide Zeilen sind in 9.3
+  aufgenommen: angesehen gehören sie, ungefragt gelöscht nicht.
+
+### 11.1 Menü, Capability und Seitenaufbau
+
+Untermenü **„Sportler"**, Slug `lsg-bestenliste-athleten`, hinter
+„Bestenliste" – die Reihenfolge steht seit 6.2 fest.
+
+**Entschieden: dieselbe Capability, `LSG_BL_CAP`.** 6.2 hatte das offen
+gelassen („ob die Athletenpflege aus Phase 4 eine eigene, engere Konstante
+braucht, wird dann entschieden") und dabei gleich das Argument geliefert, das
+jetzt entscheidet: zwei Konstanten für dieselbe Personengruppe werfen nur die
+Frage auf, welche denn nun gilt. Wer Ergebnisse erfassen darf, darf auch den
+Sportler anlegen, zu dem sie gehören.
+
+Aufbau wie Abschnitt 7 – ein Callback pro Seite, eine Datei pro Callback
+(6.2): `includes/admin/page-athlet.php` mit `lsg_bl_admin_athlet_page()`, die
+Liste in `includes/admin/class-lsg-athlet-table.php`, nachgeladen erst beim
+Rendern der Liste, weil `WP_List_Table` beim Laden des Plugins noch nicht
+existiert.
+
+Vier Ansichten über `?action=`, wie bei `lsg-bestenliste-best`:
+
+```
+?page=lsg-bestenliste-athleten                    Liste
+?page=lsg-bestenliste-athleten&action=new         leeres Formular
+?page=lsg-bestenliste-athleten&action=edit&id=N   gefüllt
+?page=lsg-bestenliste-athleten&action=delete&id=N Rückfrage (GET), Löschen per POST
+```
+
+⚠ Capability, Nonce und `check_admin_referer()` in **jedem** Handler, nicht
+nur beim Rendern (Regel aus 6.9), und die Capability-Prüfung vor der
+Nonce-Prüfung – so wie es in allen sieben vorhandenen Handlern steht.
+
+### 11.2 Das Formular
+
+Fünf Felder. Mehr hat die Tabelle nicht, und mehr braucht sie nicht.
+
+| Feld | Steuerelement | Pflicht | Regel |
+|---|---|---|---|
+| Nachname | Textfeld, max. 30 Zeichen | ja | `lsg_athlete.name` |
+| Vorname | Textfeld, max. 30 Zeichen | ja | `lsg_athlete.firstname` |
+| Jahrgang | Zahlenfeld, 1900 bis laufendes Jahr | ja | `year(4)` |
+| Geschlecht | zwei Radios, „männlich" / „weiblich" | ja | `cat`, `'m'` oder `'f'` |
+| Status | zwei Radios, „aktiv" / „ehemalig" | ja | `active`, `'1'` oder `'0'` |
+
+⚠ **Der Jahrgang hat keinen Vorgabewert und ist Pflicht.** Dieselbe
+Begründung wie bei `lsg_athlete_map.born` (6.5.3): P3 ordnet über Name **und**
+Jahrgang zu, jede Stufe davon braucht ihn, und ein Vorgabewert lädt nur dazu
+ein, ihn wegzulassen. Ein Sportler ohne Jahrgang ist für den Import
+unsichtbar – im Bestand gibt es heute keinen, und die Seite legt keinen an.
+
+**Geschlecht.** Gespeichert wird `m` oder `f`, angezeigt „männlich" und
+„weiblich". Kein drittes Zeichen: die Altersklassenrechnung (`m…`/`w…`), die
+`lsg_ak`-Tabelle und die Filter der drei Frontend-Blöcke kennen zwei Werte.
+Wer das ändern will, ändert es nicht hier zuerst.
+
+**Status.** „aktiv" / „ehemalig" ist die Mechanik, die im Athleten-Dropdown
+der Bestenlisten-Pflege die beiden `<optgroup>` trennt (7.2). Sie ist
+gleichzeitig die Antwort auf „der ist nicht mehr im Verein" – siehe 11.3.
+
+**Keine weiteren Felder.** `tstamp` setzt der Schreibvorgang. Kein
+Notizfeld – wenn eine Notiz einen Zuordnungsfall erklärt, gehört sie in
+`lsg_athlete_map.notiz`, wo die Regel steht, auf die sie sich bezieht. Keine
+Verknüpfung mit einem WordPress-Benutzerkonto: die 427 Sportler sind Personen
+in einer Vereinsstatistik, keine Anmeldungen.
+
+#### Dublettenprüfung – hier wird gesperrt, nicht gewarnt
+
+Nachname + Vorname + Jahrgang muss eindeutig bleiben.
+
+⚠ **Das ist keine Kosmetik.** P3 ordnet über genau dieses Tripel zu und
+meldet, sobald es zweimal vorkommt: *„Keine Zuordnung möglich – zwei Sportler
+heißen gleich und sind vom selben Jahrgang"* (6.5.3). Ein zweiter Eintrag
+macht also nicht bloß eine Karteileiche, er macht den Import für diesen Namen
+blind – und zwar still, weil die betroffene Zeile in der Vorschau als „offen"
+erscheint und niemand die Ursache am Athleten sucht.
+
+**Entschieden: gesperrt.** Das ist der Unterschied zu 7.3, wo geprüft und
+gewarnt, aber nicht gesperrt wird. Der Grund für den Unterschied: bei der
+Jahresbestzeit weiß der Mensch am Formular etwas, was die Datenbank nicht
+weiß – etwa dass der vorhandene Eintrag falsch ist. Bei zwei identischen
+Personen weiß er es nicht besser. Es gibt keinen Fall, in dem derselbe Name
+mit demselben Jahrgang zweimal richtig ist.
+
+Gleicher Name bei anderem Jahrgang bleibt erlaubt und wird nicht einmal
+kommentiert – „Becker, Klaus" 1963 und 1969 steht so im Bestand und ist
+richtig.
+
+Verglichen wird normalisiert: Groß-/Kleinschreibung und Randleerzeichen
+zählen nicht, damit „müller" und „Müller " nicht aneinander vorbeilaufen.
+Ein Treffer nennt die vorhandene Zeile mit Link auf ihr Formular, statt nur
+„gibt es schon" zu sagen – in neun von zehn Fällen wollte der Mensch genau
+diese Zeile bearbeiten.
+
+#### Der Jahrgang ändert sich – die Altersklassen ziehen mit
+
+`lsg_best.ak` ist gerechnet und gespeichert (7.2). Ändert sich der Jahrgang
+eines Athleten, ist jede gespeicherte Altersklasse dieses Athleten falsch –
+und zwar rückwirkend über alle Jahre.
+
+**Entschieden: die Seite rechnet die betroffenen Zeilen mit, nach Rückfrage.**
+
+Vor dem Speichern zeigt sie, was sich ändern würde – nur die Zeilen, die sich
+ändern, mit Jahr, Distanz, Leistung und `ak` alt → neu:
+
+```
+2024   Halbmarathon   01:38:12   m45 → m50
+2023   10 km          00:42:07   m45 → m50
+2019   Marathon       03:44:51   m40 → m45
+```
+
+Darunter eine Checkbox *„Die 3 Altersklassen mitschreiben"*, vorgehakt, wenn
+der Jahrgang sich geändert hat.
+
+⚠ **Ohne den Haken wird der Jahrgang trotzdem gespeichert.** Das Mitrechnen
+ist eine zweite Entscheidung, keine Bedingung. Sonst hinge die Korrektur eines
+Tippfehlers im Jahrgang an einer Liste, die der Mensch gerade nicht durchsehen
+will – und er lässt den Tippfehler stehen.
+
+Der Umfang ist überschaubar und deshalb überhaupt zumutbar: im Schnitt 15
+Zeilen, im schlimmsten Fall 131 (Befund oben). Das ist eine Liste, kein
+Wartungslauf. **Der Wartungslauf über den ganzen Bestand bleibt in 9.2** –
+dort geht es um 5 925 Zeilen und um Abweichungen ohne Anlass, hier um die
+Zeilen eines Athleten mit einem konkreten Anlass.
+
+⚠ Geschrieben wird ausschließlich `ak`. Zeit, Ort, Datum und `tstamp` der
+Ergebniszeilen bleiben unangetastet – die Änderung betrifft den Athleten,
+nicht sein Ergebnis.
+
+Dieselbe Liste erscheint auch, wenn der Jahrgang **gleich** bleibt, aber
+Abweichungen vorhanden sind – dann ohne Vorhaken. So werden die 59 Zeilen
+aus dem Befund sichtbar, sobald jemand den betreffenden Athleten öffnet, ohne
+dass die Seite ungefragt in einen Bestand schreibt, den niemand geprüft hat.
+
+### 11.3 Liste, Bearbeiten, Löschen
+
+Einstieg ist eine `WP_List_Table` über `lsg_athlete`.
+
+- **Spalten:** Nachname, Vorname, Jahrgang, Geschlecht, Status, Ergebnisse,
+  Gesamtsiege, Regeln.
+- Die drei Zählspalten sind verlinkt: Ergebnisse auf
+  `lsg-bestenliste-best&athlet=N` (die Bestenlisten-Pflege kennt diesen Filter
+  schon), Regeln auf `lsg-bestenliste-map`. Eine Zahl, die nirgends hinführt,
+  beantwortet die nächste Frage nicht.
+- **Filter:** Status (aktiv / ehemalig / alle), Geschlecht, Suche über
+  Nachname und Vorname.
+- **Vorgabesortierung:** Nachname, dann Vorname. Sortierbar: Nachname,
+  Jahrgang, Ergebnisse.
+- **100 Zeilen je Seite.** 427 Sportler passen damit auf fünf Seiten, und der
+  eigentliche Weg zum Athleten ist ohnehin die Suche.
+
+⚠ **Ein Fehler, der nicht mitwandern darf.** In `LSG_BL_Best_Table` sind drei
+Spaltenköpfe als sortierbar ausgezeichnet, aber `prepare_items()` liest
+`orderby`/`order` nicht, und `lsg_bl_best_liste()` kennt keinen
+Sortierparameter – die Links sehen aus wie Sortierung und tun nichts. Hier
+gilt: entweder die Spalte sortiert wirklich, oder sie ist nicht als sortierbar
+ausgezeichnet. Und die Bestenlisten-Tabelle wird nachgezogen; das ist ein
+Fehler, kein Entwurf (Checkliste in Abschnitt 8).
+
+**Bearbeiten** öffnet dasselbe Formular, gefüllt.
+
+**Löschen – nur, wenn nichts daran hängt.**
+
+Vor der Rückfrage zählt die Seite drei Dinge: Zeilen in `lsg_best`, Zeilen in
+`lsg_win`, Regeln in `lsg_athlete_map`.
+
+- **Alles null** → Rückfrage mit dem vollständigen Datensatz, dann löschen.
+  Das trifft heute 33 der 427 – angelegt, aber nie gelaufen.
+- **Sonst kein Löschknopf.** Stattdessen der Satz, was daranhängt, mit den
+  Links aus der Liste, und der Verweis auf „ehemalig".
+
+⚠ **Der Grund ist nicht Vorsicht, sondern Reparierbarkeit.** `lsg_best` hat
+keinen Fremdschlüssel auf `lsg_athlete`. Eine gelöschte `athletes_id`
+hinterlässt Zeilen, die in der Bestenliste ohne Namen stehen und aus denen
+nicht mehr hervorgeht, wem sie gehörten – die Zeit ist da, die Person ist weg.
+Zwei solche Zeilen gibt es bereits (Befund oben), und sie sind der beste
+Beleg: id 6652 trägt `15km`, `01:02:09` und `m50`, und niemand kann heute noch
+sagen, wer das gelaufen ist.
+
+⚠ **„Ehemalig" ist kein Löschen und soll auch nicht so aussehen.** Der
+Sportler bleibt im Athleten-Dropdown, in der Gruppe „Ehemalige" – ein Ergebnis
+von 2019 kann zu jemandem gehören, der längst ausgetreten ist (7.2). Die
+Bestenliste zeigt seine Zeiten unverändert weiter. Vereinsgeschichte
+verschwindet nicht, weil jemand den Verein verlässt.
+
+### 11.4 Protokollierung
+
+Auch hier gilt, was 6.2 für die Zugriffsentscheidung festgehalten hat:
+**Nachvollziehbarkeit ersetzt die Zugriffsbeschränkung.** Jeder angemeldete
+Benutzer darf pflegen; deshalb muss nachlesbar bleiben, wer was getan hat. Ein
+geänderter Jahrgang, der still 131 Altersklassen umschreibt, ist genau der
+Fall, den dieser Satz verbietet.
+
+Geschrieben wird in dieselben zwei Tabellen wie beim Import und bei der
+manuellen Erfassung (6.8, 7.5), nicht in eine dritte.
+
+Ein `lsg_import_run` je Formularvorgang: `adapter 'manuell'`,
+`datum_quelle 'manuell'`, `source_url`, die drei `event_*`-, die
+`contest_*`- und die `list_*`-Felder leer, `distance` und `town` leer,
+`event_date` `NULL`, `jahr 0`, `zeit_typ` leer, die drei Trichterzähler
+`cnt_gelesen`/`cnt_lsg`/`cnt_zugeordnet` auf 0, `user_id` der angemeldete
+Benutzer.
+
+Dazu `lsg_import_log`-Zeilen mit `match_type 'manuell'`, `athletes_id`,
+`roh_name`, `roh_vorname`, `roh_jahrgang` und einer sprechenden `meldung`.
+
+Vier neue Werte im Wertebereich von `aktion` (6.8) – die Spalte ist
+`varchar(20)`, es braucht keine `ALTER TABLE`:
+
+```
+athlet_insert   Sportler angelegt
+athlet_update   Sportler geändert   (meldung nennt die geänderten Felder)
+athlet_delete   Sportler gelöscht   (Rohfelder = Stand vor dem Löschen)
+ak_update       Altersklasse einer Bestandszeile nachgerechnet
+                (best_id, ak = neu, meldung = „m45 → m50")
+```
+
+⚠ **Das Nachrechnen schreibt eine Log-Zeile je geänderter Ergebniszeile**,
+nicht eine für den ganzen Vorgang. Sonst beantwortet das Log die Frage nicht,
+für die es da ist: *„warum steht bei X diese Altersklasse"* (7.5). Alle
+gehören zum selben `run_id` wie die `athlet_update`-Zeile, die sie ausgelöst
+hat – so ist der Zusammenhang lesbar und ein späteres Zurückrollen (9.2) hätte
+eine Klammer.
+
+⚠ Wie in 7.5: **eine Speicherung, die nichts ändert, schreibt nichts** und
+erzeugt keine Log-Zeile. Die Meldung nennt die geänderten Felder
+(„Jahrgang 1975 → 1976"), nicht die unveränderten.
+
+Die Log-Ansicht bekommt keinen neuen Filter – „von Hand erfasst"
+(`adapter = 'manuell'`, 7.5) fasst beide manuellen Seiten zusammen, und die
+`aktion`-Spalte unterscheidet sie ohnehin.
+
+### 11.5 Was diese Seite ausdrücklich nicht tut
+
+- **Keine Ergebnisse erfassen.** Das ist Abschnitt 7, und der Weg dorthin ist
+  die verlinkte Zählspalte.
+- **Kein Zusammenführen zweier Sportler.** Wenn dieselbe Person zweimal
+  angelegt wurde und an beiden Einträgen Ergebnisse hängen, ist das
+  Verschieben der Zeilen plus Dublettenprüfung je Distanz und Jahr ein eigener
+  Vorgang – vorgemerkt in 9.2, nicht hier hineingeschmuggelt. Die
+  Dublettensperre aus 11.2 sorgt dafür, dass der Fall nicht neu entsteht.
+- **Kein Nachrechnen des ganzen Bestands.** Nur die Zeilen des Athleten, den
+  jemand gerade offen hat (11.2). Der Wartungslauf bleibt 9.2.
+- **Kein CSV-Import einer Mitgliederliste.** Gleiche Begründung wie in 7.6:
+  für Massen gibt es den Import, und der bringt seine Athleten nicht mit.
+- **Keine Verbindung zu WordPress-Benutzerkonten.**
