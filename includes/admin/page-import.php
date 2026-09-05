@@ -35,6 +35,30 @@ if ( ! defined( 'ABSPATH' ) ) {
  * ---------------------------------------------------------------------- */
 
 /**
+ * Das Icon des Menüpunkts: eine eigene Läufer-Silhouette (assets/icons/menu-icon.svg)
+ * statt des generischen Dashicons „chart-line" – das hatte mit „Bestenliste"
+ * nur die Assoziation Diagramm gemein, nichts Eigenes.
+ *
+ * ⚠ Als Base64-SVG mit fill/stroke „black" eingebunden, wie von add_menu_page()
+ * für genau diesen Fall dokumentiert: WordPress färbt so ein Icon selbst passend
+ * zum jeweiligen Admin-Farbschema ein. Fehlt die Datei (Auslieferung ohne
+ * assets/), faellt die Funktion auf den alten Dashicon zurueck, statt einen
+ * fehlerhaften Menüpunkt zu zeigen.
+ *
+ * @return string Data-URI oder Dashicon-Klasse.
+ */
+function lsg_bl_admin_menu_icon() {
+	$datei = LSG_BL_PATH . 'assets/icons/menu-icon.svg';
+	$svg   = is_readable( $datei ) ? file_get_contents( $datei ) : false;
+
+	if ( ! $svg ) {
+		return 'dashicons-chart-line';
+	}
+
+	return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+}
+
+/**
  * Ein Top-Level-Menü, das später die weiteren Pflege-Oberflächen aufnimmt
  * (Import-Log, Zuordnungen, Bestenliste – Plan 6.2).
  *
@@ -50,7 +74,7 @@ function lsg_bl_admin_menu() {
 		LSG_BL_CAP,
 		'lsg-bestenliste',
 		'lsg_bl_admin_import_page',
-		'dashicons-chart-line',
+		lsg_bl_admin_menu_icon(),
 		58
 	);
 
