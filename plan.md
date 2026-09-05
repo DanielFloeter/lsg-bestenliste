@@ -1813,6 +1813,27 @@ stillschweigend abschneiden.
 
 Offene Punkte für die spätere Umsetzung:
 
+> ⚠ **Nachtrag 2026-09-05.** Drei der vier Punkte sind mit **Abschnitt 12**
+> (M8) entschieden, der erste bleibt offen und wird **M9**:
+>
+> - Die Dublettenprüfung ist **Athlet + Datum + Veranstaltung**, und sie
+>   sperrt – aber nur den exakt gleichen Sieg. Mehrere Siege eines Athleten
+>   im selben Jahr sind der Normalfall, anders als bei `lsg_best` (12.3).
+> - Der kleine Klassensieg zählt weiterhin nicht.
+> - `win_insert` ist ab M8 in Gebrauch, dazu kommen `win_update` und
+>   `win_delete`.
+> - Offen bleibt allein die erste Frage – Checkbox oder eigener Schritt.
+>   M8 legt keine von beiden an: der 🏆-Hinweis bekommt einen Link ins
+>   vorbelegte Formular, mehr nicht (12.6). Ob der Klick überhaupt stört,
+>   zeigt sich, wenn die Seite ein paar Wochen benutzt wurde.
+>
+> Und ein Befund, der die spätere Umsetzung betrifft: `lsg_win.distance` und
+> `.time` sind **Freitext**, nicht die Codes aus `lsg_bl_distance_map()` –
+> unter den 96 Zeilen stehen „90 Minuten", „3 x 10 km", „Pforzheim nach
+> Basel" und „48 Runden". Ein Import, der dorthin schreibt, darf also nicht
+> annehmen, sein normalisierter Distanzcode sei dort das richtige Format
+> (12.1).
+
 - Eigene Checkbox-Spalte „auch als Gesamtsieg übernehmen", oder ein separater
   Arbeitsschritt nach dem Bestzeiten-Import?
 - Dublettenprüfung in `lsg_win` (Athlet + Datum + Veranstaltung) analog zu P4.
@@ -2699,6 +2720,12 @@ Vorgangsübersicht so aussehen, als wäre etwas gelesen und gefiltert worden.
   wie in 6.5.5 entschieden. Wenn dieser Ausbaustand kommt, bekommt er ein
   eigenes Formular auf derselben Seite – die Felder sind fast dieselben, aber
   `lsg_win` hat mit `event` eine Spalte mehr.
+  → ⚠ **Nicht auf derselben Seite** – revidiert mit Abschnitt 12 (M8).
+    `lsg_win` ist eine Chronik mit Freitext in `distance` und `time`,
+    `lsg_best` eine gerechnete Tabelle mit Normalisierung, Altersklasse und
+    Jahresregel. Sie teilen sich die Spaltennamen, nicht die Regeln. Die
+    Gesamtsiege bekommen deshalb ihre eigene Seite, wie 6.2 es ohnehin
+    vorgesehen hatte.
 - **Keinen Bestand nachrechnen** – weder AK-Massenkorrektur noch das Auflösen
   vorhandener Doppelzeilen (9.2).
 - **Kein CSV-Upload.** Für Massen gibt es den Import; für alles andere ist ein
@@ -2800,6 +2827,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | ✅ **erledigt 2026-09-02** – ein 24-Stunden-Ergebnis (`112,737 km`) ist von Hand erfassbar, landet mit `ak = m45` in `lsg_best` und als `adapter = 'manuell'` im Log; eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg, und Löschen protokolliert den vollständigen Datensatz, bevor die Zeile weg ist |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | ✅ **erledigt 2026-09-05** – derselbe Ablauf ohne einen einzigen Seitenaufbau: Adresse prüfen, Wettbewerb wählen, parsen, übernehmen. Die drei laufenden Zustände (`erkenne`, `parse`, `uebernahme`) sind jetzt sichtbar, die Kopf-Checkbox ist da, das Knopf-Label zählt mit, und der Statusfilter kostet die gesetzten Haken nicht mehr. Mit deaktiviertem JavaScript verhält sich die Seite unverändert wie nach M5 |
 | M7 | Seite „Sportler" (Abschnitt 11) | ✅ **erledigt 2026-09-05** – durchgespielt mit einem eigens angelegten Testsportler: anlegen → Ergebnis erfassen → Jahrgang 1990 auf 1965 ändern → die eine Bestandszeile wechselt nach Rückfrage von `mhk` auf `m50`, mit `athlet_update` und `ak_update` am selben `run_id` → Ergebnis löschen → Sportler löschen. Ein zweiter Anlegeversuch mit demselben Namen und Jahrgang wird vom Schreibweg abgewiesen, nicht nur vom Formular; ein Sportler mit Ergebnissen bekommt gar keinen Löschknopf. Der Bestand steht danach wieder bei 427 Sportlern |
+| M8 | Seite „Gesamtsiege" (Abschnitt 12) | ein Gesamtsieg ist aus der Oberfläche heraus einzutragen, zu ändern und zu löschen, ohne phpMyAdmin; `distance` und `time` bleiben Freitext und bekommen Vorschläge aus dem Bestand; derselbe Sieg lässt sich nicht zweimal eintragen, mehrere Siege eines Athleten im selben Jahr schon; der Hinweis über der Übernahme-Tabelle führt mit einem Klick ins gefüllte Formular |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
 Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
@@ -3395,6 +3423,30 @@ prüft am Ende keinen von beiden.
   - [x] Speichern ohne Änderung schreibt nichts und loggt nichts (wie 7.5)
   - [x] Die Hinweise in 6.5.3 und 7.2 bekommen die Adresse der neuen Seite –
         bisher verweisen sie auf ein Menü, das es nicht gibt
+- [ ] **Admin-Seite „Gesamtsiege" (Abschnitt 12) – M8**
+  - [ ] Untermenü `lsg-bestenliste-win` hinter „Sportler", `LSG_BL_CAP`,
+        Hook in `lsg_bl_admin_assets()`
+  - [ ] `includes/admin/page-win.php` + `includes/admin/class-lsg-win-table.php`
+  - [ ] Sechs Felder: Datum, Ort, Veranstaltung, Distanz, Athlet, Zeit
+  - [ ] **Nichts normalisieren** – weder Zeit noch Distanz (12.1)
+  - [ ] `<datalist>` aus `SELECT DISTINCT`, nach Häufigkeit sortiert; eine
+        Eingabe ausserhalb der Liste wird angenommen
+  - [ ] `event` über 40 Zeichen wird zurückgewiesen, nicht abgeschnitten,
+        und die Meldung nennt die Zeichenzahl (6.5.5)
+  - [ ] Athlet über `lsg_bl_athleten_select()` – wiederverwendet, nicht
+        nachgebaut – mit Link auf „Sportler anlegen"
+  - [ ] Dublettensperre auf Athlet + Datum + Veranstaltung, normalisiert
+        verglichen; mehrere Siege im Jahr bleiben unkommentiert
+  - [ ] Liste: sechs Spalten, Filter Jahr/Athlet, Suche über Veranstaltung
+        und Ort, Datum absteigend, 50 je Seite; sortierbare Spalten
+        sortieren wirklich
+  - [ ] Löschen mit Rückfrage und POST, vollständiger Datensatz vorher ins
+        Log; **keine** Referenzprüfung – an einer win-Zeile hängt nichts
+  - [ ] Protokollierung mit `win_insert` (der reservierte Wert aus 6.5.5),
+        `win_update` und `win_delete`; `event_name` ist hier gefüllt
+  - [ ] Speichern ohne Änderung schreibt nichts und loggt nichts
+  - [ ] Der 🏆-Hinweis über der Übernahme-Tabelle bekommt den Link ins
+        vorbelegte Formular (12.6) – **kein** Schreibvorgang aus dem Import
 - [x] **Sortierbare Spalten in `LSG_BL_Best_Table` repariert.** Drei
       Spaltenköpfe sind als sortierbar ausgezeichnet, aber `prepare_items()`
       liest `orderby`/`order` nicht und `lsg_bl_best_liste()` kennt keinen
@@ -3755,6 +3807,20 @@ Schreibvorgang) und wächst mit M6 (REST).
         gewöhnliches Formular an `admin-post.php` bzw. ein Link. Geprüft ist
         das ausgelieferte Markup, nicht die Darstellung in einem Browser mit
         abgeschaltetem JavaScript – dieselbe Einschränkung wie bei M6.
+- [ ] M8: ein Gesamtsieg mit `48 Runden` als Zeit und `Pforzheim nach Basel`
+      als Distanz lässt sich speichern und steht danach unverändert in der
+      Datenbank und im Frontend-Block
+- [ ] M8: derselbe Athlet am selben Tag bei derselben Veranstaltung ein
+      zweites Mal → abgewiesen; derselbe Athlet an einem anderen Tag →
+      angenommen, ohne Kommentar
+- [ ] M8: ein Veranstaltungsname mit 41 Zeichen wird zurückgewiesen, nicht
+      gekürzt – und die Meldung sagt, um wie viel
+- [ ] M8: die Vorschlagsliste zeigt die Werte des Bestands; ein Wert, der
+      nicht darin steht, wird trotzdem angenommen
+- [ ] M8: der 🏆-Link aus der Übernahme-Tabelle öffnet das Formular
+      gefüllt, und der Import schreibt dabei weiterhin nichts nach `lsg_win`
+- [ ] M8: Löschen protokolliert den vollständigen Datensatz, bevor die Zeile
+      weg ist
 - [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
       → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
         `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
@@ -4084,9 +4150,13 @@ vorbereitet, damit später keine Migration nötig wird:
       zurückgerollter Vorgang muss als solcher markiert werden (sonst rollt ihn
       jemand zweimal zurück), und ein späterer Import auf denselben Datensatz
       macht das Zurückrollen ungültig – dann darf es nicht mehr angeboten werden.
-- [ ] **Gesamtsieg nach `lsg_win` schreiben** (6.5.5). Erkennung und Markierung
-      kommen jetzt, das Schreiben später. Spalten `roh_platz`, `gesamtsieg` und
-      die Log-Aktion `win_insert` sind bereits vorgesehen.
+- [ ] **Gesamtsieg aus der Übernahme heraus nach `lsg_win` schreiben** –
+      **M9** (6.5.5). Erkennung und Markierung stehen seit M3, die Oberfläche
+      zum Eintragen seit M8 (Abschnitt 12); `win_insert` ist damit in
+      Gebrauch. Was fehlt, ist der Schreibvorgang ohne Umweg über das
+      Formular – Checkbox in der Übernahme-Tabelle oder eigener Schritt
+      danach. Zu entscheiden, wenn die Seite aus M8 ein paar Wochen benutzt
+      wurde: dann zeigt sich, ob der Klick überhaupt stört.
 - [ ] **Bestand nachrechnen.** Ändert sich der Jahrgang eines Athleten, sind
       dessen gespeicherte `lsg_best.ak`-Werte falsch. Das Formular rechnet nur
       die Zeile neu, die es speichert (7.4). Ein Durchlauf über den ganzen
@@ -4102,10 +4172,10 @@ vorbereitet, damit später keine Migration nötig wird:
 - [ ] **Phase 4 der README**: Pflege-Oberflächen für Sportler und Gesamtsiege.
       Die Bestenlisten-Pflege ist mit Abschnitt 7 vorgezogen und damit
       erledigt.
-      → Die Sportler-Pflege ist seit 2026-09-05 nicht mehr nur vorgemerkt,
-        sondern ausgeplant: **Abschnitt 11**, Milestone **M7**. Was hier
-        stehenbleibt, ist die Gesamtsieger-Pflege – sie hängt an den offenen
-        Punkten aus 6.5.5 und wird als M8 geführt, sobald die entschieden sind.
+      → Beide Teile sind seit 2026-09-05 ausgeplant: die Sportler-Pflege als
+        **Abschnitt 11** (M7, gebaut), die Gesamtsieger-Pflege als
+        **Abschnitt 12** (M8). Mit dem Bau von M8 ist dieser Posten erledigt –
+        was von 6.5.5 offenbleibt, steht als M9 eine Zeile weiter oben.
         ⚠ Dabei ist zu beachten, was die Bestandsaufnahme zu Abschnitt 11
         gezeigt hat: `lsg_win.distance` ist **Freitext**, keine Distanzcodes.
         Unter 96 Zeilen stehen „5 km" und „5km" nebeneinander, dazu
@@ -4595,3 +4665,199 @@ Die Log-Ansicht bekommt keinen neuen Filter – „von Hand erfasst"
 - **Kein CSV-Import einer Mitgliederliste.** Gleiche Begründung wie in 7.6:
   für Massen gibt es den Import, und der bringt seine Athleten nicht mit.
 - **Keine Verbindung zu WordPress-Benutzerkonten.**
+
+---
+
+## 12. Backend-Oberfläche: Gesamtsiege pflegen
+
+Der zweite Teil der Phase 4, und der letzte Menüpunkt aus 6.2. Anders als bei
+den Sportlern ist hier nichts blockiert – Gesamtsiege sind seit jeher
+Handarbeit, und 6.5.5 hat das ausdrücklich so entschieden. Der Anlass ist
+schlichter: es gibt keinen Weg, einen einzutragen, ausser über phpMyAdmin.
+
+⚠ **Diese Seite ist nicht die Bestenlisten-Pflege mit anderen Spalten.**
+7.6 hat noch angenommen, der Gesamtsieg bekomme „ein eigenes Formular auf
+derselben Seite – die Felder sind fast dieselben". Das stimmt nicht, und der
+Befund unten sagt, warum: `lsg_win` ist eine Chronik, `lsg_best` eine
+gerechnete Tabelle. Sie teilen sich die Spaltennamen, nicht die Regeln.
+
+### Befund am Bestand (2026-09-05)
+
+- **96 Zeilen**, Jahrgänge 2016 bis 2025. Kein leeres Datum, keine verwaiste
+  `athletes_id`, **keine Dublette** auf Athlet + Datum + Veranstaltung.
+- `event` ist am längsten 36 Zeichen – die Spalte fasst 40. Keine leere.
+- `town` ist am längsten 25 Zeichen (Spalte: 30).
+- **`distance` ist Freitext.** Die häufigsten Werte sind `5 km` (26),
+  `10 km` (16), `Halbmarathon` (6), `Marathon` (5) und `10km` (4) – daneben
+  aber `52 km`, `90 Minuten`, `6-Stunden-Lauf`, `6 Std`, `6 Stundenlauf`,
+  `3 x 10 km`, `187,796 km/28 Loops`, `328,57 km`, `6d`, `div. Distanzen`
+  und `Pforzheim nach Basel`.
+- **`time` ebenso.** Neben `00:17:17` und `04:04:54` stehen `48 Runden`
+  (3 Zeilen), `241,621 km` und `44:21:00` – letzteres über 24 Stunden.
+- Ein Athlet hat 2025 dreimal gewonnen. Mehrere Siege im selben Jahr sind
+  der Normalfall, kein Fehler.
+
+### 12.1 Warum hier nichts normalisiert wird
+
+**Entschieden: `distance` und `time` bleiben Freitext, mit Vorschlagsliste.**
+
+Der Bestand ist nicht unordentlich, er ist *anders*. „Pforzheim nach Basel"
+ist keine schlecht geschriebene Distanz, sondern die einzige zutreffende
+Auskunft über diesen Lauf; `48 Runden` ist keine kaputte Zeit, sondern das
+Ergebnis. Ein Auswahlfeld mit den zwölf Codes aus `lsg_bl_distance_map()`
+würde diese Zeilen nicht ordnen, sondern verbieten.
+
+⚠ **Und deshalb läuft hier keine der Normalisierungen aus 6.5.1 und 7.2.**
+`lsg_bl_leistung_lesen()` würde `48 Runden` zurückweisen; die Zeitprüfung
+kennt Stunden über 24 nicht sicher, und `44:21:00` steht so im Bestand.
+Geschrieben wird, was getippt wurde – getrimmt, sonst unangetastet.
+
+Was die Oberfläche stattdessen tut: sie zeigt unter beiden Feldern, was im
+Bestand schon vorkommt (`<datalist>` aus `SELECT DISTINCT`, nach Häufigkeit
+sortiert). Wer „10 km" tippen will, bekommt „10 km" vorgeschlagen und schreibt
+nicht zum fünften Mal „10km". Das vereinheitlicht durch Angewohnheit, nicht
+durch Verbot – und es kostet keine Migration.
+
+⚠ Die Vorschlagsliste ist eine Zugabe, kein Filter: eine Eingabe, die nicht in
+der Liste steht, wird angenommen. `<datalist>` verhält sich ohne JavaScript
+genauso, in älteren Browsern fällt sie ersatzlos weg, und das Feld bleibt ein
+Textfeld.
+
+⚠ **Die Frontend-Ausgabe verträgt beides schon heute.** `render-gesamtsiege.php`
+schickt `distance` durch `lsg_bl_distance_label()`, und die Funktion gibt
+unbekannte Werte unverändert zurück (`class-lsg-helpers.php`). Deshalb steht
+dort für die vier `10km`-Zeilen dasselbe wie für die sechzehn `10 km`-Zeilen.
+Die Uneinheitlichkeit ist in der Datenbank sichtbar, nicht auf der Website.
+
+### 12.2 Menü, Capability und Seitenaufbau
+
+Untermenü **„Gesamtsiege"**, Slug `lsg-bestenliste-win`, hinter „Sportler" –
+der letzte Eintrag aus der Tabelle in 6.2. Capability `LSG_BL_CAP` wie überall.
+
+`includes/admin/page-win.php` mit `lsg_bl_admin_win_page()`, die Liste in
+`includes/admin/class-lsg-win-table.php`, nachgeladen erst beim Rendern.
+Vier Ansichten über `?action=` – Liste, `new`, `edit&id=`, `delete&id=` –,
+gelöscht wird per POST. Alles wie in 7.1 und 11.1; Capability und
+`check_admin_referer()` in jedem Handler, Capability zuerst.
+
+### 12.3 Das Formular
+
+| Feld | Steuerelement | Pflicht | Regel |
+|---|---|---|---|
+| Datum | `<input type="date">` + Textfallback | ja | Veranstaltungsdatum |
+| Ort | Textfeld, max. 30 Zeichen | ja | `lsg_win.town` |
+| Veranstaltung | Textfeld, max. 40 Zeichen | ja | `lsg_win.event` |
+| Distanz | Textfeld mit `<datalist>`, max. 20 Zeichen | ja | Freitext (12.1) |
+| Athlet | Select über `lsg_athlete` | ja | `athletes_id` |
+| Zeit | Textfeld mit `<datalist>`, max. 15 Zeichen | ja | Freitext (12.1) |
+
+**Der Athlet kommt aus demselben Select wie in 7.2** – zwei `<optgroup>`,
+„Aktiv" und „Ehemalige", sortiert nach Name. `lsg_bl_athleten_select()` wird
+wiederverwendet, nicht nachgebaut. Wer fehlt, wird unter „Sportler"
+angelegt (Abschnitt 11), und der Hinweis darunter verlinkt dorthin.
+
+⚠ **`event` wird nicht stillschweigend abgeschnitten.** Die Spalte fasst 40
+Zeichen, der längste vorhandene Name hat 36 – es ist also eng, aber es geht.
+Eine zu lange Eingabe wird zurückgewiesen, mit der Zeichenzahl im Klartext,
+damit der Mensch selbst kürzt. So steht es schon in 6.5.5: „kürzbares Feld in
+der Oberfläche, nicht stillschweigend abschneiden". Ein automatisch
+gekürzter Veranstaltungsname ist eine Falschangabe, die niemand bemerkt.
+
+⚠ **Keine Altersklasse.** `lsg_win` hat keine `ak`-Spalte, und das ist
+richtig: ein Gesamtsieg ist der Sieg in der Gesamtwertung, per Definition
+klassenunabhängig (6.5.5). Es gibt hier also auch nichts nachzurechnen, wenn
+sich ein Jahrgang ändert – der Grund, warum 11.2 nur `lsg_best` anfasst.
+
+**Dublettensperre: Athlet + Datum + Veranstaltung.** So steht es in 6.5.5.
+
+⚠ Das ist eine andere Regel als in 7.3, und der Unterschied ist der Zweck der
+Tabelle. `lsg_best` hält Jahresbestleistungen – eine zweite Zeile für
+Athlet/Distanz/Jahr ist dort immer kaputt. `lsg_win` ist eine Chronik: wer
+dreimal im Jahr gewinnt, hat drei Zeilen, und im Bestand ist genau das der
+Fall. Gesperrt wird deshalb nur der exakt gleiche Sieg – gleiche Person,
+gleicher Tag, gleiche Veranstaltung. Alles andere ist erlaubt und wird nicht
+kommentiert.
+
+Verglichen wird wie in 11.2 normalisiert (Kleinschreibung, Randleerzeichen),
+und ein Treffer nennt die vorhandene Zeile mit Link.
+
+### 12.4 Liste, Bearbeiten, Löschen
+
+Eine `WP_List_Table` über `lsg_win`, verbunden mit `lsg_athlete`.
+
+- **Spalten:** Datum, Ort, Veranstaltung, Distanz, Sportler, Zeit.
+- **Vorgabesortierung:** Datum absteigend – die Chronik liest sich von heute
+  nach hinten. Sortierbar sind Datum, Ort und Sportler; die drei sortieren
+  wirklich (siehe die Notiz zu `LSG_BL_Best_Table` in 11.3).
+- **Filter:** Jahr, Athlet, Suche über Veranstaltung und Ort.
+- **50 Zeilen je Seite.** Bei 96 Zeilen sind das zwei; wächst die Tabelle,
+  wächst sie langsam.
+
+**Löschen** mit Rückfrage und POST, wie in 7.4 und 11.3, und der vollständige
+Datensatz geht vorher ins Log.
+
+⚠ **Hier gibt es keine Referenzprüfung wie in 11.3.** An einer
+`lsg_win`-Zeile hängt nichts – sie ist selbst das Blatt. Der Grund, aus dem
+ein Sportler nicht löschbar ist, gilt hier also nicht.
+
+### 12.5 Protokollierung
+
+Dieselben zwei Tabellen wie überall (6.8, 7.5, 11.4). Ein `lsg_import_run` je
+Formularvorgang mit `adapter 'manuell'`, `datum_quelle 'manuell'`,
+`event_name` = der eingegebene Veranstaltungsname (hier gibt es endlich
+einen), `event_date` = das Datum, `jahr` = dessen Jahr, `distance` und `town`
+aus dem Formular, die Trichterzähler auf 0.
+
+Dazu eine `lsg_import_log`-Zeile mit `match_type 'manuell'` und den drei
+Aktionen:
+
+```
+win_insert   Gesamtsieg eingetragen   ← der reservierte Wert aus 6.5.5,
+                                        jetzt zum ersten Mal benutzt
+win_update   Gesamtsieg geändert      (meldung nennt die geänderten Felder)
+win_delete   Gesamtsieg gelöscht      (Rohfelder = Stand vor dem Löschen)
+```
+
+⚠ `time_neu` trägt die Zeit so, wie sie eingegeben wurde – auch `48 Runden`.
+Die Spalte ist `varchar(15)`, das reicht; und ein Log, das die Eingabe
+normalisiert, protokolliert nicht die Eingabe.
+
+⚠ Wie in 7.5 und 11.4: **eine Speicherung ohne Änderung schreibt nichts** und
+erzeugt keine Log-Zeile.
+
+Weil `event_name` gefüllt ist, steht in der Log-Liste der Veranstaltungsname –
+die Ableitung aus 11.4 („Sportler gepflegt" / „Von Hand erfasst") greift hier
+also gar nicht erst.
+
+### 12.6 Der Weg vom Import hierher
+
+Der Import erkennt einen Gesamtsieg und markiert ihn mit 🏆, schreibt aber
+nichts (6.5.5, so gebaut und geprüft mit M3). **Das bleibt so.**
+
+Was dazukommt, ist eine Abkürzung: Der Hinweis über der Übernahme-Tabelle –
+bisher *„1 Gesamtsieg erkannt – Eintrag in die Gesamtsiege bitte noch von Hand"* –
+bekommt einen Link auf `?page=lsg-bestenliste-win&action=new&…` mit Datum,
+Ort, Veranstaltung, Distanz, Athlet und Zeit in der Query. Das Formular öffnet
+sich gefüllt, der Mensch sieht drüber und speichert.
+
+⚠ **Das ist kein Schreibvorgang aus dem Import heraus.** Der Import bleibt
+eine Sache, die Chronik eine andere; was hier reist, ist eine Adresse, keine
+Datenbankzeile. Die Vorbelegung funktioniert ohne Zusatzarbeit, weil das
+Formular seine Werte ohnehin aus der Query nimmt (12.3, wie 7.2 und 11.2).
+
+Der Ausbau, bei dem die Übernahme selbst nach `lsg_win` schreibt – Checkbox in
+der Tabelle oder eigener Schritt danach –, bleibt offen und wird **M9**
+(9.2). Erst wenn diese Seite steht, ist überhaupt sichtbar, ob er sich lohnt.
+
+### 12.7 Was diese Seite ausdrücklich nicht tut
+
+- **Nichts normalisieren** (12.1). Weder Zeiten noch Distanzen.
+- **Nicht aus dem Import schreiben** – nur den vorbelegten Link anbieten
+  (12.6). Der Schreibweg ist M9.
+- **Keine Verbindung zu `lsg_best`.** Ein Gesamtsieg ist keine
+  Jahresbestleistung und umgekehrt; wer beides erfassen will, erfasst beides.
+  Das klingt nach doppelter Arbeit und ist der Preis dafür, dass ein
+  langsamer Sieg in einem kleinen Feld die Bestenliste nicht anfasst.
+- **Keine Altersklasse, kein Nachrechnen** (12.3).
+- **Keine Erkennung.** Wer gewonnen hat, weiss der Mensch oder der Import –
+  diese Seite fragt nicht nach.
