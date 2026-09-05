@@ -1204,82 +1204,196 @@ function lsg_bl_import_schritt3( array $w, array $disc, $vorbelegung ) {
  * ---------------------------------------------------------------------- */
 
 /**
- * Die erkannten Gesamtsiege – Hinweis plus Abkürzung (Plan 12.6).
+ * Die erkannten Gesamtsiege – je einer mit seinem eigenen kleinen Formular
+ * (Plan, Abschnitt 13).
  *
- * ⚠ **Hier wird nichts geschrieben.** Der Import bleibt eine Sache, die
- * Chronik in `lsg_win` eine andere (6.5.5). Was hier entsteht, ist eine
- * Adresse: ein Link auf das Formular der Seite „Gesamtsiege" mit Datum, Ort,
- * Veranstaltung, Distanz, Athlet und Zeit in der Query. Das Formular nimmt
- * seine Werte ohnehin aus der Query (12.3), es braucht dafür keine Zeile
- * Sonderbehandlung.
+ * ⚠ **Der Block steht VOR der Tabelle, nicht darin.** Verschachtelte
+ * `<form>`-Elemente gibt es in HTML nicht; der Browser hängt das innere aus,
+ * und das Übernahme-Formular wäre kaputt. Eigenes Formular, eigener Handler,
+ * eigener Nonce (13.2).
  *
- * ⚠ Als Distanz reist das Label, nicht der Code: `lsg_win.distance` ist
- * Freitext, und dort steht „10 km", nicht `10km` (12.1).
+ * ⚠ **Das Angebot hängt nicht an der Übernahme** (13.1). Wer ein kleines
+ * Rennen gewinnt, war womöglich langsamer als seine eigene Jahresbestzeit –
+ * dann schreibt der Import nach `lsg_best` nichts und der Sieg gehört
+ * trotzdem in die Chronik. Der Block erscheint deshalb, sobald die Vorschau
+ * da ist, unabhängig vom Status der Zeile.
  *
- * @param array $sieger Die Zeilen mit Platz 1 in der Gesamtwertung.
+ * ⚠ Geschickt wird nur der Zeilenindex plus die beiden änderbaren Felder.
+ * Athlet, Zeit, Datum und Ort holt der Handler selbst aus dem Parse-Ergebnis –
+ * dieselbe Regel wie in 6.10: der Client schickt Indizes, keine Daten.
+ *
+ * @param array $sieger Die Zeilen mit Platz 1 in der Gesamtwertung, je
+ *                      Eintrag `index` und `zeile`.
  * @param array $v      Parse-Ergebnis.
  * @param array $w      Formularwerte.
  * @return void
  */
 function lsg_bl_import_siege_anzeigen( array $sieger, array $v, array $w ) {
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended
+	$offen_idx     = isset( $_GET['sieg_idx'] ) ? (int) $_GET['sieg_idx'] : -1;
+	$offen_event   = isset( $_GET['sieg_event'] ) ? sanitize_text_field( wp_unslash( $_GET['sieg_event'] ) ) : null;
+	$offen_distanz = isset( $_GET['sieg_distanz'] ) ? sanitize_text_field( wp_unslash( $_GET['sieg_distanz'] ) ) : null;
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
 	echo '<div class="notice notice-info inline lsg-bl-siege">';
 
 	printf(
-		'<p>%s</p>',
+		'<p><strong>%s</strong></p>',
 		esc_html(
 			sprintf(
 				/* translators: %d: Anzahl */
-				_n(
-					'%d Gesamtsieg erkannt – der Eintrag in die Gesamtsiege bleibt Handarbeit.',
-					'%d Gesamtsiege erkannt – die Einträge in die Gesamtsiege bleiben Handarbeit.',
-					count( $sieger ),
-					'lsg-bestenliste'
-				),
+				_n( '%d Gesamtsieg erkannt', '%d Gesamtsiege erkannt', count( $sieger ), 'lsg-bestenliste' ),
 				count( $sieger )
 			)
 		)
 	);
 
-	echo '<ul>';
-	foreach ( $sieger as $z ) {
+	foreach ( $sieger as $s ) {
+		$i = (int) $s['index'];
+		$z = $s['zeile'];
+
 		$name = trim( $z['nachname'] . ', ' . $z['vorname'], ', ' );
 
+		/* ---- Ohne Zuordnung gibt es nichts vorzubelegen ---- */
 		if ( (int) $z['athletes_id'] <= 0 ) {
-			// Ohne Zuordnung gibt es nichts vorzubelegen – und der Weg dahin
-			// führt über die Zuordnung, nicht über die Gesamtsiege.
 			printf(
-				'<li>%s</li>',
+				'<p class="lsg-bl-sieg-offen">%1$s %2$s</p>',
 				esc_html(
 					sprintf(
 						/* translators: %s: Name aus der Quelle */
 						__( '%s – noch keinem Sportler zugeordnet.', 'lsg-bestenliste' ),
 						$name
 					)
+				),
+				sprintf(
+					'<a href="%1$s">%2$s</a>',
+					esc_url( lsg_bl_athlet_url( array( 'action' => 'new' ) ) ),
+					esc_html__( 'Sportler anlegen', 'lsg-bestenliste' )
 				)
 			);
 			continue;
 		}
 
-		$ziel = lsg_bl_win_url(
-			array(
-				'action'  => 'new',
-				'datum'   => (string) $w['datum'],
-				'ort'     => (string) $w['ort'],
-				'event'   => (string) $v['event_name'],
-				'distanz' => lsg_bl_distance_label( $w['distanz'] ),
-				'athlet'  => (int) $z['athletes_id'],
-				'zeit'    => (string) $z['zeit'],
+		$athlet = lsg_bl_athlet( (int) $z['athletes_id'] );
+		$label  = $z['athlet_label'] ? $z['athlet_label'] : $name;
+
+		/* ---- Vorbelegung ---- */
+		$event   = ( $offen_idx === $i && null !== $offen_event ) ? $offen_event : (string) $v['event_name'];
+		$distanz = ( $offen_idx === $i && null !== $offen_distanz )
+			? $offen_distanz
+			: lsg_bl_distance_label( $w['distanz'] );
+
+		/* ---- Steht der Sieg schon da? (13.2, Prüfung wie 12.3) ---- */
+		$da = lsg_bl_win_dublette( (int) $z['athletes_id'], (string) $w['datum'], $event );
+		if ( $da ) {
+			printf(
+				'<p class="lsg-bl-sieg-da">%1$s %2$s</p>',
+				esc_html(
+					sprintf(
+						/* translators: 1: Name, 2: Veranstaltung */
+						__( '%1$s steht für „%2$s" bereits in den Gesamtsiegen.', 'lsg-bestenliste' ),
+						$label,
+						$da['event']
+					)
+				),
+				sprintf(
+					'<a href="%1$s">%2$s</a>',
+					esc_url( lsg_bl_win_url( array( 'action' => 'edit', 'id' => (int) $da['id'] ) ) ),
+					esc_html__( 'ansehen', 'lsg-bestenliste' )
+				)
+			);
+			continue;
+		}
+
+		/* ---- Das Formular ---- */
+		printf( '<form method="post" action="%s" class="lsg-bl-siegform">', esc_url( admin_url( 'admin-post.php' ) ) );
+		wp_nonce_field( 'lsg_bl_win_aus_import' );
+		echo '<input type="hidden" name="action" value="lsg_bl_win_aus_import">';
+		printf( '<input type="hidden" name="sieg_index" value="%d">', $i );
+
+		// Der Zustand der Import-Seite reist mit, damit der Weg zurück
+		// dieselbe Vorschau zeigt (6.9).
+		foreach ( array( 'url', 'adapter', 'contest', 'list', 'distanz', 'datum', 'ort', 'token', 'filter' ) as $feld ) {
+			printf(
+				'<input type="hidden" name="%1$s" value="%2$s">',
+				esc_attr( $feld ),
+				esc_attr( isset( $w[ $feld ] ) ? $w[ $feld ] : '' )
+			);
+		}
+
+		printf(
+			'<p class="lsg-bl-sieg-kopf">%s</p>',
+			esc_html(
+				sprintf(
+					'%s · %s · %s · %s',
+					$label,
+					$z['zeit'],
+					lsg_bl_format_date( lsg_bl_datum_zu_timestamp( $w['datum'] ) ),
+					$w['ort']
+				)
 			)
 		);
 
+		/* Veranstaltung – mit Zeichenzähler (13.2) */
+		$lang = lsg_bl_zeichen( $event );
+
+		printf( '<p class="lsg-bl-sieg-feld"><label for="lsg-bl-sieg-event-%1$d">%2$s</label> ', $i, esc_html__( 'Veranstaltung', 'lsg-bestenliste' ) );
 		printf(
-			'<li>%1$s <a href="%2$s">%3$s</a></li>',
-			esc_html( sprintf( '%s (%s)', $z['athlet_label'] ? $z['athlet_label'] : $name, $z['zeit'] ) ),
-			esc_url( $ziel ),
-			esc_html__( 'als Gesamtsieg eintragen', 'lsg-bestenliste' )
+			'<input type="text" name="sieg_event" id="lsg-bl-sieg-event-%1$d" value="%2$s" class="regular-text" required> ',
+			$i,
+			esc_attr( $event )
 		);
+		printf(
+			'<span class="lsg-bl-zaehler%1$s">%2$d/40</span></p>',
+			$lang > 40 ? ' lsg-bl-zaehler-zuviel' : '',
+			(int) $lang
+		);
+
+		/*
+		 * ⚠ Angemahnt wird VOR dem Klick, nicht danach. Ein Formular, das eine
+		 * ungültige Vorbelegung kommentarlos anbietet und erst nach dem
+		 * Speichern meckert, ist eine Falle (13.2).
+		 */
+		if ( $lang > 40 ) {
+			printf(
+				'<p class="lsg-bl-fehlertext">%s</p>',
+				esc_html(
+					sprintf(
+						/* translators: %d: Anzahl Zeichen */
+						_n(
+							'Der Name ist um %d Zeichen zu lang – die Spalte fasst 40. Bitte kürzen.',
+							'Der Name ist um %d Zeichen zu lang – die Spalte fasst 40. Bitte kürzen.',
+							$lang - 40,
+							'lsg-bestenliste'
+						),
+						$lang - 40
+					)
+				)
+			);
+		}
+
+		/* Distanz – Freitext mit Vorschlägen (12.1) */
+		printf( '<p class="lsg-bl-sieg-feld"><label for="lsg-bl-sieg-distanz-%1$d">%2$s</label> ', $i, esc_html__( 'Distanz', 'lsg-bestenliste' ) );
+		printf(
+			'<input type="text" name="sieg_distanz" id="lsg-bl-sieg-distanz-%1$d" value="%2$s" maxlength="20" class="regular-text" list="lsg-bl-sieg-distanzen" required>',
+			$i,
+			esc_attr( $distanz )
+		);
+		echo '</p>';
+
+		printf(
+			'<p><button class="button">%1$s</button> <span class="description">%2$s</span></p>',
+			esc_html__( 'Als Gesamtsieg eintragen', 'lsg-bestenliste' ),
+			esc_html__( 'Schreibt nach lsg_win. Der Bestzeiten-Import bleibt davon unberührt.', 'lsg-bestenliste' )
+		);
+
+		echo '</form>';
+
+		unset( $athlet );
 	}
-	echo '</ul>';
+
+	// Eine Vorschlagsliste für alle Formulare des Blocks.
+	lsg_bl_win_datalist( 'lsg-bl-sieg-distanzen', lsg_bl_win_vorschlaege( 'distance' ) );
 
 	echo '</div>';
 }
@@ -1351,9 +1465,12 @@ function lsg_bl_import_vorschau_anzeigen( array $v, array $w ) {
 
 	// Gesamtsieg: erkannt und markiert, noch nicht geschrieben (Plan 6.5.5).
 	$sieger = array();
-	foreach ( $v['zeilen'] as $z ) {
+	foreach ( $v['zeilen'] as $i => $z ) {
 		if ( lsg_bl_ist_gesamtsieg( $z, $v['gesamtwertung'] ) ) {
-			$sieger[] = $z;
+			$sieger[] = array(
+				'index' => (int) $i,
+				'zeile' => $z,
+			);
 		}
 	}
 	if ( $sieger ) {
@@ -1430,8 +1547,15 @@ function lsg_bl_import_bilanz( array $u ) {
 		$teile[] = '<strong>' . esc_html( number_format_i18n( $wert ) ) . '</strong> ' . esc_html( $label );
 	}
 
+	/*
+	 * ⚠ `inline` ist Pflicht. Diese Notice ist von Hand gebaut und hat den
+	 * Fix aus M6 nie mitbekommen: ohne die Klasse reisst `wp-admin/js/common.js`
+	 * sie beim Laden aus ihrem Behälter und hängt sie hinter die `<h1>` –
+	 * hier wäre sie damit über den Trichter gesprungen, statt unter ihm zu
+	 * stehen. Siehe lsg_bl_admin_notice().
+	 */
 	printf(
-		'<div class="notice notice-%1$s"><p>%2$s',
+		'<div class="notice notice-%1$s inline"><p>%2$s',
 		esc_attr( $typ ),
 		wp_kses_post( implode( ' &middot; ', $teile ) )
 	);
@@ -1973,3 +2097,118 @@ function lsg_bl_import_abgelehnte_vereine( array $v, array $w ) {
 
 	echo '</details>';
 }
+
+/**
+ * Einen erkannten Gesamtsieg eintragen (Plan, Abschnitt 13.3).
+ *
+ * ⚠ Der Request bringt einen Zeilenindex mit, keine Daten. Athlet, Zeit,
+ * Datum und Ort holt dieser Handler selbst aus dem Parse-Ergebnis – dieselbe
+ * Regel wie in 6.10. Änderbar sind ausschliesslich Veranstaltung und Distanz,
+ * und die haben einen Grund (13.1).
+ *
+ * ⚠ Eigener `lsg_import_run`, `adapter = 'manuell'`. Die Werte stammen aus dem
+ * Import, die Entscheidung von einem Menschen – und das Log beantwortet die
+ * Frage „wer hat das eingetragen" (13.3).
+ *
+ * @return void
+ */
+function lsg_bl_admin_win_aus_import_post() {
+	if ( ! current_user_can( LSG_BL_CAP ) ) {
+		wp_die( esc_html__( 'Dafür fehlt dir die Berechtigung.', 'lsg-bestenliste' ), '', array( 'response' => 403 ) );
+	}
+	check_admin_referer( 'lsg_bl_win_aus_import' );
+
+	$zustand = array();
+	foreach ( array( 'url', 'adapter', 'contest', 'list', 'distanz', 'datum', 'ort', 'token', 'filter' ) as $feld ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$zustand[ $feld ] = isset( $_POST[ $feld ] ) ? sanitize_text_field( wp_unslash( $_POST[ $feld ] ) ) : '';
+	}
+
+	$index   = isset( $_POST['sieg_index'] ) ? (int) $_POST['sieg_index'] : -1;
+	$event   = isset( $_POST['sieg_event'] ) ? sanitize_text_field( wp_unslash( $_POST['sieg_event'] ) ) : '';
+	$distanz = isset( $_POST['sieg_distanz'] ) ? sanitize_text_field( wp_unslash( $_POST['sieg_distanz'] ) ) : '';
+
+	/* Zurück ins Formular, mit dem, was eingetippt wurde. */
+	$zurueck_mit_eingabe = array_merge(
+		$zustand,
+		array(
+			'sieg_idx'     => $index,
+			'sieg_event'   => $event,
+			'sieg_distanz' => $distanz,
+		)
+	);
+
+	$daten = lsg_bl_parse_holen( $zustand['token'] );
+	if ( ! $daten || ! isset( $daten['zeilen'][ $index ] ) ) {
+		lsg_bl_admin_notice_setzen(
+			'error',
+			__( 'Die Vorschau ist abgelaufen. Bitte erneut parsen – der Gesamtsieg lässt sich auch unter „Gesamtsiege" von Hand eintragen.', 'lsg-bestenliste' )
+		);
+		wp_safe_redirect( lsg_bl_import_url( $zustand ) );
+		exit;
+	}
+
+	$z = $daten['zeilen'][ $index ];
+
+	/*
+	 * ⚠ Auch die Erkennung wird noch einmal geprüft. Ein Index aus einem
+	 * POST ist eine Behauptung; ohne diese Zeile liesse sich jede beliebige
+	 * Zeile als Gesamtsieg eintragen.
+	 */
+	if ( ! lsg_bl_ist_gesamtsieg( $z, ! empty( $daten['gesamtwertung'] ) ) ) {
+		lsg_bl_admin_notice_setzen( 'error', __( 'Diese Zeile ist kein Gesamtsieg.', 'lsg-bestenliste' ) );
+		wp_safe_redirect( lsg_bl_import_url( $zustand ) );
+		exit;
+	}
+
+	$athlet = ( (int) $z['athletes_id'] > 0 ) ? lsg_bl_athlet( (int) $z['athletes_id'] ) : null;
+	if ( ! $athlet ) {
+		lsg_bl_admin_notice_setzen(
+			'error',
+			__( 'Diese Zeile ist keinem Sportler zugeordnet – erst zuordnen, dann eintragen.', 'lsg-bestenliste' )
+		);
+		wp_safe_redirect( lsg_bl_import_url( $zustand ) );
+		exit;
+	}
+
+	$eingabe = array(
+		'id'      => 0,
+		'datum'   => (string) $zustand['datum'],
+		'ort'     => (string) $zustand['ort'],
+		'event'   => $event,
+		'distanz' => $distanz,
+		'athlet'  => (int) $z['athletes_id'],
+		'zeit'    => (string) $z['zeit'],
+	);
+
+	$jahr_max = (int) gmdate( 'Y', time() ) + 1;
+	$p        = lsg_bl_win_formular_pruefen( $eingabe, $jahr_max );
+
+	if ( ! $p['ok'] ) {
+		lsg_bl_admin_notice_setzen( 'error', implode( ' ', $p['fehler'] ) );
+		wp_safe_redirect( lsg_bl_import_url( $zurueck_mit_eingabe ) );
+		exit;
+	}
+
+	$ergebnis = lsg_bl_win_speichern( $p['werte'], __( 'aus dem Import übernommen', 'lsg-bestenliste' ) );
+
+	if ( 'error' === $ergebnis['typ'] ) {
+		lsg_bl_admin_notice_setzen( 'error', $ergebnis['text'] );
+		wp_safe_redirect( lsg_bl_import_url( $zurueck_mit_eingabe ) );
+		exit;
+	}
+
+	lsg_bl_admin_notice_setzen(
+		'success',
+		sprintf(
+			/* translators: 1: Name, 2: Veranstaltung */
+			__( 'Gesamtsieg eingetragen: %1$s, %2$s. Der Bestzeiten-Import ist davon unberührt.', 'lsg-bestenliste' ),
+			lsg_bl_athlet_label( $athlet ),
+			$p['werte']['event']
+		)
+	);
+
+	wp_safe_redirect( lsg_bl_import_url( $zustand ) );
+	exit;
+}
+add_action( 'admin_post_lsg_bl_win_aus_import', 'lsg_bl_admin_win_aus_import_post' );

@@ -37,10 +37,11 @@
 > Konflikterkennung, der Doppelzeile im Bestand und des Wegs aus einer
 > offenen Zeile heraus.
 >
-> Stand der Planung: 2026-09-05 – **M1 bis M8 sind gebaut und geprüft.**
-> Damit ist die Phase 4 der README abgeschlossen: alle sechs Untermenüs aus
-> 6.2 stehen. Was aus 6.5.5 offenbleibt, ist der Schreibvorgang aus der
-> Übernahme heraus (M9, 9.2).
+> Stand der Planung: 2026-09-05 – **M1 bis M9 sind gebaut und geprüft.**
+> Die Phase 4 der README ist abgeschlossen, alle sechs Untermenüs aus 6.2
+> stehen, und mit M9 (Abschnitt 13) ist auch 6.5.5 vollständig abgeräumt: ein
+> erkannter Gesamtsieg lässt sich beim Import eintragen, ohne die Seite zu
+> verlassen – und unabhängig davon, ob die Bestzeit übernommen wurde.
 >
 > ⚠ Und ein Befund aus dem Bau von M8 wartet auf eine Entscheidung: die
 > Datumsanzeige des Plugins rechnet nicht in der Zeitzone der Website
@@ -1831,10 +1832,14 @@ Offene Punkte für die spätere Umsetzung:
 > - Der kleine Klassensieg zählt weiterhin nicht.
 > - `win_insert` ist ab M8 in Gebrauch, dazu kommen `win_update` und
 >   `win_delete`.
-> - Offen bleibt allein die erste Frage – Checkbox oder eigener Schritt.
->   M8 legt keine von beiden an: der 🏆-Hinweis bekommt einen Link ins
->   vorbelegte Formular, mehr nicht (12.6). Ob der Klick überhaupt stört,
->   zeigt sich, wenn die Seite ein paar Wochen benutzt wurde.
+- Die erste Frage ist mit **M9** beantwortet: **eigener Schritt**, keine
+>   Checkbox (Abschnitt 13.1). Drei Gründe, alle aus der Tabellenstruktur –
+>   `event` ist mit 40 Zeichen kürzer als das, was der Adapter liefert und
+>   braucht ein Feld zum Kürzen; `distance` ist dort Freitext und hier ein
+>   Code; und die Übernahme schreibt in einer Transaktion nach `lsg_best`.
+>   Dazu eine Entscheidung, die 6.5.5 nicht vorgesehen hatte: das Angebot
+>   hängt **nicht** daran, ob die Bestzeit übernommen wurde – ein Sieg mit
+>   einer langsameren Zeit als der eigenen Jahresbestzeit ist ein Sieg.
 >
 > Und ein Befund, der die spätere Umsetzung betrifft: `lsg_win.distance` und
 > `.time` sind **Freitext**, nicht die Codes aus `lsg_bl_distance_map()` –
@@ -2837,6 +2842,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | ✅ **erledigt 2026-09-05** – derselbe Ablauf ohne einen einzigen Seitenaufbau: Adresse prüfen, Wettbewerb wählen, parsen, übernehmen. Die drei laufenden Zustände (`erkenne`, `parse`, `uebernahme`) sind jetzt sichtbar, die Kopf-Checkbox ist da, das Knopf-Label zählt mit, und der Statusfilter kostet die gesetzten Haken nicht mehr. Mit deaktiviertem JavaScript verhält sich die Seite unverändert wie nach M5 |
 | M7 | Seite „Sportler" (Abschnitt 11) | ✅ **erledigt 2026-09-05** – durchgespielt mit einem eigens angelegten Testsportler: anlegen → Ergebnis erfassen → Jahrgang 1990 auf 1965 ändern → die eine Bestandszeile wechselt nach Rückfrage von `mhk` auf `m50`, mit `athlet_update` und `ak_update` am selben `run_id` → Ergebnis löschen → Sportler löschen. Ein zweiter Anlegeversuch mit demselben Namen und Jahrgang wird vom Schreibweg abgewiesen, nicht nur vom Formular; ein Sportler mit Ergebnissen bekommt gar keinen Löschknopf. Der Bestand steht danach wieder bei 427 Sportlern |
 | M8 | Seite „Gesamtsiege" (Abschnitt 12) | ✅ **erledigt 2026-09-05** – durchgespielt mit einem eigens eingetragenen Sieg („Pforzheim nach Basel" als Distanz, „48 Runden" als Zeit): anlegen → Ort ändern → speichern ohne Änderung → löschen, jeder Schritt mit seiner Log-Zeile. Der Freitext kommt unverändert wieder heraus, ein 41 Zeichen langer Veranstaltungsname wird mit „bitte um 1 kürzen" abgewiesen, und derselbe Sieg lässt sich nicht zweimal eintragen – einer am Tag danach schon. Ursprüngliche Zusage: ein Gesamtsieg ist aus der Oberfläche heraus einzutragen, zu ändern und zu löschen, ohne phpMyAdmin; `distance` und `time` bleiben Freitext und bekommen Vorschläge aus dem Bestand; derselbe Sieg lässt sich nicht zweimal eintragen, mehrere Siege eines Athleten im selben Jahr schon; der Hinweis über der Übernahme-Tabelle führt mit einem Klick ins gefüllte Formular |
+| M9 | Gesamtsieg beim Import eintragen (Abschnitt 13) | ✅ **erledigt 2026-09-05** – durchgespielt am echten Ettlinger Halbmarathon: der Sieger ist über die Oberfläche als Sportler angelegt, danach zeigt der Block sein Formular, ein zu langer Veranstaltungsname wird vor dem Klick angemahnt, und der Sieg landet in `lsg_win` mit der Log-Meldung „aus dem Import übernommen" – **ohne dass überhaupt übernommen wurde**. Ursprüngliche Zusage: ein erkannter Sieg lässt sich ohne Seitenwechsel eintragen – Veranstaltung und Distanz sichtbar und änderbar, alles übrige fest; das Angebot hängt nicht daran, ob die Bestzeit übernommen wurde; ein zu langer Veranstaltungsname wird vor dem Klick angemahnt, nicht nach ihm |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
 Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
@@ -3456,6 +3462,25 @@ prüft am Ende keinen von beiden.
   - [x] Speichern ohne Änderung schreibt nichts und loggt nichts
   - [x] Der 🏆-Hinweis über der Übernahme-Tabelle bekommt den Link ins
         vorbelegte Formular (12.6) – **kein** Schreibvorgang aus dem Import
+- [x] **Gesamtsieg beim Import (Abschnitt 13) – M9**
+  - [x] Block je erkanntem Sieg **vor** der Tabelle, mit eigenem Formular,
+        eigenem `admin_post`-Handler und eigenem Nonce – nicht in das
+        Übernahme-Formular geschachtelt
+  - [x] Erscheint, sobald die Vorschau da ist, unabhängig vom Status der
+        Zeile und davon, ob übernommen wurde (13.1)
+  - [x] Fest: Athlet, Zeit, Datum, Ort. Änderbar: Veranstaltung und Distanz
+  - [x] Zeichenzähler am Veranstaltungsnamen; zu lang wird **vor** dem Klick
+        angemahnt und nicht gekürzt
+  - [x] Distanz mit dem Label vorbelegt, Vorschlagsliste wie in 12.3
+  - [x] Dublettenprüfung wie 12.3; steht der Sieg schon da, Hinweis mit Link
+        statt Formular
+  - [x] Protokolliert über `lsg_bl_win_protokollieren()` mit `win_insert`,
+        eigener Vorgang, Meldung „aus dem Import übernommen"
+  - [x] Zurück auf die Import-Seite mit unverändertem Zustand in der Query
+- [x] **Die Notice in `lsg_bl_import_bilanz()` bekommt `inline`.** Sie ist von
+      Hand gebaut und hat den Fix aus M6 nie mitbekommen – `common.js` reisst
+      sie beim Laden aus ihrem Behälter und hängt sie hinter die `<h1>`.
+      Gehört zu M9, weil der neue Block direkt daneben steht.
 - [x] **Sortierbare Spalten in `LSG_BL_Best_Table` repariert.** Drei
       Spaltenköpfe sind als sortierbar ausgezeichnet, aber `prepare_items()`
       liest `orderby`/`order` nicht und `lsg_bl_best_liste()` kennt keinen
@@ -3770,14 +3795,23 @@ Schreibvorgang) und wächst mit M6 (REST).
       verworfen, mit derselben Meldung wie beim Reload
       → geprüft: Token weg, Tabelle weg, Zustand zurück auf „Bereit zum
         Parsen", Meldung wortgleich mit der des Reload-Wegs.
-- [ ] M7: der Weg, den 6.5.3 verspricht, geht durch – eine offene Zeile im
+- [x] M7: der Weg, den 6.5.3 verspricht, geht durch – eine offene Zeile im
       Import, Athlet über „Sportler" angelegt, Import erneut, Zeile ist
       zugeordnet. Ohne einen einzigen Griff in die Datenbank
-      → ⚠ **offen.** Geprüft ist, dass ein neu angelegter Sportler sofort
-        im Athleten-Dropdown der Bestenlisten-Pflege steht und dort ein
-        Ergebnis annimmt. Der Weg über eine wirklich offene Import-Zeile
-        braucht eine Ergebnisliste mit einem LSG-Namen, den es in
-        `lsg_athlete` nicht gibt – den hat der Bestand gerade nicht.
+      → **nachgeholt beim Bau von M9** (2026-09-05), an der echten Ettlinger
+        Liste. Der Trichter sprang von
+        `12 LSG → 10 zugeordnet, 2 ohne Zuordnung → 0 neu`
+        auf
+        `12 LSG → 11 zugeordnet, 1 ohne Zuordnung → 1 neu`,
+        allein dadurch, dass der fehlende Sportler unter „Sportler" angelegt
+        wurde. phpMyAdmin war nicht im Spiel.
+      → ⚠ Der Aufbau brauchte einen Kunstgriff: in der Ettlinger Liste gewinnt
+        kein LSG-Läufer, also ist der Verein des echten Siegers
+        („TV Bad Säckingen") vorübergehend als LSG-Alias gesetzt worden – mit
+        derselben Funktion, die der Block „nicht übernommene Vereine"
+        benutzt. Der Alias ist danach wieder entfernt, der Sportler gelöscht,
+        der Bestand steht bei 427 Sportlern, 96 Gesamtsiegen und
+        5 925 Bestenlisten-Zeilen wie vorher.
 - [x] M7: derselbe Name mit demselben Jahrgang lässt sich kein zweites Mal
       anlegen; derselbe Name mit anderem Jahrgang schon („Becker, Klaus")
       → geprüft 2026-09-05 auf beiden Ebenen. Das Formular meldet die
@@ -3851,14 +3885,12 @@ Schreibvorgang) und wächst mit M6 (REST).
         Häufigkeit, mit `10 km` vor `10km`. Zeiten: `48 Runden` zuerst
         (drei Zeilen). „Testlauf M8" stand in keiner Liste und wurde
         gespeichert.
-- [ ] M8: der 🏆-Link aus der Übernahme-Tabelle öffnet das Formular
-      gefüllt, und der Import schreibt dabei weiterhin nichts nach `lsg_win`
-      → ⚠ **offen.** Der Block erscheint nur, wenn eine Zeile Platz 1 in der
-        Gesamtwertung hat – in der Ettlinger Liste gewinnt kein LSG-Läufer
-        (bester Platz 20, Abschnitt 8). Geprüft ist nur, dass die
-        Import-Seite unverändert fehlerfrei rendert. Es fehlt eine
-        Ergebnisliste mit einem LSG-Sieg – dieselbe Lücke wie bei der
-        M7-Abnahme zur offenen Zeile.
+- [x] ~~M8: der 🏆-Link aus der Übernahme-Tabelle öffnet das Formular
+      gefüllt~~ – **hinfällig mit M9**: aus dem Link ist ein Formular an
+      derselben Stelle geworden (Abschnitt 13). Der zweite Teil der Zusage
+      gilt weiter und ist geprüft: **der Import schreibt nichts nach
+      `lsg_win`** – geschrieben wird nur auf Knopfdruck im Block, über einen
+      eigenen Handler.
 - [x] M8: Löschen protokolliert den vollständigen Datensatz, bevor die Zeile
       weg ist
       → Log-Zeile: „Gesamtsieg gelöscht / Pforzheim nach Basel, 48 Runden,
@@ -3879,6 +3911,39 @@ Schreibvorgang) und wächst mit M6 (REST).
         zurückgegeben, damit aus einem stillen Fehlschlag wenigstens keine
         Kopfzeile ohne Inhalt wird. Eine solche stand nach den Tests im Log
         und ist entfernt.
+- [x] M9: eine Siegerzeile mit Status `langsamer` bekommt das Angebot
+      trotzdem – und nach dem Eintragen steht der Sieg in `lsg_win`, während
+      `lsg_best` unverändert bleibt
+      → Stärker geprüft als verlangt: der Sieg ist eingetragen worden, **ohne
+        dass überhaupt jemand „Übernehmen" gedrückt hat**. Die Zeile stand auf
+        `neu`, `lsg_best` blieb bei 5 925 Zeilen, und der Trichter zeigte
+        danach unverändert `1 neu` – die Bestzeit wartete weiter.
+      → Der Fall `langsamer` selbst ist nicht eigens nachgestellt; die
+        Verzweigung kennt den Status gar nicht, sie fragt ihn nirgends ab.
+- [x] M9: ein Veranstaltungsname über 40 Zeichen wird im Block angemahnt,
+      bevor jemand klickt; das Feld trägt den vollen Namen
+      → Mit 45 Zeichen: Zähler `45/40` in Rot, darunter „Der Name ist um 5
+        Zeichen zu lang – die Spalte fasst 40. Bitte kürzen.", und im Feld
+        steht der volle Name. Wer trotzdem klickt, bekommt dieselbe Auskunft
+        als Meldung und den Namen unverändert zurück.
+      → Die Vorbelegung selbst ist mit 30 Zeichen kurz genug
+        („17. SWE Halbmarathon Ettlingen").
+- [x] M9: ein zweites Mal eintragen geht nicht – statt des Formulars steht der
+      Hinweis auf die vorhandene Zeile
+      → Direkt nach dem Eintragen: „Borghardt, Lukas (1991) steht für
+        ‘17. SWE Halbmarathon Ettlingen' bereits in den Gesamtsiegen. ansehen"
+        – kein Formular mehr.
+- [x] M9: nach dem Eintragen steht die Vorschau unverändert da (Token, Filter,
+      Tabelle), und das Log trägt einen eigenen Vorgang mit `win_insert`
+      → Token, Trichter und Tabelle unverändert; die Log-Zeile lautet
+        „Gesamtsieg eingetragen / aus dem Import übernommen" mit Name,
+        Jahrgang, Distanz und Zeit.
+- [x] M9: mit deaktiviertem JavaScript funktioniert der Block wie jedes andere
+      Formular – er bringt keins mit
+      → Der Block ist reines Markup: ein `<form method="post">` je Sieg, ein
+        `<datalist>` für alle. `admin-import.js` fasst ihn nicht an. Geprüft
+        ist wie überall das ausgelieferte Markup, nicht die Darstellung in
+        einem Browser mit abgeschaltetem JavaScript.
 - [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
       → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
         `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
@@ -4208,13 +4273,13 @@ vorbereitet, damit später keine Migration nötig wird:
       zurückgerollter Vorgang muss als solcher markiert werden (sonst rollt ihn
       jemand zweimal zurück), und ein späterer Import auf denselben Datensatz
       macht das Zurückrollen ungültig – dann darf es nicht mehr angeboten werden.
-- [ ] **Gesamtsieg aus der Übernahme heraus nach `lsg_win` schreiben** –
-      **M9** (6.5.5). Erkennung und Markierung stehen seit M3, die Oberfläche
-      zum Eintragen seit M8 (Abschnitt 12); `win_insert` ist damit in
-      Gebrauch. Was fehlt, ist der Schreibvorgang ohne Umweg über das
-      Formular – Checkbox in der Übernahme-Tabelle oder eigener Schritt
-      danach. Zu entscheiden, wenn die Seite aus M8 ein paar Wochen benutzt
-      wurde: dann zeigt sich, ob der Klick überhaupt stört.
+- [ ] **Gesamtsieg beim Import eintragen** – **M9** (6.5.5). Erkennung und
+      Markierung stehen seit M3, die Oberfläche zum Eintragen seit M8
+      (Abschnitt 12), der Link ins vorbelegte Formular ebenfalls.
+      → Ausgeplant am 2026-09-05 als **Abschnitt 13**: eigener Schritt statt
+        Checkbox, und unabhängig davon, ob die Bestzeit übernommen wurde.
+        Damit ist der Posten mit dem Bau von M9 erledigt und 6.5.5
+        vollständig abgeräumt.
 - [ ] **Bestand nachrechnen.** Ändert sich der Jahrgang eines Athleten, sind
       dessen gespeicherte `lsg_best.ak`-Werte falsch. Das Formular rechnet nur
       die Zeile neu, die es speichert (7.4). Ein Durchlauf über den ganzen
@@ -4991,6 +5056,12 @@ Der Ausbau, bei dem die Übernahme selbst nach `lsg_win` schreibt – Checkbox i
 der Tabelle oder eigener Schritt danach –, bleibt offen und wird **M9**
 (9.2). Erst wenn diese Seite steht, ist überhaupt sichtbar, ob er sich lohnt.
 
+> ⚠ **Nachtrag 2026-09-05: M9 ist entschieden und ersetzt diesen Link.**
+> Aus dem Hinweis mit Link wird ein Formular an derselben Stelle
+> (Abschnitt 13) – eigener Schritt, keine Checkbox, und unabhängig davon, ob
+> die Bestzeit übernommen wurde. Was hier steht, beschreibt den Zwischenstand
+> zwischen M8 und M9.
+
 ### 12.7 Was diese Seite ausdrücklich nicht tut
 
 - **Nichts normalisieren** (12.1). Weder Zeiten noch Distanzen.
@@ -5003,3 +5074,116 @@ der Tabelle oder eigener Schritt danach –, bleibt offen und wird **M9**
 - **Keine Altersklasse, kein Nachrechnen** (12.3).
 - **Keine Erkennung.** Wer gewonnen hat, weiss der Mensch oder der Import –
   diese Seite fragt nicht nach.
+
+---
+
+## 13. Der Gesamtsieg beim Import
+
+Die letzte offene Frage aus 6.5.5: *„Eigene Checkbox-Spalte ‚auch als
+Gesamtsieg übernehmen', oder ein separater Arbeitsschritt nach dem
+Bestzeiten-Import?"*
+
+Mit M8 steht die Chronik-Seite, und der 🏆-Hinweis führt bereits ins
+vorbelegte Formular (12.6). Was hier dazukommt, ist der Weg ohne
+Seitenwechsel.
+
+### 13.1 Zwei Entscheidungen
+
+**Entschieden: ein eigener Schritt, keine Checkbox in der Übernahme-Tabelle.**
+
+Drei Gründe, alle aus der Tabellenstruktur:
+
+- `lsg_win.event` fasst **40 Zeichen**, der Adapter liefert bis zu 120
+  (`event_name`, 6.8). „17. SWE Halbmarathon Ettlingen" passt, ein längerer
+  Name nicht – und 6.5.5 verlangt ausdrücklich „kürzbares Feld in der
+  Oberfläche, nicht stillschweigend abschneiden". Eine Checkbox bietet nichts
+  zum Kürzen an.
+- `lsg_win.distance` ist **Freitext** (12.1), der Import hat einen
+  normalisierten Code. Was dorthin gehört, ist das Label – und auch das gehört
+  gesehen, bevor es geschrieben wird.
+- Die Übernahme-Tabelle schreibt nach `lsg_best`, in einer Transaktion (6.7).
+  Eine zweite Tabelle in denselben Klick zu hängen, macht aus einem klaren
+  Vorgang zwei, die nur zufällig zusammen scheitern oder gelingen.
+
+**Entschieden: der Gesamtsieg hängt nicht an der Übernahme der Bestzeit.**
+
+⚠ Das ist der weniger offensichtliche Teil. Wer ein kleines Rennen gewinnt,
+war womöglich langsamer als seine eigene Jahresbestzeit – dann schreibt der
+Import nach `lsg_best` **nichts** (Status `langsamer`, 6.7) und der Sieg
+gehört trotzdem in die Chronik. Das Angebot erscheint deshalb für jede
+erkannte Siegerzeile, unabhängig von ihrem Status und unabhängig davon, ob
+überhaupt jemand „Übernehmen" gedrückt hat.
+
+Damit ist auch die Frage beantwortet, wo der Block steht: **nicht nach der
+Übernahme, sondern sobald die Vorschau da ist.** Der Name des Abschnitts ist
+„beim Import", nicht „nach dem Übernehmen".
+
+### 13.2 Der Block
+
+An der Stelle, an der seit M8 der Hinweis mit dem Link steht (12.6), steht
+jetzt je erkanntem Sieg ein kleines Formular:
+
+```
+🏆 Gesamtsieg erkannt
+
+   Seith, Marius · 01:19:51 · 05.07.2026 · Ettlingen
+   Veranstaltung  [17. SWE Halbmarathon Ettlingen        ]  (30/40)
+   Distanz        [Halbmarathon                          ]
+   [ Als Gesamtsieg eintragen ]
+```
+
+- **Fest, nicht änderbar:** Athlet, Zeit, Datum, Ort. Sie kommen aus der
+  Vorschau und aus den Formularwerten; wer sie ändern will, tut das dort, wo
+  sie herkommen, oder danach unter „Gesamtsiege".
+- **Änderbar:** Veranstaltung und Distanz – genau die beiden Felder, für die
+  es einen Grund gibt (siehe 13.1).
+- Die Distanz ist mit dem Label vorbelegt (`lsg_bl_distance_label()`), nicht
+  mit dem Code, und hat dieselbe Vorschlagsliste wie in 12.3.
+
+⚠ **Der Veranstaltungsname wird vorbelegt, nicht gekürzt** – auch wenn er zu
+lang ist. Dann steht die Zeichenzahl daneben (`46/40`) und darunter der Satz,
+um wie viel zu kürzen ist, **bevor** jemand auf Speichern drückt. Ein Formular,
+das eine ungültige Vorbelegung kommentarlos anbietet und erst nach dem Klick
+meckert, ist eine Falle; eines, das still kürzt, eine Falschangabe.
+
+⚠ **Eigenes Formular, eigener `admin_post`-Handler, eigener Nonce.** Nicht in
+das Übernahme-Formular hineinschachteln – verschachtelte `<form>`-Elemente
+gibt es in HTML nicht, und der Browser hängt das innere aus. Der Block steht
+deshalb **vor** der Tabelle, nicht darin.
+
+**Ist der Sieg schon eingetragen**, steht statt des Formulars der Hinweis
+darauf, mit Link auf die vorhandene Zeile – dieselbe Prüfung wie in 12.3
+(Athlet + Datum + Veranstaltung).
+
+**Ist die Zeile keinem Sportler zugeordnet**, gibt es nichts vorzubelegen. Der
+Block nennt den Namen aus der Quelle und verweist auf „Zuordnungen" bzw.
+„Sportler" – wie schon seit M8.
+
+### 13.3 Was danach passiert
+
+Geschrieben wird über denselben Weg wie in 12.5: `lsg_bl_win_anlegen()`,
+protokolliert über `lsg_bl_win_protokollieren()` mit `win_insert`.
+
+⚠ **Ein eigener `lsg_import_run`, nicht der des Bestzeiten-Imports.** Er
+entsteht in einem anderen Request, nach einer eigenen Entscheidung eines
+Menschen – und `adapter` bleibt `'manuell'`, obwohl die Werte aus dem Import
+stammen. Der Grund ist die Frage, die das Log beantworten soll: *„wer hat das
+eingetragen"*. Die Antwort ist ein Mensch, der auf einen Knopf gedrückt hat,
+nicht ein Adapter. Woher die Werte kamen, sagt die Meldung: *„aus dem Import
+übernommen"*.
+
+Nach dem Schreiben führt der Weg zurück auf die Import-Seite, mit
+unverändertem Zustand in der Query (6.9) – Token, Filter und Vorschau bleiben
+stehen. An der Stelle des Formulars steht dann der Hinweis, dass der Sieg
+eingetragen ist.
+
+### 13.4 Was M9 ausdrücklich nicht tut
+
+- **Nichts automatisch schreiben.** Ohne Knopfdruck passiert nichts, und der
+  Knopf steht je Sieg einzeln da – kein „alle eintragen".
+- **Die Erkennung nicht anfassen.** Platz 1, ausschließlich in der
+  Gesamtwertung, bei Unklarheit gar nicht (6.5.5). Was M9 ändert, ist der Weg
+  danach.
+- **Nicht in dieselbe Transaktion wie die Bestzeiten** (13.1).
+- **Keine Bearbeitung.** Wer den eingetragenen Sieg ändern will, tut das unter
+  „Gesamtsiege" (Abschnitt 12).

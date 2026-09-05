@@ -129,10 +129,13 @@ add_action( 'admin_post_lsg_bl_win_speichern', 'lsg_bl_admin_win_post' );
  * ⚠ Die Dublettenprüfung läuft hier ein zweites Mal, gegen die Datenbank
  * unmittelbar vor dem Schreiben – wie in 7.3 und 11.2.
  *
- * @param array $w Geprüfte Werte.
+ * @param array  $w        Geprüfte Werte.
+ * @param string $herkunft Klartext für die Log-Meldung, wenn der Eintrag
+ *                         nicht am Formular dieser Seite entstanden ist –
+ *                         etwa „aus dem Import übernommen" (13.3).
  * @return array{typ:string,text:string,id:int}
  */
-function lsg_bl_win_speichern( array $w ) {
+function lsg_bl_win_speichern( array $w, $herkunft = '' ) {
 	$id  = (int) $w['id'];
 	$alt = $id > 0 ? lsg_bl_win_zeile( $id ) : null;
 
@@ -181,7 +184,13 @@ function lsg_bl_win_speichern( array $w ) {
 			);
 		}
 
-		lsg_bl_win_protokollieren( 'win_insert', $w, $athlet, $res['id'], __( 'Gesamtsieg eingetragen', 'lsg-bestenliste' ) );
+		lsg_bl_win_protokollieren(
+			'win_insert',
+			$w,
+			$athlet,
+			$res['id'],
+			'' !== $herkunft ? $herkunft : __( 'Gesamtsieg eingetragen', 'lsg-bestenliste' )
+		);
 
 		return array(
 			'typ'  => 'success',
