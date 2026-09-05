@@ -500,7 +500,7 @@ function lsg_bl_admin_best_page() {
 
 	$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
 
-	echo '<div class="wrap lsg-bl-best">';
+	echo '<div class="wrap lsg-bl-best" id="lsg-bl-best">';
 
 	$notice = lsg_bl_admin_notice_holen();
 	if ( $notice ) {
@@ -838,7 +838,14 @@ function lsg_bl_best_formular_anzeigen( $action ) {
 			printf(
 				'<p class="description">%s</p>',
 				esc_html__(
-					'Auch 6, 12 und 24 Stunden – dort hält die Bestenliste eine Strecke statt einer Zeit. Nach dem Wechsel der Distanz einmal „Prüfen", dann passt das Feld darunter.',
+					'Auch 6, 12 und 24 Stunden – dort hält die Bestenliste eine Strecke statt einer Zeit.',
+					'lsg-bestenliste'
+				)
+			);
+			printf(
+				'<p class="description lsg-bl-nur-ohne-js">%s</p>',
+				esc_html__(
+					'Nach dem Wechsel der Distanz einmal „Prüfen", dann passt das Feld darunter.',
 					'lsg-bestenliste'
 				)
 			);
@@ -904,7 +911,7 @@ function lsg_bl_best_formular_anzeigen( $action ) {
 				esc_attr( $feld['platzhalter'] ),
 				esc_attr( $feld['pattern'] )
 			);
-			printf( '<p class="description">%s</p>', esc_html( $feld['hinweis'] ) );
+			printf( '<p class="description" id="lsg-bl-leistung-hinweis">%s</p>', esc_html( $feld['hinweis'] ) );
 		}
 	);
 

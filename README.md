@@ -7,3 +7,4 @@ Wir erfassen Running-Ergebnisse von unseren Vereinsmitglieder für eine Auswertu
 ~~3. WordPress PlugIn mit Ausgabe wie bisher: Bestenliste, Gesamtsieger und Ewige Bestenliste~~  
 ~~4. UI zur Eingabe von neuen Sportler, Bestenliste und Gesamtsieger, wie bisher~~
 ~~5. Einlesen von Ergebnis-PDFs, wie von RaceResult und Ergebnisse von Mitglieder in die Datenbank übernehmen~~
+~~6. Import und Erfassung ohne Seiten-Reload (REST + progressive enhancement)~~

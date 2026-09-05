@@ -3,7 +3,7 @@
  * Plugin Name:       LSG Bestenliste
  * Plugin URI:        https://www.lsg-ka.de/
  * Description:       Drei Gutenberg-Blöcke zur Ausgabe der LSG-Karlsruhe Laufergebnisse: Bestenliste (Jahr), Gesamtsiege (Jahr) und Ewige Bestenliste (all-time). Liest aus den bestehenden Tabellen lsg_ak, lsg_athlete, lsg_best und lsg_win.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.1
  * Requires PHP:      7.4
  * Author:            Karlsruher Lemminge
@@ -15,7 +15,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Kein direkter Zugriff.
 }
 
-define( 'LSG_BL_VERSION', '1.0.0' );
+/*
+ * ⚠ Diese Konstante haengt an jedem Style und jedem Script (`?ver=`). Wer sie
+ * bei einer Aenderung an admin.css oder den JS-Dateien stehen laesst, liefert
+ * allen, die die Seite schon einmal offen hatten, die alte Datei aus dem
+ * Browser-Cache – und das faellt beim eigenen Hart-Neuladen nicht auf.
+ */
+define( 'LSG_BL_VERSION', '1.1.0' );
 define( 'LSG_BL_PATH', plugin_dir_path( __FILE__ ) );
 define( 'LSG_BL_URL', plugin_dir_url( __FILE__ ) );
 
@@ -75,6 +81,14 @@ require_once LSG_BL_PATH . 'includes/class-lsg-athlete.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-best.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-log.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-import.php';
+
+/*
+ * Die REST-Schicht des Imports steht ausserhalb des is_admin()-Blocks: ein
+ * REST-Request ist kein Admin-Request. Sie laedt sich die Renderer der
+ * Admin-Seite selbst nach, aber erst im Handler – ein Seitenaufruf im
+ * Frontend bekommt davon nichts mit (Plan 6.10).
+ */
+require_once LSG_BL_PATH . 'includes/class-lsg-import-rest.php';
 
 /*
  * Die Admin-Oberflächen nur im Backend laden – ein Frontend-Aufruf braucht

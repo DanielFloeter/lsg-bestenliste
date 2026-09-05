@@ -124,6 +124,60 @@ function lsg_bl_admin_assets( $hook ) {
 		array(),
 		LSG_BL_VERSION
 	);
+
+	/*
+	 * Die beiden Skripte sind Zugaben, keine Voraussetzungen (Plan 6.9): sie
+	 * hängen sich an fertige Formulare, die ohne sie vollständig funktionieren.
+	 * Deshalb auch keine Abhängigkeit auf jQuery und kein Build-Schritt – zwei
+	 * Dateien in reinem Browser-JavaScript, wie das Frontend-Script.
+	 */
+	if ( isset( $GLOBALS['lsg_bl_import_hook'] ) && $hook === $GLOBALS['lsg_bl_import_hook'] ) {
+		wp_enqueue_script(
+			'lsg-bestenliste-admin-import',
+			LSG_BL_URL . 'assets/js/admin-import.js',
+			array(),
+			LSG_BL_VERSION,
+			true
+		);
+		wp_localize_script(
+			'lsg-bestenliste-admin-import',
+			'lsgImportConfig',
+			array(
+				'restUrl'   => esc_url_raw( rest_url( 'lsg/v1/import/' ) ),
+				'nonce'     => wp_create_nonce( 'wp_rest' ),
+				'zustaende' => lsg_bl_import_zustaende(),
+				'texte'     => array(
+					'alleWaehlen'   => __( 'Alle auswählen', 'lsg-bestenliste' ),
+					/* translators: %d: Anzahl */
+					'uebernehmen1'  => __( '%d Ergebnis übernehmen', 'lsg-bestenliste' ),
+					/* translators: %d: Anzahl */
+					'uebernehmenN'  => __( '%d Ergebnisse übernehmen', 'lsg-bestenliste' ),
+					'alle'          => __( 'Alle', 'lsg-bestenliste' ),
+					'keinTreffer'   => __( 'Kein Ergebnis mit diesem Status.', 'lsg-bestenliste' ),
+					'netzfehler'    => __( 'Die Anfrage kam nicht durch. Bitte noch einmal versuchen – oder den Knopf benutzen, dann lädt die Seite neu.', 'lsg-bestenliste' ),
+				),
+			)
+		);
+	}
+
+	if ( isset( $GLOBALS['lsg_bl_best_hook'] ) && $hook === $GLOBALS['lsg_bl_best_hook'] ) {
+		wp_enqueue_script(
+			'lsg-bestenliste-admin-best',
+			LSG_BL_URL . 'assets/js/admin-best.js',
+			array(),
+			LSG_BL_VERSION,
+			true
+		);
+		wp_localize_script(
+			'lsg-bestenliste-admin-best',
+			'lsgBestConfig',
+			array(
+				// Welche Distanz welches Feld verlangt, entscheidet weiterhin
+				// lsg_bl_leistung_feld() – hier steht nur, was sie liefert.
+				'felder' => lsg_bl_leistung_felder_js(),
+			)
+		);
+	}
 }
 add_action( 'admin_enqueue_scripts', 'lsg_bl_admin_assets' );
 
@@ -195,13 +249,21 @@ function lsg_bl_admin_notice_holen() {
 /**
  * Eine Notice ausgeben.
  *
+ * ⚠ Immer mit `inline`. Ohne diese Klasse holt `wp-admin/js/common.js` jede
+ * Notice beim Laden aus ihrem Elternelement heraus und hängt sie direkt hinter
+ * die `<h1>` – gedacht als Aufräumen für Plugins, die ihre Meldungen irgendwo
+ * ausgeben. Hier hätte es zwei Folgen: der Behälter `#lsg-bl-notices` wäre
+ * nach dem Laden leer, und der Weg ohne Reload (M6) tauschte einen leeren
+ * Behälter aus, während die alte Meldung daneben stehen bliebe. Optisch ändert
+ * `inline` fast nichts – der Behälter steht ohnehin gleich hinter der `<h1>`.
+ *
  * @param string $typ  'error' | 'success' | 'warning' | 'info'.
  * @param string $text Klartext (wird escaped).
  * @return void
  */
 function lsg_bl_admin_notice( $typ, $text ) {
 	printf(
-		'<div class="notice notice-%1$s"><p>%2$s</p></div>',
+		'<div class="notice notice-%1$s inline"><p>%2$s</p></div>',
 		esc_attr( $typ ),
 		esc_html( $text )
 	);
@@ -437,26 +499,40 @@ function lsg_bl_adapter_waehlen( $url, $gewaehlt = '' ) {
  * ---------------------------------------------------------------------- */
 
 /**
- * Render-Callback der Seite.
+ * Den vollständigen Zustand der Seite aus rohen Eingabewerten berechnen.
  *
- * @return void
+ * ⚠ Die EINE Wahrheit für beide Eingänge: die Admin-Seite liest `$_GET`, die
+ * REST-Schicht (Plan 6.10) liest die Request-Parameter – gerechnet wird hier,
+ * ein Mal. Sonst hätte der Weg ohne Reload eine eigene Vorstellung davon,
+ * welche Vorschau noch gilt und welcher Zustand angezeigt gehört, und die
+ * beiden Vorstellungen liefen auseinander, sobald eine von beiden gepflegt
+ * wird.
+ *
+ * ⚠ `isset()` auf `distanz`, `datum` und `ort` ist bedeutungstragend: „noch
+ * nicht angefasst" wird vorbelegt, „bewusst geleert" nicht. Deshalb nimmt die
+ * Funktion das Roh-Array entgegen und nicht neun Einzelparameter – ein
+ * Standardwert `''` könnte den Unterschied nicht tragen.
+ *
+ * Was hier NICHT passiert: die nonce-gesicherten GET-Aktionen (neu laden,
+ * Alias setzen, Alias entfernen). Die hängen an Links, nicht am Zustand, und
+ * bleiben in der Seite.
+ *
+ * @param array $roh url, adapter, contest, list, distanz, datum, ort, token,
+ *                   filter – jeweils roh und bereits ohne Slashes.
+ * @return array{w:array,adapter_cls:?string,erkannt_cls:?string,disc:?array,
+ *               vorbelegung:?array,vorschau:?array,zustand:string,
+ *               fehler:string,hinweise:array}
  */
-function lsg_bl_admin_import_page() {
-	if ( ! current_user_can( LSG_BL_CAP ) ) {
-		wp_die( esc_html__( 'Dafür fehlt dir die Berechtigung.', 'lsg-bestenliste' ), '', array( 'response' => 403 ) );
-	}
-
-	// phpcs:disable WordPress.Security.NonceVerification.Recommended
-	$url       = isset( $_GET['url'] ) ? esc_url_raw( trim( wp_unslash( $_GET['url'] ) ) ) : '';
-	$adapter_w = isset( $_GET['adapter'] ) ? sanitize_key( wp_unslash( $_GET['adapter'] ) ) : '';
-	$contest   = isset( $_GET['contest'] ) ? sanitize_text_field( wp_unslash( $_GET['contest'] ) ) : '';
-	$list      = isset( $_GET['list'] ) ? sanitize_text_field( wp_unslash( $_GET['list'] ) ) : '';
-	$distanz   = isset( $_GET['distanz'] ) ? sanitize_text_field( wp_unslash( $_GET['distanz'] ) ) : '';
-	$datum     = isset( $_GET['datum'] ) ? sanitize_text_field( wp_unslash( $_GET['datum'] ) ) : '';
-	$ort       = isset( $_GET['ort'] ) ? sanitize_text_field( wp_unslash( $_GET['ort'] ) ) : '';
-	$token     = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : '';
-	$filter    = isset( $_GET['filter'] ) ? sanitize_key( wp_unslash( $_GET['filter'] ) ) : '';
-	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+function lsg_bl_import_ansicht( array $roh ) {
+	$url       = isset( $roh['url'] ) ? esc_url_raw( trim( (string) $roh['url'] ) ) : '';
+	$adapter_w = isset( $roh['adapter'] ) ? sanitize_key( (string) $roh['adapter'] ) : '';
+	$contest   = isset( $roh['contest'] ) ? sanitize_text_field( (string) $roh['contest'] ) : '';
+	$list      = isset( $roh['list'] ) ? sanitize_text_field( (string) $roh['list'] ) : '';
+	$distanz   = isset( $roh['distanz'] ) ? sanitize_text_field( (string) $roh['distanz'] ) : '';
+	$datum     = isset( $roh['datum'] ) ? sanitize_text_field( (string) $roh['datum'] ) : '';
+	$ort       = isset( $roh['ort'] ) ? sanitize_text_field( (string) $roh['ort'] ) : '';
+	$token     = isset( $roh['token'] ) ? sanitize_text_field( (string) $roh['token'] ) : '';
+	$filter    = isset( $roh['filter'] ) ? sanitize_key( (string) $roh['filter'] ) : '';
 
 	$fehler   = '';
 	$disc     = null;
@@ -465,69 +541,6 @@ function lsg_bl_admin_import_page() {
 
 	$adapter_cls = ( '' !== $url ) ? lsg_bl_adapter_waehlen( $url, $adapter_w ) : null;
 	$erkannt_cls = ( '' !== $url ) ? lsg_bl_adapter_fuer_url( $url ) : null;
-
-	/* ---- nonce-gesicherte GET-Aktionen ---- */
-
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-	$aktion = isset( $_GET['aktion'] ) ? sanitize_key( wp_unslash( $_GET['aktion'] ) ) : '';
-
-	if ( 'neu_laden' === $aktion && $adapter_cls ) {
-		check_admin_referer( 'lsg_bl_neu_laden' );
-		$event_id = method_exists( $adapter_cls, 'event_id_aus_url' )
-			? (string) call_user_func( array( $adapter_cls, 'event_id_aus_url' ), $url )
-			: '';
-		lsg_bl_discovery_verwerfen( $adapter_cls, $event_id );
-		lsg_bl_parse_verwerfen( $token );
-		$token = '';
-		$hinweise[] = array( 'info', __( 'Die Auswahl wird frisch von der Quelle geholt.', 'lsg-bestenliste' ) );
-	}
-
-	if ( 'alias_setzen' === $aktion ) {
-		check_admin_referer( 'lsg_bl_alias' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$neu_alias = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
-
-		if ( '' === trim( $neu_alias ) || lsg_bl_ohne_verein_marke() === $neu_alias ) {
-			$hinweise[] = array(
-				'error',
-				__( 'Eine leere Vereinsangabe lässt sich nicht als Alias aufnehmen – sie würde jede Zeile ohne Verein übernehmen.', 'lsg-bestenliste' ),
-			);
-		} elseif ( lsg_bl_verein_alias_hinzufuegen( $neu_alias ) ) {
-			// Der Filter hat sich geändert, also ist die Vorschau überholt.
-			// Sie wird verworfen, nicht heimlich weiterbenutzt – dieselbe
-			// Regel wie bei Datum und Distanz (Plan 6.5.1).
-			lsg_bl_parse_verwerfen( $token );
-			$token      = '';
-			$hinweise[] = array(
-				'success',
-				sprintf(
-					/* translators: %s: Vereinsschreibweise */
-					__( '„%s" gilt ab jetzt als LSG Karlsruhe. Die Vorschau ist damit überholt – bitte erneut parsen.', 'lsg-bestenliste' ),
-					$neu_alias
-				),
-			);
-		} else {
-			$hinweise[] = array(
-				'info',
-				sprintf(
-					/* translators: %s: Vereinsschreibweise */
-					__( '„%s" stand schon in der Alias-Liste.', 'lsg-bestenliste' ),
-					$neu_alias
-				),
-			);
-		}
-	}
-
-	if ( 'alias_weg' === $aktion ) {
-		check_admin_referer( 'lsg_bl_alias_weg' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$weg = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
-		if ( lsg_bl_verein_alias_entfernen( $weg ) ) {
-			lsg_bl_parse_verwerfen( $token );
-			$token      = '';
-			$hinweise[] = array( 'success', __( 'Der Vereins-Alias ist entfernt. Bitte erneut parsen.', 'lsg-bestenliste' ) );
-		}
-	}
 
 	/* ---- Discovery ---- */
 
@@ -557,18 +570,16 @@ function lsg_bl_admin_import_page() {
 
 		// Nur vorbelegen, was der Mensch nicht selbst gesetzt hat. Der
 		// Unterschied zwischen „noch nicht angefasst" und „bewusst geleert"
-		// steht in der Query: fasst jemand das Feld an, ist der Parameter da.
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		if ( ! isset( $_GET['distanz'] ) ) {
+		// steht im Roh-Array: fasst jemand das Feld an, ist der Schlüssel da.
+		if ( ! isset( $roh['distanz'] ) ) {
 			$distanz = $vorbelegung['distanz'];
 		}
-		if ( ! isset( $_GET['datum'] ) ) {
+		if ( ! isset( $roh['datum'] ) ) {
 			$datum = $vorbelegung['datum'];
 		}
-		if ( ! isset( $_GET['ort'] ) ) {
+		if ( ! isset( $roh['ort'] ) ) {
 			$ort = $vorbelegung['ort'];
 		}
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		// Eine einzige Liste ist keine Wahl – Wert implizit setzen.
 		$listen = lsg_bl_contest_listen( $disc, $contest );
@@ -630,23 +641,127 @@ function lsg_bl_admin_import_page() {
 		)
 	);
 
-	$formularwerte = array(
-		'url'     => $url,
-		'adapter' => $adapter_w,
-		'contest' => $contest,
-		'list'    => $list,
-		'distanz' => $distanz,
-		'datum'   => $datum,
-		'ort'     => $ort,
-		'token'   => $token,
-		'filter'  => $filter,
+	return array(
+		'w'           => array(
+			'url'     => $url,
+			'adapter' => $adapter_w,
+			'contest' => $contest,
+			'list'    => $list,
+			'distanz' => $distanz,
+			'datum'   => $datum,
+			'ort'     => $ort,
+			'token'   => $token,
+			'filter'  => $filter,
+		),
+		'adapter_cls' => $adapter_cls,
+		'erkannt_cls' => $erkannt_cls,
+		'disc'        => $disc,
+		'vorbelegung' => $vorbelegung,
+		'vorschau'    => $vorschau,
+		'zustand'     => $zustand,
+		'fehler'      => $fehler,
+		'hinweise'    => $hinweise,
 	);
+}
+
+/**
+ * Render-Callback der Seite.
+ *
+ * @return void
+ */
+function lsg_bl_admin_import_page() {
+	if ( ! current_user_can( LSG_BL_CAP ) ) {
+		wp_die( esc_html__( 'Dafür fehlt dir die Berechtigung.', 'lsg-bestenliste' ), '', array( 'response' => 403 ) );
+	}
+
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended
+	$roh = array();
+	foreach ( array( 'url', 'adapter', 'contest', 'list', 'distanz', 'datum', 'ort', 'token', 'filter' ) as $feld ) {
+		if ( isset( $_GET[ $feld ] ) ) {
+			$roh[ $feld ] = wp_unslash( $_GET[ $feld ] );
+		}
+	}
+	$aktion = isset( $_GET['aktion'] ) ? sanitize_key( wp_unslash( $_GET['aktion'] ) ) : '';
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+	$hinweise = array();
+
+	/* ---- nonce-gesicherte GET-Aktionen ---- */
+
+	if ( '' !== $aktion ) {
+		$url_roh     = isset( $roh['url'] ) ? esc_url_raw( trim( (string) $roh['url'] ) ) : '';
+		$adapter_roh = isset( $roh['adapter'] ) ? sanitize_key( (string) $roh['adapter'] ) : '';
+		$token_roh   = isset( $roh['token'] ) ? sanitize_text_field( (string) $roh['token'] ) : '';
+		$adapter_cls = ( '' !== $url_roh ) ? lsg_bl_adapter_waehlen( $url_roh, $adapter_roh ) : null;
+
+		if ( 'neu_laden' === $aktion && $adapter_cls ) {
+			check_admin_referer( 'lsg_bl_neu_laden' );
+			$event_id = method_exists( $adapter_cls, 'event_id_aus_url' )
+				? (string) call_user_func( array( $adapter_cls, 'event_id_aus_url' ), $url_roh )
+				: '';
+			lsg_bl_discovery_verwerfen( $adapter_cls, $event_id );
+			lsg_bl_parse_verwerfen( $token_roh );
+			$roh['token'] = '';
+			$hinweise[]   = array( 'info', __( 'Die Auswahl wird frisch von der Quelle geholt.', 'lsg-bestenliste' ) );
+		}
+
+		if ( 'alias_setzen' === $aktion ) {
+			check_admin_referer( 'lsg_bl_alias' );
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$neu_alias = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
+
+			if ( '' === trim( $neu_alias ) || lsg_bl_ohne_verein_marke() === $neu_alias ) {
+				$hinweise[] = array(
+					'error',
+					__( 'Eine leere Vereinsangabe lässt sich nicht als Alias aufnehmen – sie würde jede Zeile ohne Verein übernehmen.', 'lsg-bestenliste' ),
+				);
+			} elseif ( lsg_bl_verein_alias_hinzufuegen( $neu_alias ) ) {
+				// Der Filter hat sich geändert, also ist die Vorschau überholt.
+				// Sie wird verworfen, nicht heimlich weiterbenutzt – dieselbe
+				// Regel wie bei Datum und Distanz (Plan 6.5.1).
+				lsg_bl_parse_verwerfen( $token_roh );
+				$roh['token'] = '';
+				$hinweise[]   = array(
+					'success',
+					sprintf(
+						/* translators: %s: Vereinsschreibweise */
+						__( '„%s" gilt ab jetzt als LSG Karlsruhe. Die Vorschau ist damit überholt – bitte erneut parsen.', 'lsg-bestenliste' ),
+						$neu_alias
+					),
+				);
+			} else {
+				$hinweise[] = array(
+					'info',
+					sprintf(
+						/* translators: %s: Vereinsschreibweise */
+						__( '„%s" stand schon in der Alias-Liste.', 'lsg-bestenliste' ),
+						$neu_alias
+					),
+				);
+			}
+		}
+
+		if ( 'alias_weg' === $aktion ) {
+			check_admin_referer( 'lsg_bl_alias_weg' );
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$weg = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
+			if ( lsg_bl_verein_alias_entfernen( $weg ) ) {
+				lsg_bl_parse_verwerfen( $token_roh );
+				$roh['token'] = '';
+				$hinweise[]   = array( 'success', __( 'Der Vereins-Alias ist entfernt. Bitte erneut parsen.', 'lsg-bestenliste' ) );
+			}
+		}
+	}
+
+	$ansicht  = lsg_bl_import_ansicht( $roh );
+	$hinweise = array_merge( $hinweise, $ansicht['hinweise'] );
 
 	/* ---- Ausgabe ---- */
 
-	echo '<div class="wrap lsg-bl-import">';
+	echo '<div class="wrap lsg-bl-import" id="lsg-bl-import">';
 	echo '<h1>' . esc_html__( 'Ergebnis-Import', 'lsg-bestenliste' ) . '</h1>';
 
+	echo '<div id="lsg-bl-notices">';
 	$notice = lsg_bl_admin_notice_holen();
 	if ( $notice ) {
 		lsg_bl_admin_notice( $notice['typ'], $notice['text'] );
@@ -654,29 +769,58 @@ function lsg_bl_admin_import_page() {
 	foreach ( $hinweise as $h ) {
 		lsg_bl_admin_notice( $h[0], $h[1] );
 	}
-	if ( '' !== $fehler ) {
-		lsg_bl_admin_notice( 'error', $fehler );
+	if ( '' !== $ansicht['fehler'] ) {
+		lsg_bl_admin_notice( 'error', $ansicht['fehler'] );
 	}
+	echo '</div>';
 
-	lsg_bl_import_zustand_anzeigen( $zustand );
+	lsg_bl_import_zustand_anzeigen( $ansicht['zustand'] );
 
-	echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+	echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="lsg-bl-form">';
 	echo '<input type="hidden" name="action" value="lsg_bl_import" />';
 	wp_nonce_field( 'lsg_bl_import' );
 
-	lsg_bl_import_schritt1( $formularwerte, $adapter_cls, $erkannt_cls, $disc );
-
-	if ( $disc ) {
-		lsg_bl_import_schritt2( $formularwerte, $disc );
-		lsg_bl_import_schritt3( $formularwerte, $disc, $vorbelegung );
-	}
+	lsg_bl_import_schritt1( $ansicht['w'], $ansicht['adapter_cls'], $ansicht['erkannt_cls'], $ansicht['disc'] );
+	lsg_bl_import_auswahl_block( $ansicht );
 
 	echo '</form>';
 
-	if ( $vorschau ) {
-		lsg_bl_import_vorschau_anzeigen( $vorschau, $formularwerte );
-	}
+	lsg_bl_import_vorschau_block( $ansicht );
 
+	echo '</div>';
+}
+
+/**
+ * Schritt 2 und 3 in einem austauschbaren Behälter.
+ *
+ * ⚠ Der Behälter steht auch dann da, wenn es nichts zu zeigen gibt: er ist
+ * das Ziel, in das der Weg ohne Reload sein Fragment hängt (M6). Ein
+ * Behälter, den es erst nach dem ersten Treffer gibt, wäre beim ersten
+ * Treffer noch nicht da.
+ *
+ * @param array $a Ergebnis von lsg_bl_import_ansicht().
+ * @return void
+ */
+function lsg_bl_import_auswahl_block( array $a ) {
+	echo '<div id="lsg-bl-auswahl">';
+	if ( $a['disc'] ) {
+		lsg_bl_import_schritt2( $a['w'], $a['disc'] );
+		lsg_bl_import_schritt3( $a['w'], $a['disc'], $a['vorbelegung'] );
+	}
+	echo '</div>';
+}
+
+/**
+ * Die Vorschau in einem austauschbaren Behälter.
+ *
+ * @param array $a Ergebnis von lsg_bl_import_ansicht().
+ * @return void
+ */
+function lsg_bl_import_vorschau_block( array $a ) {
+	echo '<div id="lsg-bl-vorschau">';
+	if ( $a['vorschau'] ) {
+		lsg_bl_import_vorschau_anzeigen( $a['vorschau'], $a['w'] );
+	}
 	echo '</div>';
 }
 
@@ -695,7 +839,7 @@ function lsg_bl_import_zustand_anzeigen( $zustand ) {
 		return;
 	}
 	printf(
-		'<p class="lsg-bl-zustand"><span class="lsg-bl-zustand-punkt lsg-bl-zustand-%1$s"></span>%2$s</p>',
+		'<p class="lsg-bl-zustand" id="lsg-bl-zustand" data-zustand="%1$s"><span class="lsg-bl-zustand-punkt lsg-bl-zustand-%1$s"></span>%2$s</p>',
 		esc_attr( $zustand ),
 		esc_html( $alle[ $zustand ] )
 	);
@@ -759,6 +903,36 @@ function lsg_bl_import_schritt1( array $w, $adapter_cls, $erkannt_cls, $disc ) {
 
 	echo '</tbody></table>';
 
+	lsg_bl_import_erkannt_zeile( $w, $adapter_cls, $disc );
+
+	// ⚠ Die drei Schritte sind drei Submit-Knöpfe im EINEN Formular, alle mit
+	// name="schritt" und eigenem value. Nur so geht kein Feldwert verloren,
+	// wenn jemand erst das Datum tippt und dann „Parsen" drückt – und nur so
+	// bleibt die Seite ohne JavaScript vollständig bedienbar (Plan 6.9).
+	printf(
+		'<p class="submit"><button type="submit" name="schritt" value="pruefen" id="lsg-bl-pruefen" class="button %1$s">%2$s</button><span class="spinner" id="lsg-bl-spinner-pruefen"></span></p>',
+		esc_attr( $disc ? 'button-secondary' : 'button-primary' ),
+		esc_html__( 'Quelle prüfen', 'lsg-bestenliste' )
+	);
+}
+
+/**
+ * Was die Quelle über sich preisgibt – oder warum sie unbekannt ist.
+ *
+ * Eigene Funktion mit eigenem Behälter, weil genau dieser Absatz sich ändert,
+ * wenn die Adresse geprüft wurde: der Weg ohne Reload (M6) tauscht ihn aus,
+ * ohne Schritt 1 anzufassen. Der Rest von Schritt 1 – Adressfeld und
+ * Portalwahl – trägt dabei die Eingabe des Menschen und darf gerade NICHT
+ * neu gerendert werden.
+ *
+ * @param array       $w           Formularwerte.
+ * @param string|null $adapter_cls Zuständiger Adapter.
+ * @param array|null  $disc        Discovery-Daten.
+ * @return void
+ */
+function lsg_bl_import_erkannt_zeile( array $w, $adapter_cls, $disc ) {
+	echo '<div id="lsg-bl-erkannt">';
+
 	// Kein Adapter: Klartext plus Auflistung der unterstützten Portale.
 	if ( '' !== $w['url'] && ! $adapter_cls ) {
 		echo '<div class="notice notice-error inline"><p>'
@@ -786,15 +960,7 @@ function lsg_bl_import_schritt1( array $w, $adapter_cls, $erkannt_cls, $disc ) {
 		echo '</p>';
 	}
 
-	// ⚠ Die drei Schritte sind drei Submit-Knöpfe im EINEN Formular, alle mit
-	// name="schritt" und eigenem value. Nur so geht kein Feldwert verloren,
-	// wenn jemand erst das Datum tippt und dann „Parsen" drückt – und nur so
-	// bleibt die Seite ohne JavaScript vollständig bedienbar (Plan 6.9).
-	printf(
-		'<p class="submit"><button type="submit" name="schritt" value="pruefen" class="button %1$s">%2$s</button></p>',
-		esc_attr( $disc ? 'button-secondary' : 'button-primary' ),
-		esc_html__( 'Quelle prüfen', 'lsg-bestenliste' )
-	);
+	echo '</div>';
 }
 
 /**
@@ -865,10 +1031,10 @@ function lsg_bl_import_schritt2( array $w, array $disc ) {
 	echo '</tbody></table>';
 
 	printf(
-		'<p class="submit"><button type="submit" name="schritt" value="auswahl" class="button button-secondary">%s</button></p>',
+		'<p class="submit lsg-bl-nur-ohne-js"><button type="submit" name="schritt" value="auswahl" class="button button-secondary">%s</button></p>',
 		esc_html__( 'Auswahl übernehmen', 'lsg-bestenliste' )
 	);
-	echo '<p class="description">'
+	echo '<p class="description lsg-bl-nur-ohne-js">'
 		. esc_html__( 'Ohne JavaScript aktualisiert dieser Knopf die Listen- und Distanzvorschläge.', 'lsg-bestenliste' )
 		. '</p>';
 }
@@ -977,7 +1143,7 @@ function lsg_bl_import_schritt3( array $w, array $disc, $vorbelegung ) {
 	}
 
 	printf(
-		'<p class="submit"><button type="submit" name="schritt" value="parsen" class="button button-primary"%1$s>%2$s</button></p>',
+		'<p class="submit"><button type="submit" name="schritt" value="parsen" id="lsg-bl-parsen" class="button button-primary"%1$s>%2$s</button><span class="spinner" id="lsg-bl-spinner-parsen"></span></p>',
 		$gesperrt ? ' disabled="disabled"' : '',
 		esc_html__( 'Parsen', 'lsg-bestenliste' )
 	);
@@ -1186,7 +1352,9 @@ function lsg_bl_import_bilanz( array $u ) {
  *
  * ⚠ Ohne JavaScript lädt der Filter die Seite neu und setzt damit die
  * Auswahl auf die Vorbelegung zurück. Das steht auch so daneben – erst
- * filtern, dann anhaken.
+ * filtern, dann anhaken. Mit JavaScript filtert das Skript in der Tabelle,
+ * die Haken bleiben stehen, und der Satz wird ausgeblendet
+ * (`lsg-bl-nur-ohne-js`).
  *
  * @param array  $v      Parse-Ergebnis.
  * @param array  $w      Formularwerte.
@@ -1239,12 +1407,12 @@ function lsg_bl_import_statusfilter( array $v, array $w, $aktiv ) {
 		);
 	}
 
-	echo '<ul class="subsubsub lsg-bl-statusfilter"><li>'
+	echo '<ul class="subsubsub lsg-bl-statusfilter" id="lsg-bl-statusfilter"><li>'
 		. wp_kses_post( implode( ' |</li><li>', $teile ) )
 		. '</li></ul><div class="clear"></div>';
 
 	if ( '' !== $aktiv ) {
-		echo '<p class="description">'
+		echo '<p class="description lsg-bl-nur-ohne-js">'
 			. esc_html__( 'Ohne JavaScript setzt ein Filterwechsel die Auswahl auf die Vorbelegung zurück – erst filtern, dann anhaken.', 'lsg-bestenliste' )
 			. '</p>';
 	}
@@ -1264,9 +1432,10 @@ function lsg_bl_import_statusfilter( array $v, array $w, $aktiv ) {
  * übersehen. Die Zeilenzahl der Tabelle entspricht damit immer der LSG-Zahl
  * aus dem Trichter (Plan 6.5.3).
  *
- * ⚠ Die Kopf-Checkbox „Alle" gibt es hier nicht: sie braucht JavaScript, und
- * ohne JavaScript soll die Seite vollständig bedienbar bleiben. Sie kommt mit
- * M6 (Plan 6.6).
+ * ⚠ Die Kopf-Checkbox „Alle" steht nicht hier, sondern wird von
+ * `assets/js/admin-import.js` nachgerüstet (Plan 6.6): ohne JavaScript hätte
+ * sie keine Wirkung, und ein Bedienelement, das nichts tut, ist schlimmer als
+ * keines. Die leere Kopfzelle ist ihr Platz.
  *
  * @param array $v Parse-Ergebnis.
  * @param array $w Formularwerte.
@@ -1305,7 +1474,10 @@ function lsg_bl_import_tabelle( array $v, array $w ) {
 		}
 	}
 
-	echo '<table class="wp-list-table widefat fixed striped lsg-bl-vorschau">';
+	printf(
+		'<table class="wp-list-table widefat fixed striped lsg-bl-vorschau" id="lsg-bl-tabelle" data-serverfilter="%s">',
+		esc_attr( $filter )
+	);
 	echo '<thead><tr>';
 	if ( ! $fertig ) {
 		echo '<td class="manage-column column-cb check-column"></td>';
@@ -1510,7 +1682,7 @@ function lsg_bl_import_tabelle( array $v, array $w ) {
 
 	/* ---- Der Knopf ---- */
 	printf(
-		'<p class="submit"><button type="submit" class="button button-primary"%1$s>%2$s</button></p>',
+		'<p class="submit"><button type="submit" id="lsg-bl-uebernehmen" class="button button-primary"%1$s>%2$s</button><span class="spinner" id="lsg-bl-spinner-uebernehmen"></span></p>',
 		( 0 === $gewaehlt ) ? ' disabled="disabled"' : '',
 		esc_html(
 			sprintf(

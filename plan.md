@@ -2153,13 +2153,45 @@ SSRF-Proxy für nicht angemeldete Besucher.
 | Route | Methode | Parameter | Antwort |
 |---|---|---|---|
 | `/import/erkennen` | POST | `url` | `{ adapter, label, eventId, eventName, contestId?, listId? }` |
-| `/import/wettbewerbe` | GET | `adapter`, `eventId` | `{ contests:[{id,name}] }` |
-| `/import/listen` | GET | `adapter`, `eventId`, `contestId` | `{ lists:[{id,name,live}] }` |
-| `/import/parsen` | POST | `adapter`, `eventId`, `contestId`, `listId?`, `distanz`, `ort`, `datum` | `{ token, meta, trichter, zeilen[], warnungen[] }` |
+| `/import/wettbewerbe` | GET | `url`, `adapter` | `{ contests:[{id,name}] }` |
+| `/import/listen` | GET | `url`, `adapter`, `contest`, `list`, `distanz`, `datum`, `ort`, `token` | `{ lists:[{id,name,live}] }` |
+| `/import/parsen` | POST | `url`, `adapter`, `contest`, `list?`, `distanz`, `ort`, `datum` | `{ token, meta, trichter, zeilen[], warnungen[] }` |
 | `/import/uebernehmen` | POST | `token`, `zeilen[]` (Indizes der angehakten) | `{ run_id, angelegt, aktualisiert, uebersprungen, konflikte, ergebnisse[] }` |
 
 `trichter` ist das Zählwerk aus 6.5: `{ gelesen, lsg, zugeordnet, neu,
 schneller, langsamer, gleich, offen }`.
+
+> ⚠ **Nachtrag 2026-09-05, nach dem Bau (M6). Zwei Abweichungen von der
+> Tabelle, beide bewusst.**
+>
+> 1. **Jede Antwort trägt zusätzlich `html`** – die fünf Fragmente, die die
+>    Seite an ihre Behälter hängt (`notices`, `zustand`, `erkannt`,
+>    `auswahl`, `vorschau`), dazu `zustand` und `werte` (die aufgelösten
+>    Formularwerte, aus denen das Skript die Adresszeile nachführt). Die
+>    dokumentierten JSON-Felder bleiben unverändert daneben stehen.
+>
+>    Der Grund ist derselbe, aus dem die Routen dieselben Funktionen rufen
+>    wie der Formular-Handler: sonst stünde die Vorschau zweimal da. Trichter,
+>    Statusfilter, Rohdaten der Quelle, ähnliche Athleten, 🏆-Markierung,
+>    Resultatspalte und der Block der abgelehnten Vereine sind kein „bisschen
+>    Markup" – sie in JavaScript nachzubauen hiesse, jede spätere Änderung an
+>    der Tabelle an zwei Stellen zu machen, und die zweite fiele erst auf,
+>    wenn jemand ohne JavaScript arbeitet. Gerendert wird aus dem
+>    Discovery-Cache; ein Fragment kostet keinen Abruf bei der Quelle.
+>
+> 2. **Die Routen bekommen `url`, nicht `eventId`.** Die Discovery hängt an
+>    der Adresse: ist der 15-Minuten-Transient abgelaufen, muss sie neu
+>    abgerufen werden, und aus einer blossen Event-ID liesse sich die Adresse
+>    nicht zurückbauen – bei race result steckt die Vorauswahl im Fragment,
+>    bei runtix im Pfad. Die Allowlist prüft ohnehin jede Adresse einzeln
+>    (unten), die zusätzliche `url` öffnet also nichts.
+>
+> Und eine Zugabe, die die Tabelle nicht vorsah: `/import/listen` ist zugleich
+> der Weg, auf dem ein Wechsel von Wettbewerb, Liste, **Distanz oder Datum**
+> die Vorbelegungen, die Plausibilitätshinweise und die Sperre des
+> Parsen-Knopfes nachzieht – also das, was ohne JavaScript der Knopf „Auswahl
+> übernehmen" holt. Eine eigene Route dafür wäre eine zweite Stelle mit
+> derselben Antwort gewesen.
 
 Eine Route zum Zuordnen einzelner Zeilen gibt es nicht: der Import legt keine
 Athleten an und schreibt keine Regeln (6.5.3). Wer eine offene Zeile auflösen
@@ -2321,6 +2353,9 @@ Zeitmessung Barth; geplant ist keiner davon.
 >    Zeit. Stattdessen wird die unpassende Eingabe abgelehnt – `01:36:44`
 >    unter „Strecke" ergibt eine Fehlermeldung mit Vorschlag. Das Leeren
 >    gehört zu M6.
+>    → **mit M6 nachgezogen** (2026-09-05): mit JavaScript wechselt das Feld
+>      ohne Reload und wird geleert, sobald der Feld-TYP wechselt – ohne
+>      JavaScript bleibt es bei der Ablehnung mit Vorschlag.
 > 2. **Löschen läuft über eine eigene Ansicht mit POST-Formular**, nicht über
 >    einen `wp_nonce_url()`-Link (7.4). Ein GET-Link löscht, wenn ein
 >    Prefetch oder ein Crawler ihn anfasst, und ein `confirm()` wäre auf
@@ -2745,7 +2780,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M3 | P3, P4, Übernahme, Log + Log-Ansicht | ✅ **erledigt 2026-09-02** – der Ettlinger Halbmarathon landet als `7 angelegt, 1 aktualisiert, 3 übersprungen` in `lsg_best`; ein zweiter Durchlauf zeigt lauter `gleich` und schreibt nichts |
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | ✅ **erledigt 2026-09-02** – derselbe Ablauf mit `https://runtix.com/sts/10050/3152/21/total`: erkannt als runtix, Datum `16.08.2026` aus der Veranstaltungsübersicht, Distanz „Halbmarathon" aus dem Wettbewerbsnamen, Trichter `22 gelesen → 1 LSG`. Die Oberfläche hat dafür keine Zeile Sonderbehandlung |
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | ✅ **erledigt 2026-09-02** – ein 24-Stunden-Ergebnis (`112,737 km`) ist von Hand erfassbar, landet mit `ak = m45` in `lsg_best` und als `adapter = 'manuell'` im Log; eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg, und Löschen protokolliert den vollständigen Datensatz, bevor die Zeile weg ist |
-| M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | derselbe Ablauf ohne Reload |
+| M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | ✅ **erledigt 2026-09-05** – derselbe Ablauf ohne einen einzigen Seitenaufbau: Adresse prüfen, Wettbewerb wählen, parsen, übernehmen. Die drei laufenden Zustände (`erkenne`, `parse`, `uebernahme`) sind jetzt sichtbar, die Kopf-Checkbox ist da, das Knopf-Label zählt mit, und der Statusfilter kostet die gesetzten Haken nicht mehr. Mit deaktiviertem JavaScript verhält sich die Seite unverändert wie nach M5 |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
 Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
@@ -2855,12 +2890,30 @@ prüft am Ende keinen von beiden.
   - [x] Alle elf Zustände aus 6.11 darstellen (inkl. Fehler mit Klartext)
         → als eine Funktion (`lsg_bl_import_zustand()`); dargestellt werden die ohne
           JavaScript erreichbaren. `erkenne`, `parse` und `uebernahme` sind
-          Zwischenzustände eines laufenden Requests und werden erst mit M6 sichtbar.
+          Zwischenzustände eines laufenden Requests und sind seit M6 sichtbar:
+          das Skript setzt die Zustandszeile, der Punkt pulsiert, und der
+          Spinner steht am jeweiligen Knopf. Die Klartexte kommen aus derselben
+          Liste wie die serverseitigen (`lsg_bl_import_zustaende()`, per
+          `wp_localize_script`) – nicht aus einer zweiten im JavaScript.
           ⚠ „erkannt" deckt zwei Lagen ab, die der Plan nicht trennt: Wettbewerb noch
           nicht gewählt, und Wettbewerb gewählt, aber Distanz oder Datum fehlen.
   - [x] Formular-Roundtrip über `admin-post.php` (funktioniert ohne JS)
-  - [ ] `assets/js/admin-import.js` für den Ablauf ohne Reload
-  - [ ] `AbortController` gegen Race Condition beim schnellen Umschalten
+  - [x] `assets/js/admin-import.js` für den Ablauf ohne Reload
+        → Vier Schritte über `fetch`, alles per Delegation am äusseren Behälter:
+          die inneren werden bei jeder Antwort ausgetauscht, an ihnen hängende
+          Listener wären nach dem ersten Schritt weg. Das Skript rendert nichts –
+          es hängt die Fragmente aus der Antwort ein (6.10) – und führt den
+          Seitenzustand per `history.replaceState()` in der Adresszeile nach,
+          damit ein Reload nach drei Schritten ohne Reload nicht der erste
+          Schritt ist.
+  - [x] `AbortController` gegen Race Condition beim schnellen Umschalten
+        → ⚠ nur für die Leseschritte (`erkennen`, `listen`): wer dreimal schnell
+          den Wettbewerb wechselt, will das Ergebnis des dritten Wechsels sehen,
+          nicht das des ersten, das zufällig zuletzt eintrifft. Parsen und
+          Übernehmen werden NICHT abgebrochen – ein abgebrochener `fetch()` hält
+          den Server nicht an, der Schreibvorgang liefe weiter, und die Seite
+          wüsste nichts davon. Solange einer von beiden läuft, passiert nichts
+          anderes.
   - [x] Assets nur auf dieser Seite laden (`$hook`-Vergleich)
   - [x] Nonce + `check_admin_referer()` + Capability-Prüfung in jedem Handler
 - [ ] Parse-Pipeline P1–P4 (Abschnitt 6.5)
@@ -3049,12 +3102,14 @@ prüft am Ende keinen von beiden.
   - [x] **Nicht** nach `lsg_win` schreiben – späterer Ausbaustand
 - [ ] Übernahme-Oberfläche (Abschnitt 6.6)
   - [x] Checkbox je Zeile, Vorauswahl nur `neu` + `schneller`
-  - [ ] Kopf-Checkbox „Alle" (`offen`-Zeilen ausgenommen)
-        → ⚠ kommt mit M6, und zwar aus dem Grund, den 6.6 selbst nennt: sie
-          braucht JavaScript („Ohne JavaScript ist die Kopf-Checkbox schlicht
-          nicht da"), und bis dahin soll die Seite vollständig ohne
-          JavaScript bedienbar sein. Die Vorauswahl aus `neu` + `schneller`
-          deckt den Normalfall ohnehin ab.
+  - [x] Kopf-Checkbox „Alle" (`offen`-Zeilen ausgenommen)
+        → mit M6 nachgerüstet, und zwar **vom Skript**, nicht vom PHP: ohne
+          JavaScript hätte sie keine Wirkung, und ein Bedienelement, das nichts
+          tut, ist schlimmer als keines. `offen` und `mehrdeutig` sind
+          automatisch aussen vor – sie haben gar keine Checkbox.
+        → ⚠ Sie schaltet nur die **sichtbaren** Zeilen um. Was der Statusfilter
+          gerade versteckt, hat niemand vor Augen und soll sich nicht
+          mitbewegen.
   - [x] Statusspalte im Klartext mit alter und neuer Zeit
   - [x] Button mit Anzahl im Label, bei 0 Auswahl deaktiviert
 - [x] Schreiblogik (Abschnitt 6.7)
@@ -3086,14 +3141,20 @@ prüft am Ende keinen von beiden.
           Zeilen. Der Einstieg über das Suchfeld führt direkt in die Zeilenebene,
           weil „warum steht bei X diese Zeit" die häufigere Frage ist als „was ist in
           Vorgang 12 passiert".
-- [ ] REST-Routen `lsg/v1/import/*` mit
+- [x] REST-Routen `lsg/v1/import/*` mit
       `permission_callback => fn() => current_user_can( LSG_BL_CAP )` –
       **nie** eine hart notierte Capability und **nie** `__return_true` (6.10)
-      → die Routen selbst kommen mit M6. Die Unterpunkte darunter sind
-        trotzdem erledigt: sie sind keine REST-Eigenschaften, sondern
+      → steht in `includes/class-lsg-import-rest.php`, fünf Routen, ein
+        `permission_callback` für alle. Die Unterpunkte darunter waren schon
+        vorher erledigt: sie sind keine REST-Eigenschaften, sondern
         Eigenschaften des Abrufs und des Caches, und die brauchte schon der
-        Formularweg. Die REST-Schicht ruft dieselben Funktionen (6.10) und
-        erbt sie damit.
+        Formularweg. Die REST-Schicht ruft dieselben Funktionen und erbt sie
+        damit.
+      → ⚠ Die Datei hängt **nicht** am `is_admin()`-Block in
+        `lsg-bestenliste.php` – ein REST-Request ist kein Admin-Request. Die
+        Renderer aus `includes/admin/page-import.php` lädt sie sich im Handler
+        selbst nach, also nur, wenn wirklich eine Import-Route aufgerufen
+        wurde.
   - [x] `wp_safe_remote_get()`, Host-Allowlist aus der Registry, Redirect-Prüfung
         → Redirects werden von Hand verfolgt (`redirection => 0`), damit jeder
           Zwischenschritt erneut durch die Allowlist läuft
@@ -3111,8 +3172,14 @@ prüft am Ende keinen von beiden.
           Nicht-LSG-Ergebnisse landen nirgends, auch nicht im Transient.
   - [x] Formular-Handler und REST-Route rufen dieselbe Funktion (keine Doppel-Logik)
         → Die Logik steht in `class-lsg-import.php` (`lsg_bl_discovery()`,
-          `lsg_bl_parsen()`); die Admin-Seite ist nur ein Eingang. Der zweite kommt
-          mit M6.
+          `lsg_bl_parsen()`, `lsg_bl_uebernehmen()`); die Admin-Seite ist nur ein
+          Eingang, die REST-Schicht der zweite.
+        → ⚠ Dazu kam mit M6 eine zweite gemeinsame Stelle, die es vorher nicht
+          gab: `lsg_bl_import_ansicht()`. Sie rechnet aus den Eingabewerten
+          Discovery, Vorbelegung, gültige Vorschau und Zustand – die Seite liest
+          dafür `$_GET`, die REST-Schicht die Request-Parameter. Ohne sie hätte
+          der Weg ohne Reload eine eigene Vorstellung davon, welche Vorschau
+          noch gilt.
 - [x] Admin-Seite „Bestenliste": von Hand erfassen (Abschnitt 7)
       → Vier Ansichten über `?action=`: Liste, `new`, `edit`, `delete`. Die reine
         Logik steht in `includes/class-lsg-leistung.php` (ohne WordPress, in der
@@ -3139,6 +3206,10 @@ prüft am Ende keinen von beiden.
           unter „Strecke" ergibt eine Fehlermeldung mit Vorschlag, keine
           stille Übernahme. Das Leeren gehört zu M6, wo der Wechsel ohne
           Reload passiert und die Eingabe ohnehin noch im Feld steht.
+        → **erledigt mit M6** (2026-09-05): `assets/js/admin-best.js` zieht
+          Label, Platzhalter, Prüfmuster und Hinweis nach und leert das Feld,
+          sobald der Feld-Typ wechselt. Ohne JavaScript gilt der Absatz
+          darüber unverändert weiter.
   - [x] Zeiten über dieselbe Normalisierung wie P1 (keine zweite Implementierung)
         → `lsg_bl_leistung_lesen()` ruft `lsg_bl_zeit_normalisieren()`; der Test
           vergleicht das Ergebnis zusätzlich Zeichen für Zeichen mit dem, was P1
@@ -3432,16 +3503,65 @@ Schreibvorgang) und wächst mit M6 (REST).
       `https://angreifer.example/?x=my.raceresult.com` treffen die Allowlist nicht
       → ebenso `raceresult.com.angreifer.example`, `http://127.0.0.1/` und
         `file:///etc/passwd`
-- [ ] REST-Routen ohne Login / ohne Nonce → 401/403
+- [x] REST-Routen ohne Login / ohne Nonce → 401/403
+      → geprüft am 2026-09-05 an `/import/wettbewerbe`: ohne `X-WP-Nonce`
+        (angemeldet, Cookie da) und ohne Cookie kommt beide Male
+        `401 rest_forbidden`. Damit ist der Abruf fremder Adressen kein
+        offener Endpunkt – genau der Punkt, an dem `__return_true` einen
+        SSRF-Proxy ergäbe.
 - [x] race result: Liste mit `Contest: 0` erscheint bei jedem Wettbewerb
       → im Adapter umgesetzt; die Ettlingen-Fixture enthält keinen solchen
         Eintrag, geprüft ist also die Regel, nicht der Fall
 - [x] Runtix: Wettbewerb `"w"` überlebt den Weg durch Attribut, REST und Parser
       → Attribut und Parser sind geprüft (Unit-Test plus ein Durchlauf der
         Import-Seite mit `contest=w`, der „Interstick-Walk" und `value="w"` zeigt).
-        Der REST-Weg fehlt noch – die Routen kommen mit M6.
+        Der REST-Weg geht durch dieselben Funktionen und reicht `contest` als
+        String durch – zu prüfen bleibt er trotzdem einmal von Hand.
 - [x] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
 - [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
+      → mit M6 wieder zu prüfen, und zwar als Gegenprobe: die Seite darf sich
+        ohne JavaScript verhalten wie nach M5. Sichtbar müssen dann wieder
+        sein: der Knopf „Auswahl übernehmen", der Satz darunter und der
+        Hinweis am Statusfilter – sie hängen an `.lsg-bl-nur-ohne-js`, das
+        erst das Skript ausblendet.
+- [x] M6: derselbe Ablauf mit JavaScript ohne einen einzigen Seitenaufbau –
+      Adresse prüfen, Wettbewerb wechseln, parsen, übernehmen; danach steht
+      der Stand in der Adresszeile und ein Reload zeigt dieselbe Seite
+      → geprüft am 2026-09-05 mit beiden Portalen. Der Ettlinger Trichter kommt
+        über REST Zeichen für Zeichen so heraus wie über das Formular
+        (`658 gelesen, 1 ohne Zeit → 11 LSG → 10 zugeordnet, 1 ohne Zuordnung →
+        0 neu, 1 schneller, 6 langsamer, 3 gleich`), und derselbe Vergleich mit
+        `runtix.com/sts/10050/3152/21/total` ergibt auf beiden Wegen
+        `234 gelesen → 1 LSG`.
+      → Übernehmen ist schreibfrei geprüft: nur die sechs `langsamer`-Zeilen
+        angehakt → `0 angelegt · 0 aktualisiert · 11 übersprungen`, in
+        `lsg_best` keine Änderung, Log-Zeile da, Tabelle bleibt mit
+        Resultatspalte stehen, Knopf und Kopf-Checkbox verschwinden.
+      → ⚠ **Zweiter WordPress-Eigenwille, dabei aufgefallen und behoben:**
+        `wp-admin/js/common.js` holt beim Laden jede Notice aus ihrem
+        Elternelement heraus und hängt sie direkt hinter die `<h1>` – jede
+        ausser denen mit der Klasse `inline`. Das machte `#lsg-bl-notices` nach
+        dem Laden leer, und der nächste Schritt ohne Reload tauschte einen
+        leeren Behälter aus, während die alte Meldung daneben stehen blieb.
+        `lsg_bl_admin_notice()` setzt jetzt immer `inline`; optisch ändert das
+        fast nichts, weil der Behälter ohnehin gleich hinter der `<h1>` steht.
+- [x] M6: Kopf-Checkbox schaltet nur die sichtbaren Zeilen, das Knopf-Label
+      zählt mit, und ein Statuswechsel im Filter kostet keinen gesetzten Haken
+      → ⚠ **Dabei aufgefallen und behoben:** `wp-admin/js/common.js` hängt an
+        jeder Kopf-Checkbox einer `wp-list-table` einen eigenen Klick-Handler,
+        und der setzt jede Checkbox, die gerade `:hidden` ist, auf **false**.
+        Gedacht ist das für ausgeblendete Spalten – hier traf es genau die
+        Zeilen, die der Statusfilter versteckt: ein „Alle"-Klick im Filter
+        `langsamer` kostete still den Haken der `schneller`-Zeile. Das Skript
+        merkt sich den Stand beim Verstecken und holt ihn zurück; der
+        WordPress-Handler hängt am `click`, unserer am `change`, kommt also
+        danach.
+- [x] M6: dreimal schnell den Wettbewerb wechseln → es gewinnt der letzte
+      Wechsel, nicht die zuletzt eintreffende Antwort
+- [x] M6: Distanz oder Datum nach dem Parsen ändern → die Vorschau wird
+      verworfen, mit derselben Meldung wie beim Reload
+      → geprüft: Token weg, Tabelle weg, Zustand zurück auf „Bereit zum
+        Parsen", Meldung wortgleich mit der des Reload-Wegs.
 - [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
 - [x] Zweimal derselbe Import → alle Zeilen `gleich`, keine Duplikate
       → geprüft: nach dem zweiten Durchlauf ist `lsg_best` Zeichen für Zeichen
@@ -3538,13 +3658,20 @@ Manuelle Erfassung (Abschnitt 7):
       → geprüft am Label und am Platzhalter, nicht am Vorkommen des Worts:
         „Strecke" steht auch im Zeit-Formular, nämlich in der Beschreibung des
         Distanz-Selects
-- [x] ~~Distanzwechsel leert das Leistungsfeld (kein stehengebliebener Wert)~~
-      → **verworfen für M5, kommt mit M6.** Ohne JavaScript ist der Wechsel ein
-        Formular-Roundtrip, und dabei die Eingabe wegzuwerfen hiesse: ein
-        Vertipper in der Distanz kostet die getippte Zeit. Stattdessen wird die
-        unpassende Eingabe abgelehnt, mit Vorschlag. Sobald der Wechsel ohne
-        Reload passiert (M6), ist das Leeren richtig – dann steht die Eingabe
-        ohnehin noch im Feld.
+- [x] Distanzwechsel leert das Leistungsfeld (kein stehengebliebener Wert)
+      → **mit M6 nachgezogen** (`assets/js/admin-best.js`): Label, Platzhalter,
+        Prüfmuster und Hinweis wechseln ohne Reload mit. Ohne JavaScript bleibt
+        es beim Roundtrip über „Prüfen" mit Ablehnung statt stiller Übernahme –
+        dort wäre das Leeren immer noch falsch, weil ein Vertipper in der
+        Distanz die getippte Zeit kostete.
+      → ⚠ **Abweichung, bewusst:** geleert wird beim Wechsel des Feld-TYPS,
+        nicht bei jedem Wechsel der Distanz. `01:36:44` bleibt gültig, wenn aus
+        Halbmarathon Marathon wird; unter „Strecke" ist derselbe Wert Unsinn und
+        muss weg. „Kein stehengebliebener Wert" meint genau diesen Fall.
+      → ⚠ Was das Feld verlangt, entscheidet weiterhin `lsg_bl_leistung_feld()`.
+        Das Skript bekommt die fertige Tabelle über `wp_localize_script()`
+        (`lsg_bl_leistung_felder_js()`) – die Zuordnung „Zeitlauf →
+        Streckenfeld" steht nicht ein zweites Mal in JavaScript.
 - [x] `96,723 km` wird unverändert als `96,723 km` gespeichert – **keine**
       führende Null; `96,7 km` wird ~~auf `96,700 km` ergänzt~~ und `96,7234 km`
       abgelehnt (drei Nachkommastellen sind Pflicht)
@@ -3780,6 +3907,32 @@ angezeigt wird, stehen 3 675 Zeilen im Jahr 2106. Zur Wahl:
 
 *Vorschlag:* auf `0`. Ein Wert, der in 80 Jahren liegt, ist schlimmer als kein
 Wert, weil er jede Sortierung anführt.
+
+**Der Distanzvorschlag folgt dem Wettbewerbswechsel nicht.** Aufgefallen beim
+Durchspielen von M6 (2026-09-05), aber **kein Fehler von M6**: der Weg ohne
+JavaScript verhält sich genauso, und zwar seit M2.
+
+Der Grund ist die Regel aus 6.5.1 – vorbelegt wird nur, was der Mensch nicht
+selbst gesetzt hat, und „gesetzt" heisst: der Wert steht in der Query. Beim
+ersten Rendern kommt `HM` als Vorschlag ins Feld, ab dem ersten Roundtrip
+reist er als expliziter Wert mit, und danach gilt er als Entscheidung des
+Menschen. Wer dann von „21 KM" auf „5 KM" wechselt, behält „Halbmarathon" im
+Feld – mit einem Beschreibungstext, der weiter auf den alten Wettbewerb
+verweist.
+
+Zur Wahl:
+
+- beim **Wettbewerbswechsel** den Distanzvorschlag neu ziehen, wie es 6.4
+  schon für die Listenauswahl tut („alte Auswahl verwerfen statt einen
+  Geisterwert mitschleppen") – und in Kauf nehmen, dass eine von Hand
+  gewählte Distanz dabei verlorengeht;
+- oder unterscheiden, ob der Wert vom Menschen oder aus der Vorbelegung kam,
+  und nur den vorbelegten nachziehen. Das kostet ein weiteres Feld im
+  Formular, das mitreist.
+
+*Vorschlag:* das zweite. Der Wettbewerb ist die Quelle des Vorschlags; wechselt
+er, ist ein ungefragt stehengebliebener Vorschlag schlicht falsch – eine
+eingetippte Entscheidung wegzuwerfen aber auch.
 
 Was hier neu auftaucht, gehört auch wirklich entschieden, bevor es in
 Abschnitt 8 wandert.

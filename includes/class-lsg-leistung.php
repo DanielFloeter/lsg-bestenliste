@@ -64,6 +64,24 @@ function lsg_bl_leistung_feld( $distanz ) {
 }
 
 /**
+ * Dasselbe für alle Distanzcodes auf einmal, für das Skript der Seite.
+ *
+ * ⚠ Hier wird nichts zusätzlich entschieden: die Funktion ruft für jeden Code
+ * lsg_bl_leistung_feld() und reicht das Ergebnis weiter. Sonst stünde die
+ * Zuordnung „Zeitlauf → Streckenfeld" zweimal da, einmal in PHP und einmal in
+ * JavaScript – und beim nächsten Distanzcode fiele nur eine der beiden auf.
+ *
+ * @return array<string,array>
+ */
+function lsg_bl_leistung_felder_js() {
+	$out = array();
+	foreach ( array_keys( lsg_bl_distance_map() ) as $code ) {
+		$out[ $code ] = lsg_bl_leistung_feld( $code );
+	}
+	return $out;
+}
+
+/**
  * Das Vergleichswort einer Distanz: „schneller" oder „weiter".
  *
  * Bei Zeitläufen ist mehr besser (Plan 7.3), und „112,737 km ist schneller"

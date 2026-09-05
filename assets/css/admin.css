@@ -41,6 +41,53 @@
 	background: #d63638;
 }
 
+/*
+ * Die drei laufenden Zustaende (erkenne, parse, uebernahme) gibt es nur mit
+ * JavaScript – ohne JS ist zwischen Klick und neuer Seite nichts zu zeigen.
+ * Sie pulsieren, damit „laeuft noch" auch dann sichtbar ist, wenn der
+ * Spinner ausserhalb des Blickfelds steht.
+ */
+.lsg-bl-zustand-punkt.lsg-bl-zustand-erkenne,
+.lsg-bl-zustand-punkt.lsg-bl-zustand-parse,
+.lsg-bl-zustand-punkt.lsg-bl-zustand-uebernahme {
+	background: #2271b1;
+	animation: lsg-bl-puls 1.2s ease-in-out infinite;
+}
+
+@keyframes lsg-bl-puls {
+	0%, 100% { opacity: 1; }
+	50%      { opacity: .3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lsg-bl-zustand-punkt {
+		animation: none;
+	}
+}
+
+.lsg-bl-zustand-punkt.lsg-bl-zustand-teilfehler {
+	background: #dba617;
+}
+
+/* --- Was es nur ohne JavaScript gibt ---------------------------------- */
+
+/*
+ * Der Knopf „Auswahl uebernehmen" und die beiden Saetze daneben sind Ersatz
+ * fuer ein onchange bzw. Warnungen vor einem Reload. Mit JavaScript passiert
+ * beides nicht mehr – dann sind sie schlicht falsch, nicht nur ueberfluessig.
+ * Das Ausblenden haengt an einer Klasse, die das Skript setzt: ohne Skript
+ * steht alles da.
+ */
+.lsg-bl-js .lsg-bl-nur-ohne-js {
+	display: none;
+}
+
+.lsg-bl-import .submit .spinner {
+	float: none;
+	margin: 0 0 0 .5em;
+	vertical-align: middle;
+}
+
 /* --- Erkennung und Herkunftsangaben ----------------------------------- */
 
 .lsg-bl-erkannt,
