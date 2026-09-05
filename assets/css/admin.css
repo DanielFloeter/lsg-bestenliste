@@ -285,7 +285,8 @@
  */
 .lsg-bl-bestform tr.lsg-bl-feldfehler th,
 .lsg-bl-mapform tr.lsg-bl-feldfehler th,
-.lsg-bl-athletform tr.lsg-bl-feldfehler th {
+.lsg-bl-athletform tr.lsg-bl-feldfehler th,
+.lsg-bl-winform tr.lsg-bl-feldfehler th {
 	border-left: 4px solid #d63638;
 	padding-left: .6em;
 }
@@ -499,4 +500,20 @@
 .lsg-bl-aktabelle td,
 .lsg-bl-aktabelle th {
 	padding: .4em .8em;
+}
+
+/* --- Seite „Gesamtsiege" (Abschnitt 12) ------------------------------- */
+
+/*
+ * Die erkannten Siege im Import: Hinweis plus je ein Link ins vorbelegte
+ * Formular (12.6). Geschrieben wird dabei nichts - deshalb sieht der Block
+ * aus wie eine Auskunft und nicht wie ein Knopf.
+ */
+.lsg-bl-siege ul {
+	margin: .4em 0 .8em 1.4em;
+	list-style: disc;
+}
+
+.lsg-bl-siege li {
+	margin: .2em 0;
 }

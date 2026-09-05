@@ -1012,13 +1012,20 @@ function lsg_bl_formularzeile( $label, $id, $fehler, $inhalt ) {
 /**
  * Das Athleten-Select (Plan 7.2).
  *
- * @param int $gewaehlt Ausgewählte athletes_id.
+ * ⚠ Auch die Gesamtsiege benutzen dieses Select (12.3) – deshalb sind Name
+ * und id Parameter geworden. Nachgebaut wird es nicht: die beiden
+ * `<optgroup>` „Aktiv" und „Ehemalige" und der sichtbare Jahrgang sind eine
+ * Entscheidung, die an einer Stelle stehen soll.
+ *
+ * @param int    $gewaehlt Ausgewählte athletes_id.
+ * @param string $name     Feldname im Formular.
+ * @param string $id       HTML-id.
  * @return void
  */
-function lsg_bl_athleten_select( $gewaehlt ) {
+function lsg_bl_athleten_select( $gewaehlt, $name = 'athlet', $id = 'lsg-bl-athlet' ) {
 	$gruppen = lsg_bl_athleten_gruppiert();
 
-	echo '<select name="athlet" id="lsg-bl-athlet">';
+	printf( '<select name="%1$s" id="%2$s">', esc_attr( $name ), esc_attr( $id ) );
 	printf( '<option value="">%s</option>', esc_html__( '— bitte wählen —', 'lsg-bestenliste' ) );
 
 	$labels = array(

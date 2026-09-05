@@ -37,7 +37,16 @@
 > Konflikterkennung, der Doppelzeile im Bestand und des Wegs aus einer
 > offenen Zeile heraus.
 >
-> Stand der Planung: 2026-09-05 – **M1 bis M7 sind gebaut und geprüft.**
+> Stand der Planung: 2026-09-05 – **M1 bis M8 sind gebaut und geprüft.**
+> Damit ist die Phase 4 der README abgeschlossen: alle sechs Untermenüs aus
+> 6.2 stehen. Was aus 6.5.5 offenbleibt, ist der Schreibvorgang aus der
+> Übernahme heraus (M9, 9.2).
+>
+> ⚠ Und ein Befund aus dem Bau von M8 wartet auf eine Entscheidung: die
+> Datumsanzeige des Plugins rechnet nicht in der Zeitzone der Website
+> (9.3, „Zeitzonen").
+>
+> — früherer Stand — **M1 bis M7 sind gebaut und geprüft.**
 > Mit M7 steht **Abschnitt 11, „Sportler pflegen"**, der erste Teil der
 > Phase 4 aus der README: ein fehlender Athlet ist aus der Oberfläche heraus
 > anzulegen, und die drei Stellen, die bisher auf ein Menü ohne Seite zeigten
@@ -2827,7 +2836,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | ✅ **erledigt 2026-09-02** – ein 24-Stunden-Ergebnis (`112,737 km`) ist von Hand erfassbar, landet mit `ak = m45` in `lsg_best` und als `adapter = 'manuell'` im Log; eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg, und Löschen protokolliert den vollständigen Datensatz, bevor die Zeile weg ist |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | ✅ **erledigt 2026-09-05** – derselbe Ablauf ohne einen einzigen Seitenaufbau: Adresse prüfen, Wettbewerb wählen, parsen, übernehmen. Die drei laufenden Zustände (`erkenne`, `parse`, `uebernahme`) sind jetzt sichtbar, die Kopf-Checkbox ist da, das Knopf-Label zählt mit, und der Statusfilter kostet die gesetzten Haken nicht mehr. Mit deaktiviertem JavaScript verhält sich die Seite unverändert wie nach M5 |
 | M7 | Seite „Sportler" (Abschnitt 11) | ✅ **erledigt 2026-09-05** – durchgespielt mit einem eigens angelegten Testsportler: anlegen → Ergebnis erfassen → Jahrgang 1990 auf 1965 ändern → die eine Bestandszeile wechselt nach Rückfrage von `mhk` auf `m50`, mit `athlet_update` und `ak_update` am selben `run_id` → Ergebnis löschen → Sportler löschen. Ein zweiter Anlegeversuch mit demselben Namen und Jahrgang wird vom Schreibweg abgewiesen, nicht nur vom Formular; ein Sportler mit Ergebnissen bekommt gar keinen Löschknopf. Der Bestand steht danach wieder bei 427 Sportlern |
-| M8 | Seite „Gesamtsiege" (Abschnitt 12) | ein Gesamtsieg ist aus der Oberfläche heraus einzutragen, zu ändern und zu löschen, ohne phpMyAdmin; `distance` und `time` bleiben Freitext und bekommen Vorschläge aus dem Bestand; derselbe Sieg lässt sich nicht zweimal eintragen, mehrere Siege eines Athleten im selben Jahr schon; der Hinweis über der Übernahme-Tabelle führt mit einem Klick ins gefüllte Formular |
+| M8 | Seite „Gesamtsiege" (Abschnitt 12) | ✅ **erledigt 2026-09-05** – durchgespielt mit einem eigens eingetragenen Sieg („Pforzheim nach Basel" als Distanz, „48 Runden" als Zeit): anlegen → Ort ändern → speichern ohne Änderung → löschen, jeder Schritt mit seiner Log-Zeile. Der Freitext kommt unverändert wieder heraus, ein 41 Zeichen langer Veranstaltungsname wird mit „bitte um 1 kürzen" abgewiesen, und derselbe Sieg lässt sich nicht zweimal eintragen – einer am Tag danach schon. Ursprüngliche Zusage: ein Gesamtsieg ist aus der Oberfläche heraus einzutragen, zu ändern und zu löschen, ohne phpMyAdmin; `distance` und `time` bleiben Freitext und bekommen Vorschläge aus dem Bestand; derselbe Sieg lässt sich nicht zweimal eintragen, mehrere Siege eines Athleten im selben Jahr schon; der Hinweis über der Übernahme-Tabelle führt mit einem Klick ins gefüllte Formular |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
 Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
@@ -3423,29 +3432,29 @@ prüft am Ende keinen von beiden.
   - [x] Speichern ohne Änderung schreibt nichts und loggt nichts (wie 7.5)
   - [x] Die Hinweise in 6.5.3 und 7.2 bekommen die Adresse der neuen Seite –
         bisher verweisen sie auf ein Menü, das es nicht gibt
-- [ ] **Admin-Seite „Gesamtsiege" (Abschnitt 12) – M8**
-  - [ ] Untermenü `lsg-bestenliste-win` hinter „Sportler", `LSG_BL_CAP`,
+- [x] **Admin-Seite „Gesamtsiege" (Abschnitt 12) – M8**
+  - [x] Untermenü `lsg-bestenliste-win` hinter „Sportler", `LSG_BL_CAP`,
         Hook in `lsg_bl_admin_assets()`
-  - [ ] `includes/admin/page-win.php` + `includes/admin/class-lsg-win-table.php`
-  - [ ] Sechs Felder: Datum, Ort, Veranstaltung, Distanz, Athlet, Zeit
-  - [ ] **Nichts normalisieren** – weder Zeit noch Distanz (12.1)
-  - [ ] `<datalist>` aus `SELECT DISTINCT`, nach Häufigkeit sortiert; eine
+  - [x] `includes/admin/page-win.php` + `includes/admin/class-lsg-win-table.php`
+  - [x] Sechs Felder: Datum, Ort, Veranstaltung, Distanz, Athlet, Zeit
+  - [x] **Nichts normalisieren** – weder Zeit noch Distanz (12.1)
+  - [x] `<datalist>` aus `SELECT DISTINCT`, nach Häufigkeit sortiert; eine
         Eingabe ausserhalb der Liste wird angenommen
-  - [ ] `event` über 40 Zeichen wird zurückgewiesen, nicht abgeschnitten,
+  - [x] `event` über 40 Zeichen wird zurückgewiesen, nicht abgeschnitten,
         und die Meldung nennt die Zeichenzahl (6.5.5)
-  - [ ] Athlet über `lsg_bl_athleten_select()` – wiederverwendet, nicht
+  - [x] Athlet über `lsg_bl_athleten_select()` – wiederverwendet, nicht
         nachgebaut – mit Link auf „Sportler anlegen"
-  - [ ] Dublettensperre auf Athlet + Datum + Veranstaltung, normalisiert
+  - [x] Dublettensperre auf Athlet + Datum + Veranstaltung, normalisiert
         verglichen; mehrere Siege im Jahr bleiben unkommentiert
-  - [ ] Liste: sechs Spalten, Filter Jahr/Athlet, Suche über Veranstaltung
+  - [x] Liste: sechs Spalten, Filter Jahr/Athlet, Suche über Veranstaltung
         und Ort, Datum absteigend, 50 je Seite; sortierbare Spalten
         sortieren wirklich
-  - [ ] Löschen mit Rückfrage und POST, vollständiger Datensatz vorher ins
+  - [x] Löschen mit Rückfrage und POST, vollständiger Datensatz vorher ins
         Log; **keine** Referenzprüfung – an einer win-Zeile hängt nichts
-  - [ ] Protokollierung mit `win_insert` (der reservierte Wert aus 6.5.5),
+  - [x] Protokollierung mit `win_insert` (der reservierte Wert aus 6.5.5),
         `win_update` und `win_delete`; `event_name` ist hier gefüllt
-  - [ ] Speichern ohne Änderung schreibt nichts und loggt nichts
-  - [ ] Der 🏆-Hinweis über der Übernahme-Tabelle bekommt den Link ins
+  - [x] Speichern ohne Änderung schreibt nichts und loggt nichts
+  - [x] Der 🏆-Hinweis über der Übernahme-Tabelle bekommt den Link ins
         vorbelegte Formular (12.6) – **kein** Schreibvorgang aus dem Import
 - [x] **Sortierbare Spalten in `LSG_BL_Best_Table` repariert.** Drei
       Spaltenköpfe sind als sortierbar ausgezeichnet, aber `prepare_items()`
@@ -3500,6 +3509,14 @@ Die zwei Lagen sind kein Selbstzweck, sie unterscheiden sich in der Laufzeit:
 | `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields` | in Sekunden, ohne Datenbank, ohne Netz |
 | `tests/integration/` | WordPress-Testsuite + MySQL | `dbDelta()`-Schema, P3/P4 gegen echte Tabellen, REST-Routen, Capability, SSRF-Allowlist | langsamer, braucht eine Testdatenbank |
 
+> **Stand der Unit-Lage nach M8 (2026-09-05): 425 Läufe, 15 476 Zusicherungen,
+> kein Fehler.** Dazugekommen sind die 24 Tests in
+> `tests/unit/gesamtsieg-test.php`. Ihr Schwerpunkt ist das, was diese Seite
+> von der Bestenlisten-Pflege unterscheidet: dass „48 Runden", „44:21:00" und
+> „Pforzheim nach Basel" durch die Prüfung gehen und unverändert wieder
+> herauskommen. Ein Test, der das zusichert, ist die Bremse gegen den
+> naheliegenden Gedanken, hier doch `lsg_bl_leistung_lesen()` davorzuschalten.
+>
 > **Stand der Unit-Lage nach M7 (2026-09-05): 401 Läufe, 15 424 Zusicherungen,
 > kein Fehler.** Dazugekommen sind die 20 Tests in
 > `tests/unit/sportler-test.php` – Formularprüfung, Dublettenschlüssel, Diff
@@ -3807,20 +3824,61 @@ Schreibvorgang) und wächst mit M6 (REST).
         gewöhnliches Formular an `admin-post.php` bzw. ein Link. Geprüft ist
         das ausgelieferte Markup, nicht die Darstellung in einem Browser mit
         abgeschaltetem JavaScript – dieselbe Einschränkung wie bei M6.
-- [ ] M8: ein Gesamtsieg mit `48 Runden` als Zeit und `Pforzheim nach Basel`
+- [x] M8: ein Gesamtsieg mit `48 Runden` als Zeit und `Pforzheim nach Basel`
       als Distanz lässt sich speichern und steht danach unverändert in der
       Datenbank und im Frontend-Block
-- [ ] M8: derselbe Athlet am selben Tag bei derselben Veranstaltung ein
+      → geprüft 2026-09-05. In der Liste steht danach
+        `01.04.2026 | Teststadt | Testlauf M8 | Pforzheim nach Basel |
+        Seith Marius | 48 Runden` – Zeichen für Zeichen wie eingegeben.
+      → Der Frontend-Block ist nicht eigens nachgesehen; er gibt `time` roh aus
+        und schickt `distance` durch `lsg_bl_distance_label()`, das unbekannte
+        Werte unverändert zurückgibt (12.1).
+- [x] M8: derselbe Athlet am selben Tag bei derselben Veranstaltung ein
       zweites Mal → abgewiesen; derselbe Athlet an einem anderen Tag →
       angenommen, ohne Kommentar
-- [ ] M8: ein Veranstaltungsname mit 41 Zeichen wird zurückgewiesen, nicht
+      → geprüft gegen `lsg_win` #111 (Seith, Ettlinger Halbmarathon,
+        01.08.2025): gleicher Tag → Meldung mit id und abgeschaltetem
+        „Speichern"; „ ETTLINGER halbmarathon " trifft genauso; Tag danach,
+        andere Veranstaltung und das Bearbeiten der Zeile selbst → kein
+        Einspruch.
+- [x] M8: ein Veranstaltungsname mit 41 Zeichen wird zurückgewiesen, nicht
       gekürzt – und die Meldung sagt, um wie viel
-- [ ] M8: die Vorschlagsliste zeigt die Werte des Bestands; ein Wert, der
+      → „Die Spalte fasst 40 Zeichen, das sind 41 – bitte um 1 kürzen."
+        40 Zeichen gehen durch.
+- [x] M8: die Vorschlagsliste zeigt die Werte des Bestands; ein Wert, der
       nicht darin steht, wird trotzdem angenommen
+      → Distanzen: `5 km / 10 km / Halbmarathon / Marathon / 10km` – nach
+        Häufigkeit, mit `10 km` vor `10km`. Zeiten: `48 Runden` zuerst
+        (drei Zeilen). „Testlauf M8" stand in keiner Liste und wurde
+        gespeichert.
 - [ ] M8: der 🏆-Link aus der Übernahme-Tabelle öffnet das Formular
       gefüllt, und der Import schreibt dabei weiterhin nichts nach `lsg_win`
-- [ ] M8: Löschen protokolliert den vollständigen Datensatz, bevor die Zeile
+      → ⚠ **offen.** Der Block erscheint nur, wenn eine Zeile Platz 1 in der
+        Gesamtwertung hat – in der Ettlinger Liste gewinnt kein LSG-Läufer
+        (bester Platz 20, Abschnitt 8). Geprüft ist nur, dass die
+        Import-Seite unverändert fehlerfrei rendert. Es fehlt eine
+        Ergebnisliste mit einem LSG-Sieg – dieselbe Lücke wie bei der
+        M7-Abnahme zur offenen Zeile.
+- [x] M8: Löschen protokolliert den vollständigen Datensatz, bevor die Zeile
       weg ist
+      → Log-Zeile: „Gesamtsieg gelöscht / Pforzheim nach Basel, 48 Runden,
+        Teststadt", dazu Name, Jahrgang und Zeit in den Rohfeldern.
+      → ⚠ **Dabei aufgefallen und behoben – der ernsteste Fund dieses
+        Milestones:** `lsg_import_run.distance` und `lsg_import_log.distance`
+        sind `varchar(15)`, zugeschnitten auf die Distanzcodes des Imports.
+        „Pforzheim nach Basel" hat 20 Zeichen. Der Insert scheiterte daran,
+        `lsg_bl_log_schreiben()` gab eine 0 zurück – und **niemand prüft
+        diesen Rückgabewert**. Vier Vorgänge hintereinander (anlegen, ändern,
+        speichern, löschen) liefen scheinbar sauber durch, mit grüner Meldung,
+        und schrieben nichts ins Log. Aufgefallen ist es nur, weil ich danach
+        nachgesehen habe.
+      → Behoben an drei Stellen: beide `distance`-Felder werden jetzt wie ihre
+        Nachbarn mit `mb_substr()` gekürzt (der volle Wert reist in der
+        `meldung` mit, wenn er nicht hineinpasst); und wenn **keine einzige**
+        Log-Zeile durchkommt, wird der Vorgang wieder gelöscht und eine 0
+        zurückgegeben, damit aus einem stillen Fehlschlag wenigstens keine
+        Kopfzeile ohne Inhalt wird. Eine solche stand nach den Tests im Log
+        und ist entfernt.
 - [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
       → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
         `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
@@ -4271,6 +4329,70 @@ Verifikationsliste, und die erste davon, die jemand tatsächlich ausgeführt
 hat, schlägt fehl. Solange sie offen sind, ist „V1 ist erledigt" eine
 Behauptung.
 
+**Zeitzonen: die Datumsanzeige rechnet nicht in der Zeitzone der Website.**
+Aufgefallen beim Bau von M8 (2026-09-05), als eine Dublettenprüfung einen
+Sieg vom 1. August erst unter dem 2. August fand.
+
+`lsg_bl_format_date()`, `lsg_bl_format_date_iso()` und
+`lsg_bl_year_from_timestamp()` benutzen `date_i18n()`. Diese Funktion erwartet
+einen Zeitstempel, der den Zeitzonen-Versatz **schon enthält**; bekommt sie
+einen echten Unix-Zeitstempel, rechnet sie faktisch in UTC. Die dafür
+vorgesehene Funktion ist `wp_date()`.
+
+Gemessen an derselben Zeile:
+
+```
+lsg_win #111, date = 1754085600
+  date_i18n( 'd.m.Y H:i' )  →  01.08.2025 22:00     ← was die Seite heute zeigt
+  wp_date(   'd.m.Y H:i' )  →  02.08.2025 00:00     ← was in der Zeitzone
+                                                       Europe/Berlin gilt
+```
+
+Der Bestand trägt fast durchweg **Mitternacht Ortszeit** – ein Artefakt der
+Migration. Damit zeigt die Oberfläche für diese Zeilen den **Vortag**:
+
+```
+lsg_best   5 916 von 5 924 Zeilen betroffen
+lsg_win       96 von    96 Zeilen betroffen
+```
+
+Nicht betroffen sind die acht Zeilen, die auf 12:00 Ortszeit stehen – also
+genau die, die das Plugin selbst geschrieben hat (6.5.1) oder die V1 dorthin
+gezogen hat.
+
+⚠ **Das ist derselbe Mechanismus, den V1 schon einmal getroffen hat.** In
+Abschnitt 8 steht als V1-Befund: „Lauf am 1. Januar, als 00:00 Ortszeit
+gespeichert → bei UTC-Session im Vorjahr", behandelt mit „auf 12:00 Ortszeit
+ziehen". Sechs Zeilen wurden so repariert. Der Fehler in der Rechnung blieb –
+und er betrifft nicht sechs Zeilen, sondern 6 012. Dass es niemandem auffiel,
+liegt daran, dass ein um einen Tag verschobenes Datum nur dort weh tut, wo
+der Jahreswechsel dazwischenliegt.
+
+Zur Wahl:
+
+- **den Code reparieren**: die drei Funktionen auf `wp_date()` umstellen.
+  Danach zeigen 6 012 Zeilen ihr richtiges Datum – einen Tag später als
+  heute. Das ist sichtbar, auch auf der öffentlichen Website.
+- **die Daten verschieben**: alle Zeitstempel auf 12:00 Ortszeit ziehen, wie
+  V1 es mit den sechs Neujahrsläufen gemacht hat. Dann stimmt die Anzeige
+  wieder – aber `date_i18n()` bleibt falsch, und die nächste Zeile, die
+  jemand auf anderem Weg einfügt, fällt wieder hinein.
+- **beides**: erst den Code, dann prüfen, ob die verschobenen Daten stimmen.
+
+*Vorschlag:* das dritte, und zwar in dieser Reihenfolge. Der Code ist die
+Ursache; die Datenverschiebung war ein Pflaster, das fünf Jahre lang
+unauffällig geblieben ist. Zu klären ist vorher genau eine Frage, und sie
+ist nicht technisch: **war der 1. August gemeint oder der 2.?** Ein Indiz
+spricht für den 2., also für die gespeicherte Ortszeit – die sechs
+Neujahrsläufe. Ein Neujahrslauf ist am 1. Januar; gespeichert waren sie als
+1. Januar 00:00 Ortszeit, und angezeigt wurden sie als 31. Dezember. Der
+gespeicherte Wert war also der richtige, die Anzeige der falsche.
+
+⚠ Bevor hier irgendetwas geschrieben wird, gehört eine Stichprobe gegen die
+Wirklichkeit gemacht: fünf Veranstaltungen aus `lsg_win` heraussuchen, deren
+Datum sich extern belegen lässt. Diese Frage lässt sich nicht aus der
+Datenbank beantworten.
+
 Was hier neu auftaucht, gehört auch wirklich entschieden, bevor es in
 Abschnitt 8 wandert.
 
@@ -4674,6 +4796,26 @@ Der zweite Teil der Phase 4, und der letzte Menüpunkt aus 6.2. Anders als bei
 den Sportlern ist hier nichts blockiert – Gesamtsiege sind seit jeher
 Handarbeit, und 6.5.5 hat das ausdrücklich so entschieden. Der Anlass ist
 schlichter: es gibt keinen Weg, einen einzutragen, ausser über phpMyAdmin.
+
+> ⚠ **Nachtrag 2026-09-05, nach dem Bau (M8).** Drei Dinge sind anders
+> gekommen:
+>
+> 1. **Das Log war zu eng.** `lsg_import_run.distance` und
+>    `lsg_import_log.distance` sind `varchar(15)`; eine Distanz wie
+>    „Pforzheim nach Basel" (20 Zeichen) liess den Insert scheitern, und
+>    `lsg_bl_log_schreiben()` gab still eine 0 zurück. Beide Felder werden
+>    jetzt wie ihre Nachbarn gekürzt, der volle Wert reist in der `meldung`
+>    mit, und ein Vorgang, von dem keine einzige Zeile durchkommt, löscht sich
+>    selbst wieder. Ausführlich in der Verifikationsliste, Abschnitt 8.
+> 2. **`lsg_bl_athleten_select()` hat zwei Parameter mehr** – Feldname und id.
+>    Nachgebaut wird das Select nicht: die beiden `<optgroup>` und der
+>    sichtbare Jahrgang sind eine Entscheidung, die an einer Stelle stehen
+>    soll (7.2).
+> 3. **Die Dublettenprüfung vergleicht über `lsg_bl_format_date_iso()`**,
+>    nicht über ein Zeitfenster. Der Grund steht in 9.3: welchen Kalendertag
+>    ein Zeitstempel bezeichnet, ist im Plugin gerade nicht eindeutig. Bis das
+>    entschieden ist, benutzt die Prüfung dieselbe Funktion wie die Anzeige –
+>    dann sagen beide in jedem Fall dasselbe.
 
 ⚠ **Diese Seite ist nicht die Bestenlisten-Pflege mit anderen Spalten.**
 7.6 hat noch angenommen, der Gesamtsieg bekomme „ein eigenes Formular auf

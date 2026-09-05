@@ -101,11 +101,15 @@ Geplante Phasen:
 ~~1. Anlegen der vorhandenen Tabellen in der neuen Datenbank~~  
 ~~2. Übernahme bestehender Daten~~  
 ~~3. WordPress PlugIn mit Ausgabe wie bisher: Bestenliste, Gesamtsieger und Ewige Bestenliste~~  
-4\. UI zur Eingabe von neuen Sportler, Bestenliste und Gesamtsieger, wie bisher – ~~die Bestenlisten-Pflege steht~~, Sportler und Gesamtsieger fehlen noch  
+~~4. UI zur Eingabe von neuen Sportler, Bestenliste und Gesamtsieger, wie bisher~~  
 ~~5. Einlesen von Ergebnis-PDFs, wie von RaceResult und Ergebnisse von Mitglieder in die Datenbank übernehmen~~  
 ~~6. Import und Erfassung ohne Seiten-Reload (REST + progressive enhancement)~~
 
-Was darüber hinaus offen ist – Rückgängig-Funktion für einen Import-Vorgang,
-Gesamtsiege nach `lsg_win` schreiben, ein Wartungslauf, der den Bestand
-nachrechnet – steht in `plan.md` unter 9.2, die noch zu treffenden
-Entscheidungen unter 9.3.
+Alle sechs Phasen sind damit durch – im Adminbereich stehen die sechs
+Untermenüs Ergebnis-Import, Import-Log, Zuordnungen, Bestenliste, Sportler
+und Gesamtsiege.
+
+Was darüber hinaus offen ist – eine Rückgängig-Funktion für einen
+Import-Vorgang, der Gesamtsieg direkt aus der Übernahme heraus, ein
+Wartungslauf, der den Bestand nachrechnet – steht in `plan.md` unter 9.2, die
+noch zu treffenden Entscheidungen unter 9.3.

@@ -3,7 +3,7 @@
  * Plugin Name:       LSG Bestenliste
  * Plugin URI:        https://www.lsg-ka.de/
  * Description:       Drei Gutenberg-Blöcke zur Ausgabe der LSG-Karlsruhe Laufergebnisse: Bestenliste (Jahr), Gesamtsiege (Jahr) und Ewige Bestenliste (all-time). Liest aus den bestehenden Tabellen lsg_ak, lsg_athlete, lsg_best und lsg_win.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 6.1
  * Requires PHP:      7.4
  * Author:            Karlsruher Lemminge
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * allen, die die Seite schon einmal offen hatten, die alte Datei aus dem
  * Browser-Cache – und das faellt beim eigenen Hart-Neuladen nicht auf.
  */
-define( 'LSG_BL_VERSION', '1.2.0' );
+define( 'LSG_BL_VERSION', '1.3.0' );
 define( 'LSG_BL_PATH', plugin_dir_path( __FILE__ ) );
 define( 'LSG_BL_URL', plugin_dir_url( __FILE__ ) );
 
@@ -89,6 +89,7 @@ require_once LSG_BL_PATH . 'includes/class-lsg-import.php';
  * Admin-Seite selbst nach, aber erst im Handler – ein Seitenaufruf im
  * Frontend bekommt davon nichts mit (Plan 6.10).
  */
+require_once LSG_BL_PATH . 'includes/class-lsg-win.php';
 require_once LSG_BL_PATH . 'includes/class-lsg-import-rest.php';
 
 /*
@@ -98,6 +99,7 @@ require_once LSG_BL_PATH . 'includes/class-lsg-import-rest.php';
  * fuer die Unit-Lage der Tests erreichbar bleibt.
  */
 require_once LSG_BL_PATH . 'includes/class-lsg-athlet-form.php';
+require_once LSG_BL_PATH . 'includes/class-lsg-win-form.php';
 
 /*
  * Die Admin-Oberflächen nur im Backend laden – ein Frontend-Aufruf braucht
@@ -110,6 +112,7 @@ if ( is_admin() ) {
 	require_once LSG_BL_PATH . 'includes/admin/page-log.php';
 	require_once LSG_BL_PATH . 'includes/admin/page-map.php';
 	require_once LSG_BL_PATH . 'includes/admin/page-athlet.php';
+	require_once LSG_BL_PATH . 'includes/admin/page-win.php';
 }
 
 /**

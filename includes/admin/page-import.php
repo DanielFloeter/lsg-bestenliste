@@ -97,8 +97,8 @@ function lsg_bl_admin_menu() {
 	);
 
 	// Reihenfolge laut Plan 6.2: Ergebnis-Import, Import-Log, Zuordnungen,
-	// Bestenliste – alle vier "jetzt". "Sportler" folgt als fuenfter Eintrag
-	// (Abschnitt 11, M7), "Gesamtsiege" bleibt vorgemerkt (9.2, M8).
+	// Bestenliste – alle vier "jetzt". Dahinter die beiden aus Phase 4:
+	// "Sportler" (Abschnitt 11, M7) und "Gesamtsiege" (Abschnitt 12, M8).
 	$hook_map = add_submenu_page(
 		'lsg-bestenliste',
 		__( 'Zuordnungen', 'lsg-bestenliste' ),
@@ -130,7 +130,17 @@ function lsg_bl_admin_menu() {
 	$GLOBALS['lsg_bl_log_hook']    = $hook_log;
 	$GLOBALS['lsg_bl_map_hook']    = $hook_map;
 	$GLOBALS['lsg_bl_best_hook']   = $hook_best;
+	$hook_win = add_submenu_page(
+		'lsg-bestenliste',
+		__( 'Gesamtsiege', 'lsg-bestenliste' ),
+		__( 'Gesamtsiege', 'lsg-bestenliste' ),
+		LSG_BL_CAP,
+		'lsg-bestenliste-win',
+		'lsg_bl_admin_win_page'
+	);
+
 	$GLOBALS['lsg_bl_athlet_hook'] = $hook_athlet;
+	$GLOBALS['lsg_bl_win_hook']    = $hook_win;
 }
 add_action( 'admin_menu', 'lsg_bl_admin_menu' );
 
@@ -148,6 +158,7 @@ function lsg_bl_admin_assets( $hook ) {
 			isset( $GLOBALS['lsg_bl_map_hook'] ) ? $GLOBALS['lsg_bl_map_hook'] : '',
 			isset( $GLOBALS['lsg_bl_best_hook'] ) ? $GLOBALS['lsg_bl_best_hook'] : '',
 			isset( $GLOBALS['lsg_bl_athlet_hook'] ) ? $GLOBALS['lsg_bl_athlet_hook'] : '',
+			isset( $GLOBALS['lsg_bl_win_hook'] ) ? $GLOBALS['lsg_bl_win_hook'] : '',
 		)
 	);
 	if ( ! in_array( $hook, $eigene, true ) ) {
@@ -1193,6 +1204,87 @@ function lsg_bl_import_schritt3( array $w, array $disc, $vorbelegung ) {
  * ---------------------------------------------------------------------- */
 
 /**
+ * Die erkannten Gesamtsiege – Hinweis plus Abkürzung (Plan 12.6).
+ *
+ * ⚠ **Hier wird nichts geschrieben.** Der Import bleibt eine Sache, die
+ * Chronik in `lsg_win` eine andere (6.5.5). Was hier entsteht, ist eine
+ * Adresse: ein Link auf das Formular der Seite „Gesamtsiege" mit Datum, Ort,
+ * Veranstaltung, Distanz, Athlet und Zeit in der Query. Das Formular nimmt
+ * seine Werte ohnehin aus der Query (12.3), es braucht dafür keine Zeile
+ * Sonderbehandlung.
+ *
+ * ⚠ Als Distanz reist das Label, nicht der Code: `lsg_win.distance` ist
+ * Freitext, und dort steht „10 km", nicht `10km` (12.1).
+ *
+ * @param array $sieger Die Zeilen mit Platz 1 in der Gesamtwertung.
+ * @param array $v      Parse-Ergebnis.
+ * @param array $w      Formularwerte.
+ * @return void
+ */
+function lsg_bl_import_siege_anzeigen( array $sieger, array $v, array $w ) {
+	echo '<div class="notice notice-info inline lsg-bl-siege">';
+
+	printf(
+		'<p>%s</p>',
+		esc_html(
+			sprintf(
+				/* translators: %d: Anzahl */
+				_n(
+					'%d Gesamtsieg erkannt – der Eintrag in die Gesamtsiege bleibt Handarbeit.',
+					'%d Gesamtsiege erkannt – die Einträge in die Gesamtsiege bleiben Handarbeit.',
+					count( $sieger ),
+					'lsg-bestenliste'
+				),
+				count( $sieger )
+			)
+		)
+	);
+
+	echo '<ul>';
+	foreach ( $sieger as $z ) {
+		$name = trim( $z['nachname'] . ', ' . $z['vorname'], ', ' );
+
+		if ( (int) $z['athletes_id'] <= 0 ) {
+			// Ohne Zuordnung gibt es nichts vorzubelegen – und der Weg dahin
+			// führt über die Zuordnung, nicht über die Gesamtsiege.
+			printf(
+				'<li>%s</li>',
+				esc_html(
+					sprintf(
+						/* translators: %s: Name aus der Quelle */
+						__( '%s – noch keinem Sportler zugeordnet.', 'lsg-bestenliste' ),
+						$name
+					)
+				)
+			);
+			continue;
+		}
+
+		$ziel = lsg_bl_win_url(
+			array(
+				'action'  => 'new',
+				'datum'   => (string) $w['datum'],
+				'ort'     => (string) $w['ort'],
+				'event'   => (string) $v['event_name'],
+				'distanz' => lsg_bl_distance_label( $w['distanz'] ),
+				'athlet'  => (int) $z['athletes_id'],
+				'zeit'    => (string) $z['zeit'],
+			)
+		);
+
+		printf(
+			'<li>%1$s <a href="%2$s">%3$s</a></li>',
+			esc_html( sprintf( '%s (%s)', $z['athlet_label'] ? $z['athlet_label'] : $name, $z['zeit'] ) ),
+			esc_url( $ziel ),
+			esc_html__( 'als Gesamtsieg eintragen', 'lsg-bestenliste' )
+		);
+	}
+	echo '</ul>';
+
+	echo '</div>';
+}
+
+/**
  * Trichter, Warnungen, Tabelle und der Block der nicht übernommenen Vereine.
  *
  * @param array $v Parse-Ergebnis.
@@ -1258,26 +1350,14 @@ function lsg_bl_import_vorschau_anzeigen( array $v, array $w ) {
 	}
 
 	// Gesamtsieg: erkannt und markiert, noch nicht geschrieben (Plan 6.5.5).
-	$siege = 0;
+	$sieger = array();
 	foreach ( $v['zeilen'] as $z ) {
 		if ( lsg_bl_ist_gesamtsieg( $z, $v['gesamtwertung'] ) ) {
-			++$siege;
+			$sieger[] = $z;
 		}
 	}
-	if ( $siege > 0 ) {
-		lsg_bl_admin_notice(
-			'info',
-			sprintf(
-				/* translators: %d: Anzahl */
-				_n(
-					'%d Gesamtsieg erkannt – Eintrag in die Gesamtsiege bitte noch von Hand.',
-					'%d Gesamtsiege erkannt – Einträge in die Gesamtsiege bitte noch von Hand.',
-					$siege,
-					'lsg-bestenliste'
-				),
-				$siege
-			)
-		);
+	if ( $sieger ) {
+		lsg_bl_import_siege_anzeigen( $sieger, $v, $w );
 	}
 
 	// Nicht zuordenbare Zeilen: die Zahl steht zusätzlich als eigene Meldung

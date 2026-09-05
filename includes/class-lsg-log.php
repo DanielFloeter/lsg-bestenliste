@@ -169,7 +169,18 @@ function lsg_bl_log_schreiben( array $daten, array $bilanz, array $log_zeilen ) 
 		'contest_name'      => mb_substr( (string) $daten['contest_name'], 0, 120 ),
 		'list_id'           => mb_substr( (string) $daten['list_id'], 0, 64 ),
 		'list_name'         => mb_substr( (string) $daten['list_name'], 0, 120 ),
-		'distance'          => (string) $daten['distanz'],
+		/*
+		 * ⚠ Auch `distance` wird gekürzt, nicht nur die Nachbarfelder.
+		 * `lsg_import_run.distance` ist `varchar(15)` – zugeschnitten auf die
+		 * Distanzcodes des Imports –, während `lsg_win.distance` `varchar(20)`
+		 * Freitext ist (12.1). „Pforzheim nach Basel" hat 20 Zeichen, und ohne
+		 * diese Zeile scheiterte der gesamte `lsg_import_run`-Insert daran:
+		 * das Log schrieb NICHTS und gab eine 0 zurück, ohne dass es auffiel –
+		 * der schlechteste denkbare Ausgang für eine Tabelle, deren Zweck
+		 * Nachvollziehbarkeit ist (6.2). Ein gekürzter Zusammenfassungswert
+		 * ist verschmerzbar; der volle steht in der Zeile darunter.
+		 */
+		'distance'          => mb_substr( (string) $daten['distanz'], 0, 15 ),
 		'town'              => mb_substr( (string) $daten['ort'], 0, 30 ),
 		'zeit_typ'          => (string) $daten['zeit_typ'],
 		'cnt_gelesen'       => isset( $trichter['gelesen'] ) ? (int) $trichter['gelesen'] : 0,
@@ -193,13 +204,32 @@ function lsg_bl_log_schreiben( array $daten, array $bilanz, array $log_zeilen ) 
 	$run_id = (int) $wpdb->insert_id;
 	$jetzt  = time();
 
+	$fehlgeschlagen = 0;
+
 	foreach ( $log_zeilen as $z ) {
-		$z['run_id']   = $run_id;
-		$z['tstamp']   = $jetzt;
-		$z['distance'] = (string) $daten['distanz'];
+		$z['run_id'] = $run_id;
+		$z['tstamp'] = $jetzt;
+		// ⚠ Gekürzt wie im Vorgang darueber, und aus demselben Grund:
+		// `lsg_import_log.distance` ist ebenfalls `varchar(15)`.
+		$z['distance'] = mb_substr( (string) $daten['distanz'], 0, 15 );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$wpdb->insert( $t_log, $z, lsg_bl_formate( $z, lsg_bl_log_feldtypen() ) );
+		if ( false === $wpdb->insert( $t_log, $z, lsg_bl_formate( $z, lsg_bl_log_feldtypen() ) ) ) {
+			++$fehlgeschlagen;
+		}
+	}
+
+	/*
+	 * ⚠ Ein Vorgang ohne seine Zeilen ist kein Log, sondern eine Kopfzeile.
+	 * Wenn keine einzige Zeile durchkam, ist der Vorgang wertlos – dann lieber
+	 * ganz weg und eine 0 zurück, damit der Aufrufer es merken kann. Das ist
+	 * genau der Fall, der beim Bau von M8 stundenlang unbemerkt blieb: der
+	 * Insert scheiterte an einer zu langen Distanz, das Log schwieg.
+	 */
+	if ( $log_zeilen && count( $log_zeilen ) === $fehlgeschlagen ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->delete( $t_run, array( 'id' => $run_id ), array( '%d' ) );
+		return 0;
 	}
 
 	return $run_id;
@@ -250,7 +280,9 @@ function lsg_bl_log_manuell_zeile( array $zeile, $aktion, $time_alt, $meldung, $
  * (adapter/quelle/contest/list-Felder bleiben leer, der Trichter aus 6.5
  * bleibt bewusst auf 0, siehe 7.5).
  *
- * @param array $daten      datum (JJJJ-MM-TT), jahr, distanz, ort, doppelt (optional).
+ * @param array $daten      datum (JJJJ-MM-TT), jahr, distanz, ort, event_name
+ *                          (optional – nur die Gesamtsiege haben einen, 12.5),
+ *                          doppelt (optional).
  * @param array $bilanz     angelegt, aktualisiert (je 0|1) - geloescht zaehlt
  *                          in lsg_import_run absichtlich nicht mit, siehe 7.5.
  * @param array $log_zeilen Zeilen von lsg_bl_log_manuell_zeile().
@@ -261,7 +293,7 @@ function lsg_bl_log_manuell( array $daten, array $bilanz, array $log_zeilen ) {
 		'adapter'      => 'manuell',
 		'quelle_url'   => '',
 		'event_id'     => '',
-		'event_name'   => '',
+		'event_name'   => isset( $daten['event_name'] ) ? (string) $daten['event_name'] : '',
 		'datum'        => (string) $daten['datum'],
 		'datum_quelle' => 'manuell',
 		'jahr'         => (int) $daten['jahr'],

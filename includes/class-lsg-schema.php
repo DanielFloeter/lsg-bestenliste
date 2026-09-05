@@ -171,6 +171,8 @@ function lsg_bl_log_aktionen() {
 		'fehler'          => __( 'Fehler', 'lsg-bestenliste' ),
 		'delete'          => __( 'gelöscht', 'lsg-bestenliste' ),
 		'win_insert'      => __( 'Gesamtsieg eingetragen', 'lsg-bestenliste' ),
+		'win_update'      => __( 'Gesamtsieg geändert', 'lsg-bestenliste' ),
+		'win_delete'      => __( 'Gesamtsieg gelöscht', 'lsg-bestenliste' ),
 		'athlet_insert'   => __( 'Sportler angelegt', 'lsg-bestenliste' ),
 		'athlet_update'   => __( 'Sportler geändert', 'lsg-bestenliste' ),
 		'athlet_delete'   => __( 'Sportler gelöscht', 'lsg-bestenliste' ),
