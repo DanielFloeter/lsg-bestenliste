@@ -2880,7 +2880,7 @@ prüft am Ende keinen von beiden.
         Seitenaufruf derselben Veranstaltung kostet null Abrufe, ein Parsen kostet
         genau zwei (config + list).
 - [x] Adapter-Registry + Filter `lsg_bl_ergebnis_adapter`
-- [ ] Admin-Seite „Ergebnis-Import" (Abschnitt 6)
+- [x] Admin-Seite „Ergebnis-Import" (Abschnitt 6)
   - [x] Top-Level-Menü `lsg-bestenliste` + Konstante `LSG_BL_CAP`
   - [x] Schritt 1: URL-Feld + Adapter-Erkennung, Adapter manuell übersteuerbar
   - [x] Schritt 2: Wettbewerbs-Select, Listen-Select (ausblenden bei ≤ 1 Liste)
@@ -2916,7 +2916,7 @@ prüft am Ende keinen von beiden.
           anderes.
   - [x] Assets nur auf dieser Seite laden (`$hook`-Vergleich)
   - [x] Nonce + `check_admin_referer()` + Capability-Prüfung in jedem Handler
-- [ ] Parse-Pipeline P1–P4 (Abschnitt 6.5)
+- [x] Parse-Pipeline P1–P4 (Abschnitt 6.5)
   - [x] P1 Namens-Splitter: Komma-Form, GROSSBUCHSTABEN-Form, Fallback + `namen_unsicher`
         → ⚠ das scharfe ß hat keine Großform, die die Quellen benutzen
           (`GEIßLER`, `STÖßER`): vor dem Vergleich zu `SS` auflösen, sonst fällt
@@ -3100,7 +3100,7 @@ prüft am Ende keinen von beiden.
           richtigerweise nichts.
   - [x] Spalten `roh_platz`, `gesamtsieg` im Log anlegen (leer nutzen)
   - [x] **Nicht** nach `lsg_win` schreiben – späterer Ausbaustand
-- [ ] Übernahme-Oberfläche (Abschnitt 6.6)
+- [x] Übernahme-Oberfläche (Abschnitt 6.6)
   - [x] Checkbox je Zeile, Vorauswahl nur `neu` + `schneller`
   - [x] Kopf-Checkbox „Alle" (`offen`-Zeilen ausgenommen)
         → mit M6 nachgerüstet, und zwar **vom Skript**, nicht vom PHP: ohne
@@ -3327,8 +3327,20 @@ prüft am Ende keinen von beiden.
 - [x] ~~Frontend: Shortcode und/oder Block für die Bestenliste~~ – erledigt,
       die drei Blöcke stehen (Phase 3 der README)
 - [x] ~~Sortierung/Filter (AK, Geschlecht, Jahr, Verein)~~ – erledigt
-- [ ] i18n (`load_plugin_textdomain`)
-- [ ] Fehlerbehandlung + Logging (kein `error_log` in Produktion)
+- [x] i18n (`load_plugin_textdomain`)
+      → nachgetragen am 2026-09-05, an `init` und mit `Domain Path: /languages`
+        im Header. ⚠ Der Aufruf fehlte bisher ganz, und das fällt nicht auf:
+        die deutschen Texte stehen als Vorgabe in jedem `__()`, das Plugin ist
+        also auch ohne `.mo` vollständig lesbar. Übersetzbar war es trotzdem
+        nicht – WordPress lädt eine Textdomain nur dann von selbst, wenn das
+        Plugin aus dem offiziellen Verzeichnis kommt. Der Ordner `languages/`
+        ist angelegt und erklärt, wie eine Vorlage entsteht.
+- [x] Fehlerbehandlung + Logging (kein `error_log` in Produktion)
+      → geprüft am 2026-09-05: im Produktivpfad (`includes/`, `blocks/`,
+        `assets/`, `lsg-bestenliste.php`) steht kein `error_log`, kein
+        `var_dump`, kein `print_r` und kein `console.log`. Fehler der Quelle
+        reisen als `LSG_BL_Quelle_Exception` und landen im Klartext in einer
+        Notice; was beim Schreiben passiert ist, steht im Import-Log.
 
 ### Verifikation
 
@@ -3367,6 +3379,22 @@ Die zwei Lagen sind kein Selbstzweck, sie unterscheiden sich in der Laufzeit:
 |---|---|---|---|
 | `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields` | in Sekunden, ohne Datenbank, ohne Netz |
 | `tests/integration/` | WordPress-Testsuite + MySQL | `dbDelta()`-Schema, P3/P4 gegen echte Tabellen, REST-Routen, Capability, SSRF-Allowlist | langsamer, braucht eine Testdatenbank |
+
+> **Stand der Unit-Lage nach M6 (2026-09-05): 381 Läufe, 15 386 Zusicherungen,
+> kein Fehler.**
+>
+> ⚠ Gelaufen sind sie mit einem **Notbehelf**, nicht mit PHPUnit: ein
+> Wegwerf-Läufer, der `PHPUnit\Framework\TestCase` nachbaut, weil an der
+> Stelle, an der gearbeitet wurde, weder Composer noch `phar.phpunit.de`
+> erreichbar waren. Er kennt genau die Zusicherungen, die in `tests/unit/`
+> vorkommen, und wirft bei jeder anderen einen Fehler – damit nichts still
+> durchrutscht und grün aussieht, was nie geprüft wurde; ein absichtlich
+> eingebauter Fehler wurde zur Kontrolle auch gemeldet.
+>
+> Das ersetzt den echten Lauf nicht. `composer install && vendor/bin/phpunit
+> --testsuite unit` auf einer Maschine mit PHP bleibt die Abnahme – zumal
+> `phpunit.xml.dist` mit `failOnWarning` und
+> `beStrictAboutTestsThatDoNotTestAnything` schärfer prüft als der Notbehelf.
 
 Die untere Lage ist die, die täglich läuft; sie ist auch der Grund für die
 Trennung aus Abschnitt 5: **der Abruf gehört nicht in den Parser.** Ein Adapter,
@@ -3496,9 +3524,32 @@ Schreibvorgang) und wächst mit M6 (REST).
         Cache-Treffer-Weg verloren – die Seite hätte beim zweiten Aufruf derselben
         Adresse plötzlich keinen Wettbewerb mehr vorbelegt.
 - [x] Erkennung: unbekannter Host → kein Adapter, saubere Meldung statt Fehler
-- [ ] SSRF: `http://127.0.0.1/`, `file://`, Redirect auf fremden Host → alle geblockt
-- [ ] SSRF: manipulierte `config`-Antwort mit `server: "angreifer.example"` →
+- [x] SSRF: `http://127.0.0.1/`, `file://`, Redirect auf fremden Host → alle geblockt
+      → geprüft am 2026-09-05 direkt gegen `lsg_bl_url_erlaubt()`, für beide
+        Adapter. Abgewiesen: `http://127.0.0.1/`, `http://localhost/…`,
+        `http://169.254.169.254/…` (die Metadaten-Adresse, die einen
+        Cloud-Server ausliest), `file:///etc/passwd`, `ftp://runtix.com/x`.
+      → Die drei Namensfallen ebenfalls abgewiesen:
+        `https://boeseraceresult.com/…` (Suffix ohne Punkt),
+        `https://my.raceresult.com.angreifer.example/…` (erlaubter Name als
+        Präfix) und `https://angreifer.example/?x=my.raceresult.com` (erlaubter
+        Name in der Query). Geprüft wird der Host, nie die ganze Adresse.
+      → ⚠ `ftp://runtix.com/x` wird vom Adapter durchaus **erkannt** (Score > 0)
+        und trotzdem nicht abgerufen: Erkennung ist keine Erlaubnis, der
+        Torwächter ist `lsg_bl_url_erlaubt()`. Gut zu wissen, falls jemand die
+        Erkennung später für eine Prüfung hält.
+      → ⚠ Der Redirect selbst ist damit nur mittelbar geprüft: die Ziel-Adresse
+        jedes Sprungs läuft durch genau diese Funktion (`redirection => 0`,
+        Prüfung je Sprung). Ein Lauf gegen einen echten umleitenden Server
+        braucht die Integrationslage.
+- [x] SSRF: manipulierte `config`-Antwort mit `server: "angreifer.example"` →
       Abbruch mit Meldung, **kein** Rückfall auf `my.raceresult.com`
+      → geprüft am 2026-09-05 an der Adresse, die aus `config.server` gebaut
+        würde: `https://angreifer.example/375768/RRPublish/data/list` wird
+        abgewiesen, `https://my4.raceresult.com/375768/RRPublish/data/list`
+        durchgelassen. Das ist die Stelle, an der eine Allowlist, die nur die
+        eingegebene Adresse prüft, ins Leere liefe – der Wert kommt aus der
+        Antwort eines fremden Servers und wechselt tatsächlich (4.2).
 - [x] SSRF: `boeseraceresult.com` und
       `https://angreifer.example/?x=my.raceresult.com` treffen die Allowlist nicht
       → ebenso `raceresult.com.angreifer.example`, `http://127.0.0.1/` und
@@ -3518,12 +3569,27 @@ Schreibvorgang) und wächst mit M6 (REST).
         Der REST-Weg geht durch dieselben Funktionen und reicht `contest` als
         String durch – zu prüfen bleibt er trotzdem einmal von Hand.
 - [x] Wettbewerbswechsel setzt die Listenauswahl zurück (kein Geisterwert)
-- [ ] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
-      → mit M6 wieder zu prüfen, und zwar als Gegenprobe: die Seite darf sich
-        ohne JavaScript verhalten wie nach M5. Sichtbar müssen dann wieder
-        sein: der Knopf „Auswahl übernehmen", der Satz darunter und der
-        Hinweis am Statusfilter – sie hängen an `.lsg-bl-nur-ohne-js`, das
-        erst das Skript ausblendet.
+- [x] Admin-Seite mit deaktiviertem JavaScript komplett durchklickbar
+      → Gegenprobe am 2026-09-05, den ganzen Assistenten über
+        `admin-post.php` durchgespielt, ohne dass eine Zeile Seiten-JavaScript
+        lief. Ergebnis: derselbe Trichter wie über REST, Zeichen für Zeichen
+        (`658 gelesen, 1 ohne Zeit → 11 LSG → 10 zugeordnet, 1 ohne Zuordnung
+        → 0 neu, 1 schneller, 6 langsamer, 3 gleich`), 11 Zeilen, eine
+        vorausgewählt, Knopf „1 Ergebnis übernehmen".
+      → Die Unterschiede sind genau die gewollten: am `<div class="wrap">`
+        fehlt `lsg-bl-js` (die Klasse setzt erst das Skript), die beiden
+        `.lsg-bl-nur-ohne-js`-Stellen stehen sichtbar da, und die
+        Kopf-Checkbox `#cb-select-all-1` ist gar nicht erst im Markup.
+      → Der Statusfilter als Link geprüft: `filter=langsamer` liefert sechs
+        sichtbare Zeilen plus **eine Platzhalterzeile** mit
+        `<input type="hidden" name="zeilen[]" value="0">` – so überlebt die
+        Vorauswahl der ausgeblendeten `schneller`-Zeile den Filterwechsel,
+        und der Knopf zählt sie weiter mit.
+      → Das Textfeld-Datum ist mitgeprüft: `05.07.2026` kommt als
+        `2026-07-05` zurück.
+      → ⚠ Was diese Probe NICHT abdeckt: wie die Seite in einem Browser
+        aussieht, in dem JavaScript abgeschaltet ist. Geprüft sind jede
+        Server-Antwort und das ausgelieferte Markup, nicht die Darstellung.
 - [x] M6: derselbe Ablauf mit JavaScript ohne einen einzigen Seitenaufbau –
       Adresse prüfen, Wettbewerb wechseln, parsen, übernehmen; danach steht
       der Stand in der Adresszeile und ein Reload zeigt dieselbe Seite
@@ -3562,7 +3628,20 @@ Schreibvorgang) und wächst mit M6 (REST).
       verworfen, mit derselben Meldung wie beim Reload
       → geprüft: Token weg, Tabelle weg, Zustand zurück auf „Bereit zum
         Parsen", Meldung wortgleich mit der des Reload-Wegs.
-- [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
+- [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
+      → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
+        `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
+        Stelle (6.2). Ergebnis, als angemeldeter Administrator mit gültigem
+        Nonce: der Menüpunkt „LSG Bestenliste" ist weg, alle **vier** Seiten
+        antworten 403, alle **fünf** REST-Routen antworten 403, und alle
+        **sieben** `admin_post`-Handler (Import, Übernehmen, Bestenliste
+        speichern und löschen, Zuordnung speichern, schalten und löschen)
+        antworten 403 mit der eigenen Meldung.
+      → ⚠ Die Capability-Prüfung steht in jedem Handler VOR
+        `check_admin_referer()`. Deshalb verweigert er auch ohne Nonce mit
+        „Dafür fehlt dir die Berechtigung" statt mit der Nonce-Rückfrage von
+        WordPress – die richtige Reihenfolge: wer nicht darf, soll nicht erst
+        gefragt werden, ob er sicher ist.
 - [x] Zweimal derselbe Import → alle Zeilen `gleich`, keine Duplikate
       → geprüft: nach dem zweiten Durchlauf ist `lsg_best` Zeichen für Zeichen
         unverändert, und nichts ist vorausgewählt. Ein zweiter Klick auf denselben
@@ -3720,7 +3799,20 @@ Manuelle Erfassung (Abschnitt 7):
         Wert schreibt, stünde als Änderung im Log und wäre keine.
 - [x] Ehemalige Athleten (`active = '0'`) sind wählbar, aber getrennt gruppiert
       → zwei `<optgroup>`; in der Liste steht „(ehemalig)" hinter dem Namen
-- [ ] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler verweigern
+- [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler verweigern
+      → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
+        `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
+        Stelle (6.2). Ergebnis, als angemeldeter Administrator mit gültigem
+        Nonce: der Menüpunkt „LSG Bestenliste" ist weg, alle **vier** Seiten
+        antworten 403, alle **fünf** REST-Routen antworten 403, und alle
+        **sieben** `admin_post`-Handler (Import, Übernehmen, Bestenliste
+        speichern und löschen, Zuordnung speichern, schalten und löschen)
+        antworten 403 mit der eigenen Meldung.
+      → ⚠ Die Capability-Prüfung steht in jedem Handler VOR
+        `check_admin_referer()`. Deshalb verweigert er auch ohne Nonce mit
+        „Dafür fehlt dir die Berechtigung" statt mit der Nonce-Rückfrage von
+        WordPress – die richtige Reihenfolge: wer nicht darf, soll nicht erst
+        gefragt werden, ob er sicher ist.
       → die Prüfung steht in jedem Handler und in jedem Render-Callback der
         beiden neuen Seiten; **geprüft ist sie nicht**. Dafür braucht es zwei
         WordPress-Benutzer, also die Integrationslage – derselbe offene Punkt

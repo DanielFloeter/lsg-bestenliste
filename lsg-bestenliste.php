@@ -8,6 +8,7 @@
  * Requires PHP:      7.4
  * Author:            Karlsruher Lemminge
  * Text Domain:       lsg-bestenliste
+ * Domain Path:       /languages
  * License:           GPL v2 or later
  */
 
@@ -101,6 +102,29 @@ if ( is_admin() ) {
 	require_once LSG_BL_PATH . 'includes/admin/page-log.php';
 	require_once LSG_BL_PATH . 'includes/admin/page-map.php';
 }
+
+/**
+ * Die Übersetzungen laden.
+ *
+ * ⚠ Die deutschen Texte stehen als Vorgabe im Code – das Plugin ist also auch
+ * ohne .mo-Datei vollständig lesbar. Ohne diesen Aufruf liesse sich aber
+ * NICHTS übersetzen, obwohl jeder Text durch `__()` geht: WordPress lädt eine
+ * Textdomain nur automatisch, wenn das Plugin aus dem offiziellen Verzeichnis
+ * kommt. Dieses hier kommt aus dem Vereins-Repository.
+ *
+ * An `init` gehängt, nicht früher: seit WordPress 6.7 meldet ein zu früher
+ * Aufruf eine Warnung, weil vorher noch keine Sprache feststeht.
+ *
+ * @return void
+ */
+function lsg_bl_load_textdomain() {
+	load_plugin_textdomain(
+		'lsg-bestenliste',
+		false,
+		dirname( plugin_basename( __FILE__ ) ) . '/languages'
+	);
+}
+add_action( 'init', 'lsg_bl_load_textdomain' );
 
 /**
  * Liefert den vollen (ggf. präfixierten) Tabellennamen.
