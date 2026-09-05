@@ -284,7 +284,8 @@
  * ist „bitte Eingaben pruefen" keine Hilfe.
  */
 .lsg-bl-bestform tr.lsg-bl-feldfehler th,
-.lsg-bl-mapform tr.lsg-bl-feldfehler th {
+.lsg-bl-mapform tr.lsg-bl-feldfehler th,
+.lsg-bl-athletform tr.lsg-bl-feldfehler th {
 	border-left: 4px solid #d63638;
 	padding-left: .6em;
 }
@@ -456,4 +457,46 @@
 
 .lsg-bl-mapliste tr.lsg-bl-inaktiv code {
 	color: #8c8f94;
+}
+
+/* --- Seite „Sportler" (Abschnitt 11) --------------------------------- */
+
+/*
+ * Ehemalige stehen weiter in der Liste – sie sind nicht geloescht, nur nicht
+ * mehr aktiv. Grau, nicht rot: das ist kein Fehlerzustand.
+ */
+.lsg-bl-ehemalig {
+	color: #646970;
+}
+
+/*
+ * Woran ein Sportler haengt, wenn er sich nicht loeschen laesst (11.3).
+ */
+.lsg-bl-referenzen {
+	margin: .8em 0 1.2em 1.4em;
+	list-style: disc;
+}
+
+.lsg-bl-referenzen li {
+	margin: .3em 0;
+}
+
+.lsg-bl-nichtloeschbar {
+	margin-top: 2em;
+}
+
+/*
+ * Die Altersklassen, die mit dem neuen Jahrgang nicht mehr passen (11.2).
+ * Sitzt im selben Kasten wie der Jahresbestzeit-Vergleich aus 7.3 und erbt
+ * dessen Rahmen – es ist dieselbe Sorte Auskunft: was das Speichern am
+ * Bestand aendern wuerde, bevor es passiert.
+ */
+.lsg-bl-aktabelle {
+	margin: .8em 0;
+	max-width: 44em;
+}
+
+.lsg-bl-aktabelle td,
+.lsg-bl-aktabelle th {
+	padding: .4em .8em;
 }

@@ -97,7 +97,8 @@ function lsg_bl_admin_menu() {
 	);
 
 	// Reihenfolge laut Plan 6.2: Ergebnis-Import, Import-Log, Zuordnungen,
-	// Bestenliste – alle vier "jetzt", nicht erst Phase 4.
+	// Bestenliste – alle vier "jetzt". "Sportler" folgt als fuenfter Eintrag
+	// (Abschnitt 11, M7), "Gesamtsiege" bleibt vorgemerkt (9.2, M8).
 	$hook_map = add_submenu_page(
 		'lsg-bestenliste',
 		__( 'Zuordnungen', 'lsg-bestenliste' ),
@@ -116,10 +117,20 @@ function lsg_bl_admin_menu() {
 		'lsg_bl_admin_best_page'
 	);
 
+	$hook_athlet = add_submenu_page(
+		'lsg-bestenliste',
+		__( 'Sportler', 'lsg-bestenliste' ),
+		__( 'Sportler', 'lsg-bestenliste' ),
+		LSG_BL_CAP,
+		'lsg-bestenliste-athleten',
+		'lsg_bl_admin_athlet_page'
+	);
+
 	$GLOBALS['lsg_bl_import_hook'] = $hook;
 	$GLOBALS['lsg_bl_log_hook']    = $hook_log;
 	$GLOBALS['lsg_bl_map_hook']    = $hook_map;
 	$GLOBALS['lsg_bl_best_hook']   = $hook_best;
+	$GLOBALS['lsg_bl_athlet_hook'] = $hook_athlet;
 }
 add_action( 'admin_menu', 'lsg_bl_admin_menu' );
 
@@ -136,6 +147,7 @@ function lsg_bl_admin_assets( $hook ) {
 			isset( $GLOBALS['lsg_bl_log_hook'] ) ? $GLOBALS['lsg_bl_log_hook'] : '',
 			isset( $GLOBALS['lsg_bl_map_hook'] ) ? $GLOBALS['lsg_bl_map_hook'] : '',
 			isset( $GLOBALS['lsg_bl_best_hook'] ) ? $GLOBALS['lsg_bl_best_hook'] : '',
+			isset( $GLOBALS['lsg_bl_athlet_hook'] ) ? $GLOBALS['lsg_bl_athlet_hook'] : '',
 		)
 	);
 	if ( ! in_array( $hook, $eigene, true ) ) {

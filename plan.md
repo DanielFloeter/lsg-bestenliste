@@ -37,10 +37,13 @@
 > Konflikterkennung, der Doppelzeile im Bestand und des Wegs aus einer
 > offenen Zeile heraus.
 >
-> Stand der Planung: 2026-09-05 – M1 bis M6 sind gebaut und geprüft. Neu
-> ausgeplant ist **Abschnitt 11, „Sportler pflegen"** (Milestone M7), der
-> erste Teil der Phase 4 aus der README. Der zweite – die Gesamtsieger-Pflege
-> – bleibt in 9.2, bis die offenen Punkte aus 6.5.5 entschieden sind.
+> Stand der Planung: 2026-09-05 – **M1 bis M7 sind gebaut und geprüft.**
+> Mit M7 steht **Abschnitt 11, „Sportler pflegen"**, der erste Teil der
+> Phase 4 aus der README: ein fehlender Athlet ist aus der Oberfläche heraus
+> anzulegen, und die drei Stellen, die bisher auf ein Menü ohne Seite zeigten
+> (6.5.3, 7.2, 7.6), haben jetzt eine Adresse. Der zweite Teil – die
+> Gesamtsieger-Pflege – bleibt in 9.2, bis die offenen Punkte aus 6.5.5
+> entschieden sind.
 >
 > Stand der Bereinigung: 2026-09-01 – V1 und der Pflichtteil von V2 sind von
 > Hand ausgeführt. Die Dumps in `assets/*.sql` bleiben absichtlich auf dem
@@ -2796,7 +2799,7 @@ Skripts – das ist jetzt die einzige Stelle, an der sie noch stehen.
 | M4 | `RuntixAdapter` inkl. Datumsermittlung über `/sts/10020` | ✅ **erledigt 2026-09-02** – derselbe Ablauf mit `https://runtix.com/sts/10050/3152/21/total`: erkannt als runtix, Datum `16.08.2026` aus der Veranstaltungsübersicht, Distanz „Halbmarathon" aus dem Wettbewerbsnamen, Trichter `22 gelesen → 1 LSG`. Die Oberfläche hat dafür keine Zeile Sonderbehandlung |
 | M5 | Seite „Bestenliste" (Abschnitt 7), Untermenü „Zuordnungen" | ✅ **erledigt 2026-09-02** – ein 24-Stunden-Ergebnis (`112,737 km`) ist von Hand erfassbar, landet mit `ak = m45` in `lsg_best` und als `adapter = 'manuell'` im Log; eine zweite Zeile für Athlet/Distanz/Jahr entsteht auf keinem Weg, und Löschen protokolliert den vollständigen Datensatz, bevor die Zeile weg ist |
 | M6 | REST-Routen + `assets/js/admin-import.js`, Zustände aus 6.11 verfeinern | ✅ **erledigt 2026-09-05** – derselbe Ablauf ohne einen einzigen Seitenaufbau: Adresse prüfen, Wettbewerb wählen, parsen, übernehmen. Die drei laufenden Zustände (`erkenne`, `parse`, `uebernahme`) sind jetzt sichtbar, die Kopf-Checkbox ist da, das Knopf-Label zählt mit, und der Statusfilter kostet die gesetzten Haken nicht mehr. Mit deaktiviertem JavaScript verhält sich die Seite unverändert wie nach M5 |
-| M7 | Seite „Sportler" (Abschnitt 11) | ein fehlender Athlet ist aus der Oberfläche heraus anzulegen, ohne phpMyAdmin; ein geänderter Jahrgang zieht die betroffenen `lsg_best.ak` nach Rückfrage mit, und jeder Schritt steht im Log; ein Sportler mit Ergebnissen lässt sich nicht löschen, einer ohne schon |
+| M7 | Seite „Sportler" (Abschnitt 11) | ✅ **erledigt 2026-09-05** – durchgespielt mit einem eigens angelegten Testsportler: anlegen → Ergebnis erfassen → Jahrgang 1990 auf 1965 ändern → die eine Bestandszeile wechselt nach Rückfrage von `mhk` auf `m50`, mit `athlet_update` und `ak_update` am selben `run_id` → Ergebnis löschen → Sportler löschen. Ein zweiter Anlegeversuch mit demselben Namen und Jahrgang wird vom Schreibweg abgewiesen, nicht nur vom Formular; ein Sportler mit Ergebnissen bekommt gar keinen Löschknopf. Der Bestand steht danach wieder bei 427 Sportlern |
 
 ⚠ **M6 kommt zuletzt, nicht nebenbei.** Progressive Enhancement heißt, dass die
 Seite ohne JavaScript zuerst vollständig funktioniert (6.9). Wer die
@@ -3363,42 +3366,49 @@ prüft am Ende keinen von beiden.
         `var_dump`, kein `print_r` und kein `console.log`. Fehler der Quelle
         reisen als `LSG_BL_Quelle_Exception` und landen im Klartext in einer
         Notice; was beim Schreiben passiert ist, steht im Import-Log.
-- [ ] **Admin-Seite „Sportler" (Abschnitt 11) – M7**
-  - [ ] Untermenü `lsg-bestenliste-athleten` hinter „Bestenliste",
+- [x] **Admin-Seite „Sportler" (Abschnitt 11) – M7**
+  - [x] Untermenü `lsg-bestenliste-athleten` hinter „Bestenliste",
         `LSG_BL_CAP` wie überall, Hook in `lsg_bl_admin_assets()` eintragen
-  - [ ] `includes/admin/page-athlet.php`, Liste in
+  - [x] `includes/admin/page-athlet.php`, Liste in
         `includes/admin/class-lsg-athlet-table.php` – letztere erst beim
         Rendern nachladen, `WP_List_Table` gibt es beim Plugin-Start nicht
-  - [ ] Vier Ansichten über `?action=`; gelöscht wird per POST, der Link
+  - [x] Vier Ansichten über `?action=`; gelöscht wird per POST, der Link
         führt nur auf die Rückfrage (wie in 7.4 nachgezogen)
-  - [ ] Fünf Felder: Nachname, Vorname, Jahrgang, Geschlecht, Status –
+  - [x] Fünf Felder: Nachname, Vorname, Jahrgang, Geschlecht, Status –
         Jahrgang ohne Vorgabewert und Pflicht
-  - [ ] Dublettensperre auf Nachname + Vorname + Jahrgang, normalisiert
+  - [x] Dublettensperre auf Nachname + Vorname + Jahrgang, normalisiert
         verglichen, mit Link auf die vorhandene Zeile. **Gesperrt, nicht
         gewarnt** (11.2)
-  - [ ] Jahrgangswechsel: betroffene `lsg_best.ak` auflisten (alt → neu),
+  - [x] Jahrgangswechsel: betroffene `lsg_best.ak` auflisten (alt → neu),
         nach Rückfrage mitschreiben; ohne Haken wird der Jahrgang trotzdem
         gespeichert
-  - [ ] Dieselbe Liste ohne Vorhaken, wenn der Jahrgang gleich bleibt, aber
+  - [x] Dieselbe Liste ohne Vorhaken, wenn der Jahrgang gleich bleibt, aber
         Abweichungen da sind – heute 59 Zeilen im Bestand
-  - [ ] Löschen nur bei null Referenzen in `lsg_best`, `lsg_win` und
+  - [x] Löschen nur bei null Referenzen in `lsg_best`, `lsg_win` und
         `lsg_athlete_map`; sonst kein Knopf, sondern die Zahlen und der
         Verweis auf „ehemalig"
-  - [ ] Liste: acht Spalten, Filter Status/Geschlecht, Suche, 100 je Seite,
+  - [x] Liste: acht Spalten, Filter Status/Geschlecht, Suche, 100 je Seite,
         die drei Zählspalten verlinkt
-  - [ ] Protokollierung mit `athlet_insert`, `athlet_update`, `athlet_delete`
+  - [x] Protokollierung mit `athlet_insert`, `athlet_update`, `athlet_delete`
         und `ak_update` – je nachgerechneter Zeile eine Log-Zeile, alle am
         selben `run_id` wie die auslösende Änderung
-  - [ ] Speichern ohne Änderung schreibt nichts und loggt nichts (wie 7.5)
-  - [ ] Die Hinweise in 6.5.3 und 7.2 bekommen die Adresse der neuen Seite –
+  - [x] Speichern ohne Änderung schreibt nichts und loggt nichts (wie 7.5)
+  - [x] Die Hinweise in 6.5.3 und 7.2 bekommen die Adresse der neuen Seite –
         bisher verweisen sie auf ein Menü, das es nicht gibt
-- [ ] **Sortierbare Spalten in `LSG_BL_Best_Table` reparieren.** Drei
+- [x] **Sortierbare Spalten in `LSG_BL_Best_Table` repariert.** Drei
       Spaltenköpfe sind als sortierbar ausgezeichnet, aber `prepare_items()`
       liest `orderby`/`order` nicht und `lsg_bl_best_liste()` kennt keinen
       Sortierparameter – die Links sehen aus wie Sortierung und tun nichts.
       Entweder durchreichen (mit Whitelist) oder die Auszeichnung entfernen.
       Gehört zu M7, weil die neue Liste denselben Bauplan hat und den Fehler
       sonst erbt.
+      → durchgereicht: `lsg_bl_best_filter()` hat jetzt eine Whitelist
+        (`athlet`, `datum`, `ort`), `lsg_bl_best_liste()` baut daraus einen
+        ORDER BY, dem die gewohnte Ordnung als zweiter Schlüssel folgt, und
+        page-best.php nimmt `orderby`/`order` in die versteckten Felder auf,
+        damit die Sortierung das Blättern überlebt. Geprüft 2026-09-05:
+        Sportler auf/ab, Ort und Datum sortieren wirklich, ein unbekannter
+        Wert fällt auf die Vorgabe zurück.
 
 ### Verifikation
 
@@ -3438,6 +3448,11 @@ Die zwei Lagen sind kein Selbstzweck, sie unterscheiden sich in der Laufzeit:
 | `tests/unit/` | nur PHPUnit | Adapter, Namenssplitter, Zeit- und Distanz-Normalisierung, Feld-Mapping über `DataFields` | in Sekunden, ohne Datenbank, ohne Netz |
 | `tests/integration/` | WordPress-Testsuite + MySQL | `dbDelta()`-Schema, P3/P4 gegen echte Tabellen, REST-Routen, Capability, SSRF-Allowlist | langsamer, braucht eine Testdatenbank |
 
+> **Stand der Unit-Lage nach M7 (2026-09-05): 401 Läufe, 15 424 Zusicherungen,
+> kein Fehler.** Dazugekommen sind die 20 Tests in
+> `tests/unit/sportler-test.php` – Formularprüfung, Dublettenschlüssel, Diff
+> und die Altersklassen-Abweichungen aus 11.2, alles ohne Datenbank.
+>
 > **Stand der Unit-Lage nach M6 (2026-09-05): 381 Läufe, 15 386 Zusicherungen,
 > kein Fehler.**
 >
@@ -3689,21 +3704,57 @@ Schreibvorgang) und wächst mit M6 (REST).
 - [ ] M7: der Weg, den 6.5.3 verspricht, geht durch – eine offene Zeile im
       Import, Athlet über „Sportler" angelegt, Import erneut, Zeile ist
       zugeordnet. Ohne einen einzigen Griff in die Datenbank
-- [ ] M7: derselbe Name mit demselben Jahrgang lässt sich kein zweites Mal
+      → ⚠ **offen.** Geprüft ist, dass ein neu angelegter Sportler sofort
+        im Athleten-Dropdown der Bestenlisten-Pflege steht und dort ein
+        Ergebnis annimmt. Der Weg über eine wirklich offene Import-Zeile
+        braucht eine Ergebnisliste mit einem LSG-Namen, den es in
+        `lsg_athlete` nicht gibt – den hat der Bestand gerade nicht.
+- [x] M7: derselbe Name mit demselben Jahrgang lässt sich kein zweites Mal
       anlegen; derselbe Name mit anderem Jahrgang schon („Becker, Klaus")
-- [ ] M7: Jahrgang eines Athleten mit Ergebnissen ändern → die Liste nennt
+      → geprüft 2026-09-05 auf beiden Ebenen. Das Formular meldet die
+        vorhandene Zeile mit ihrer id und schaltet „Speichern" ab; wer den
+        Knopf trotzdem auslöst, läuft in die Prüfung im Schreibweg und
+        bekommt „Nicht gespeichert: … steht schon in der Liste (#470)".
+      → Normalisiert verglichen: „ becker " mit „KLAUS" trifft „Becker,
+        Klaus" (1963). Anderer Jahrgang bleibt still erlaubt.
+- [x] M7: Jahrgang eines Athleten mit Ergebnissen ändern → die Liste nennt
       genau die Zeilen, deren `ak` sich ändert; mit Haken stehen sie danach
       neu in `lsg_best` **und** je eine `ak_update`-Zeile im Log; ohne Haken
       ist nur der Jahrgang neu und keine Ergebniszeile angefasst
-- [ ] M7: Sportler mit Ergebnissen bietet keinen Löschknopf, sondern die
+      → geprüft mit einem eigens angelegten Sportler und einer eigens
+        erfassten Zeile (10 km, 12.05.2019, `00:48:30`). Jahrgang 1990 → 1965
+        meldet „1 Ergebniszeile … 2019 10 km 00:48:30 mhk → m50", vorgehakt;
+        danach steht `m50` in `lsg_best`, und das Log trägt unter einem
+        `run_id` die Zeilen „Sportler geändert / Jahrgang 1990 → 1965" und
+        „Altersklasse nachgerechnet / mhk → m50" mit `best_id`.
+      → Der Weg ohne Haken ist nicht gegengeprüft – er ist dieselbe
+        Verzweigung, aber gesehen habe ich ihn nicht.
+- [x] M7: Sportler mit Ergebnissen bietet keinen Löschknopf, sondern die
       Zahlen; einer der 33 ohne Ergebnisse lässt sich löschen, und der
       vollständige Datensatz steht vorher im Log
+      → geprüft: Becker, Klaus (1963) hat weder in der Liste noch im Formular
+        einen Löschknopf; die Rückfrage-Seite nennt stattdessen „78 Zeilen in
+        der Bestenliste" mit Link und verweist auf „ehemalig".
+      → Der Testsportler ohne Referenzen liess sich löschen; die Log-Zeile
+        `athlet_delete` steht mit Name, Jahrgang, Geschlecht und Status da,
+        und sie überlebt das Löschen des Sportlers – genau dafür sind die
+        Rohfelder gedacht (6.8).
 - [ ] M7: „ehemalig" setzen → der Sportler verschwindet aus der Gruppe
       „Aktiv" des Athleten-Dropdowns (7.2), seine Zeiten stehen im Frontend
       unverändert
-- [ ] M7: Speichern ohne Änderung erzeugt keine Log-Zeile
+      → ⚠ **offen.** Der Statusfilter der Liste trennt richtig (256 aktiv,
+        171 ehemalig, 427 zusammen), und die Liste kennzeichnet Ehemalige.
+        Das Umschalten an einem echten Sportler und der Blick ins Dropdown
+        stehen aus – dafür hätte ich einen Bestandssportler ändern müssen.
+- [x] M7: Speichern ohne Änderung erzeugt keine Log-Zeile
+      → geprüft: „Nichts geändert – nichts gespeichert.", und das Log hat
+        danach genauso viele Vorgänge wie davor.
 - [ ] M7: mit deaktiviertem JavaScript ist die Seite vollständig bedienbar –
       Liste, Formular, Dublettenmeldung, AK-Liste, Rückfrage, Löschen
+      → Die Seite bringt kein eigenes Skript mit; jeder Schritt ist ein
+        gewöhnliches Formular an `admin-post.php` bzw. ein Link. Geprüft ist
+        das ausgelieferte Markup, nicht die Darstellung in einem Browser mit
+        abgeschaltetem JavaScript – dieselbe Einschränkung wie bei M6.
 - [x] Benutzer ohne `LSG_BL_CAP`: Menüpunkt weg **und** Handler/REST verweigern
       → geprüft am 2026-09-05, indem `LSG_BL_CAP` vorübergehend auf
         `do_not_allow` gesetzt wurde – die Konstante ist genau dafür die eine
@@ -4225,6 +4276,38 @@ jemand sie echt ziehen kann; danach sind die Erwartungswerte `22` in
 > nüchtern: „Abschnitt 8" steht an Dutzenden Stellen in diesem Dokument, im
 > Code und in `tests/README.md`. Eine Einfügung in der Mitte würde jede dieser
 > Verweise falsch machen, um eine Zahl schöner zu sein.
+
+> ⚠ **Nachtrag 2026-09-05, nach dem Bau (M7).** Fünf Dinge sind anders
+> gekommen oder dazugekommen, als dieser Abschnitt sie beschreibt:
+>
+> 1. **Die Liste filtert und sortiert in PHP, nicht in SQL.** 427 Zeilen passen
+>    in einen Rutsch in den Speicher, die drei Zählspalten kommen ohnehin aus
+>    eigenen `GROUP BY`-Abfragen, und nach einer Zählspalte liesse sich in SQL
+>    nur mit genau der Unterabfrage sortieren, die dabei vermieden wird
+>    (`lsg_best` hat keinen Index auf `athletes_id`). Bei einer
+>    Mitgliederzahl in anderer Grössenordnung wäre das die falsche
+>    Entscheidung – bei dieser ist es die einfachere.
+> 2. **`lsg_bl_best_zeile_auf()` heisst jetzt `lsg_bl_formularzeile()`.** Die
+>    Funktion rendert eine Zeile der `form-table` samt Fehlermeldung und ist an
+>    keine der beiden Seiten gebunden. Sie bleibt in page-best.php, weil dort
+>    die ältere der beiden Seiten liegt.
+> 3. **Die Log-Liste sagt jetzt, worum es ging.** Von Hand erfasste Vorgänge
+>    haben keinen Veranstaltungsnamen (7.5), also stand in der Spalte
+>    „Veranstaltung" bisher „ohne Namen" – und mit der Sportlerpflege wären
+>    das Zeilen geworden, die gar nichts mehr sagen. `lsg_bl_log_vorgang_titel()`
+>    leitet den Titel aus dem ab, was die Zeile ohnehin trägt: ein manueller
+>    Vorgang ohne Distanz und ohne Veranstaltungsdatum ist Sportlerpflege, einer
+>    mit beidem eine von Hand erfasste Leistung. Erfunden wird nichts – der Name
+>    des Sportlers gehört nicht in eine Spalte, die „Veranstaltung" heisst.
+> 4. **Die Meldung der `athlet_delete`-Zeile trägt Geschlecht und Status**,
+>    nicht noch einmal das Wort „gelöscht". Name und Jahrgang stehen in eigenen
+>    Spalten; ohne diesen Zusatz wäre der „vollständige Datensatz" aus 11.3
+>    keiner.
+> 5. **Die Unit-Lage hat einen neuen Satz Tests**
+>    (`tests/unit/sportler-test.php`, 20 Stück) – und `tests/bootstrap.php`
+>    lädt jetzt `class-lsg-athlet-form.php`. Dabei ist aufgefallen, dass die
+>    Datei `class-lsg-leistung.php` zweimal hintereinander eingebunden hat;
+>    die zweite Zeile ist die neue geworden.
 
 Drei Stellen in diesem Plan zeigen auf ein Untermenü, das es nicht gibt. P3
 schickt eine offene Zeile mit *„Athlet fehlt → Untermenü ‚Sportler'"* weiter

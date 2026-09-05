@@ -531,6 +531,8 @@ function lsg_bl_best_liste_anzeigen() {
 			'geschlecht' => isset( $_GET['geschlecht'] ) ? sanitize_text_field( wp_unslash( $_GET['geschlecht'] ) ) : '',
 			's'          => isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '',
 			'athlet'     => isset( $_GET['athlet'] ) ? (int) $_GET['athlet'] : 0,
+			'orderby'    => isset( $_GET['orderby'] ) ? sanitize_key( wp_unslash( $_GET['orderby'] ) ) : '',
+			'order'      => isset( $_GET['order'] ) ? sanitize_key( wp_unslash( $_GET['order'] ) ) : '',
 		)
 	);
 
@@ -565,7 +567,7 @@ function lsg_bl_best_liste_anzeigen() {
 
 	echo '<form method="get">';
 	printf( '<input type="hidden" name="page" value="%s">', esc_attr( 'lsg-bestenliste-best' ) );
-	foreach ( array( 'jahr', 'distanz', 'geschlecht', 's', 'athlet' ) as $k ) {
+	foreach ( array( 'jahr', 'distanz', 'geschlecht', 's', 'athlet', 'orderby', 'order' ) as $k ) {
 		if ( '' !== (string) $filter[ $k ] && 0 !== $filter[ $k ] ) {
 			printf( '<input type="hidden" name="%1$s" value="%2$s">', esc_attr( $k ), esc_attr( $filter[ $k ] ) );
 		}
@@ -802,24 +804,23 @@ function lsg_bl_best_formular_anzeigen( $action ) {
 	echo '<table class="form-table" role="presentation"><tbody>';
 
 	/* Sportler */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Sportler', 'lsg-bestenliste' ),
 		'lsg-bl-athlet',
 		isset( $fehler['athlet'] ) ? $fehler['athlet'] : '',
 		function () use ( $werte ) {
 			lsg_bl_athleten_select( (int) $werte['athlet'] );
 			printf(
-				'<p class="description">%s</p>',
-				esc_html__(
-					'Fehlt jemand, wird er nicht hier angelegt – Sportler werden getrennt gepflegt (Untermenü „Sportler", noch nicht gebaut; bis dahin direkt in lsg_athlete).',
-					'lsg-bestenliste'
-				)
+				'<p class="description">%1$s <a href="%2$s">%3$s</a></p>',
+				esc_html__( 'Fehlt jemand, wird er nicht hier angelegt – Sportler werden getrennt gepflegt.', 'lsg-bestenliste' ),
+				esc_url( lsg_bl_athlet_url( array( 'action' => 'new' ) ) ),
+				esc_html__( 'Sportler anlegen', 'lsg-bestenliste' )
 			);
 		}
 	);
 
 	/* Distanz */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Distanz', 'lsg-bestenliste' ),
 		'lsg-bl-distanz',
 		isset( $fehler['distanz'] ) ? $fehler['distanz'] : '',
@@ -853,7 +854,7 @@ function lsg_bl_best_formular_anzeigen( $action ) {
 	);
 
 	/* Datum */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Veranstaltungsdatum', 'lsg-bestenliste' ),
 		'lsg-bl-datum',
 		isset( $fehler['datum'] ) ? $fehler['datum'] : '',
@@ -899,7 +900,7 @@ function lsg_bl_best_formular_anzeigen( $action ) {
 	);
 
 	/* Leistung */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		$feld['label'],
 		'lsg-bl-leistung',
 		isset( $fehler['leistung'] ) ? $fehler['leistung'] : '',
@@ -916,7 +917,7 @@ function lsg_bl_best_formular_anzeigen( $action ) {
 	);
 
 	/* Ort */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Ort', 'lsg-bestenliste' ),
 		'lsg-bl-ort',
 		isset( $fehler['ort'] ) ? $fehler['ort'] : '',
@@ -980,13 +981,18 @@ function lsg_bl_best_formular_anzeigen( $action ) {
  * ⚠ Die Fehlermeldung steht AM Feld, nicht nur oben in einer Notice. Bei
  * sechs Feldern ist „bitte Eingaben prüfen" keine Hilfe.
  *
+ * ⚠ Der Name sagt nicht „best": die Funktion ist nicht an diese Seite
+ * gebunden, page-athlet.php benutzt dieselbe (11.2). Sie steht hier, weil hier
+ * die ältere der beiden Seiten liegt – eine dritte Datei nur für eine
+ * Tabellenzeile wäre Buchhaltung, keine Struktur.
+ *
  * @param string   $label   Beschriftung.
  * @param string   $id      HTML-id des Felds.
  * @param string   $fehler  Fehlermeldung oder ''.
  * @param callable $inhalt  Gibt das Feld aus.
  * @return void
  */
-function lsg_bl_best_zeile_auf( $label, $id, $fehler, $inhalt ) {
+function lsg_bl_formularzeile( $label, $id, $fehler, $inhalt ) {
 	printf(
 		'<tr class="%1$s"><th scope="row"><label for="%2$s">%3$s</label></th><td>',
 		( '' !== $fehler ) ? 'lsg-bl-feldfehler' : '',

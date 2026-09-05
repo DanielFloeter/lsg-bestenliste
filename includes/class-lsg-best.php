@@ -158,12 +158,31 @@ function lsg_bl_best_filter( array $roh ) {
 		$geschlecht = '';
 	}
 
+	/*
+	 * ⚠ Die Sortierung gehört in die Whitelist, nicht direkt in die Abfrage.
+	 * `orderby` kommt aus der Query, und ein Spaltenname aus der Query, der
+	 * ungeprüft in ein ORDER BY wandert, ist eine Einladung.
+	 *
+	 * ⚠ Sortiert wird nur nach Sportler, Datum und Ort – und diese drei
+	 * sortieren wirklich. Bis 2026-09-05 zeichnete LSG_BL_Best_Table sie als
+	 * sortierbar aus, ohne dass hier je ein `orderby` angekommen wäre: die
+	 * Spaltenköpfe waren Links, die nichts taten (Abschnitt 8, M7).
+	 */
+	$orderby = isset( $roh['orderby'] ) ? (string) $roh['orderby'] : '';
+	if ( ! in_array( $orderby, array( 'athlet', 'datum', 'ort' ), true ) ) {
+		$orderby = '';
+	}
+
+	$order = ( isset( $roh['order'] ) && 'desc' === strtolower( (string) $roh['order'] ) ) ? 'desc' : 'asc';
+
 	return array(
 		'jahr'       => isset( $roh['jahr'] ) ? (int) $roh['jahr'] : 0,
 		'distanz'    => $distanz,
 		'geschlecht' => $geschlecht,
 		's'          => isset( $roh['s'] ) ? trim( (string) $roh['s'] ) : '',
 		'athlet'     => isset( $roh['athlet'] ) ? (int) $roh['athlet'] : 0,
+		'orderby'    => $orderby,
+		'order'      => $order,
 	);
 }
 
@@ -231,12 +250,35 @@ function lsg_bl_best_liste( array $filter, $seite = 1, $pro = 50 ) {
 	$rang    = lsg_bl_sql_distanz_rang();
 	$strecke = lsg_bl_sql_strecke_desc();
 
+	/*
+	 * Die Vorgabe: neuestes Jahr zuerst, darin die Distanzen in der
+	 * Reihenfolge der Map (nicht alphabetisch – sonst stünde `100km` vor
+	 * `10km`), darin die beste Leistung oben.
+	 *
+	 * Sortiert der Mensch selbst, tritt sein Schlüssel davor; die vertraute
+	 * Ordnung bleibt als zweiter Schlüssel stehen, damit gleiche Werte nicht
+	 * zufällig angeordnet sind. Die Werte kommen aus der Whitelist in
+	 * lsg_bl_best_filter(), nicht aus der Query.
+	 */
+	$vorgabe   = "b.`date` DESC, {$rang} ASC, {$strecke} ASC, b.time ASC, b.id ASC";
+	$richtung  = ( 'desc' === $filter['order'] ) ? 'DESC' : 'ASC';
+	$schluessel = array(
+		'athlet' => 'a.name %1$s, a.firstname %1$s',
+		'datum'  => 'b.`date` %1$s',
+		'ort'    => 'b.town %1$s',
+	);
+
+	$order_by = $vorgabe;
+	if ( '' !== $filter['orderby'] && isset( $schluessel[ $filter['orderby'] ] ) ) {
+		$order_by = sprintf( $schluessel[ $filter['orderby'] ], $richtung ) . ', ' . $vorgabe;
+	}
+
 	$sql = "SELECT b.id, b.distance, b.time, b.town, b.`date`, b.ak, b.athletes_id, b.tstamp,
 	               a.name, a.firstname, a.born, a.cat, a.active
 	          FROM {$t_best} b
 	          LEFT JOIN {$t_athlete} a ON a.id = b.athletes_id
 	         WHERE {$w}
-	         ORDER BY b.`date` DESC, {$rang} ASC, {$strecke} ASC, b.time ASC, b.id ASC
+	         ORDER BY {$order_by}
 	         LIMIT %d OFFSET %d";
 
 	$args   = $params;

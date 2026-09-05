@@ -32,6 +32,12 @@ if ( ! class_exists( 'WP_List_Table' ) ) {
  * Admin-Optik einer Tabelle, in der man arbeitet. Das Log braucht keine
  * Zeilen-Aktionen – es wird gelesen, nicht bearbeitet.
  *
+ * ⚠ Bis 2026-09-05 waren die drei Spaltenköpfe zwar als sortierbar
+ * ausgezeichnet, `prepare_items()` las `orderby` aber nie, und
+ * lsg_bl_best_liste() kannte keinen Sortierparameter – die Links sahen aus wie
+ * eine Funktion und waren keine. Beides ist mit M7 nachgezogen; die erlaubten
+ * Werte stehen als Whitelist in lsg_bl_best_filter().
+ *
  * ⚠ Sortierbar sind bewusst nur Sportler, Datum und Ort. NICHT Distanz und
  * NICHT Leistung: eine alphabetische Distanzsortierung stellte `100km` vor
  * `10km`, und eine Leistungssortierung über alle Distanzen hinweg vergliche

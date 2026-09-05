@@ -196,7 +196,7 @@ function lsg_bl_log_vorgangsansicht( $seite, $adapter = '' ) {
 
 		echo '<td class="column-primary"><strong><a href="'
 			. esc_url( lsg_bl_log_url( array( 'run' => (int) $r['id'] ) ) ) . '">'
-			. esc_html( $r['event_name'] ? $r['event_name'] : __( 'ohne Namen', 'lsg-bestenliste' ) )
+			. esc_html( lsg_bl_log_vorgang_titel( $r ) )
 			. '</a></strong>';
 		if ( '' !== $r['contest_name'] ) {
 			echo '<br /><span class="lsg-bl-roh">' . esc_html( $r['contest_name'] );
@@ -265,6 +265,37 @@ function lsg_bl_log_vorgangsansicht( $seite, $adapter = '' ) {
 
 	echo '</tbody></table>';
 	lsg_bl_log_pagination( $daten['gesamt'], $seite, $pro, array( 'adapter' => $adapter ) );
+}
+
+/**
+ * Womit ein Vorgang in der Liste überschrieben ist.
+ *
+ * ⚠ Von Hand erfasste Vorgänge haben keinen Veranstaltungsnamen – der Import
+ * bringt ihn mit, ein Mensch am Formular nicht (7.5). Bis M7 stand dort
+ * deshalb „ohne Namen", und mit der Sportlerpflege wären es Zeilen geworden,
+ * die gar nichts mehr sagen. Der Titel wird jetzt aus dem abgeleitet, was die
+ * Zeile ohnehin trägt: ein manueller Vorgang ohne Distanz und ohne
+ * Veranstaltungsdatum kann nur Sportlerpflege sein (11.4), einer mit beidem
+ * ist eine von Hand erfasste Leistung.
+ *
+ * ⚠ Erfunden wird nichts. Der Name des Sportlers gehört nicht in eine Spalte,
+ * die „Veranstaltung" heißt – er steht eine Ebene tiefer, in den Zeilen.
+ *
+ * @param array $r Zeile aus lsg_import_run.
+ * @return string
+ */
+function lsg_bl_log_vorgang_titel( array $r ) {
+	if ( '' !== (string) $r['event_name'] ) {
+		return (string) $r['event_name'];
+	}
+
+	if ( 'manuell' === (string) $r['adapter'] ) {
+		return ( '' === (string) $r['distance'] && empty( $r['event_date'] ) )
+			? __( 'Sportler gepflegt', 'lsg-bestenliste' )
+			: __( 'Von Hand erfasst', 'lsg-bestenliste' );
+	}
+
+	return __( 'ohne Namen', 'lsg-bestenliste' );
 }
 
 /**
