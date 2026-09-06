@@ -1,5 +1,5 @@
 {
-	"name": "karlsruher-lemminge/lsg-bestenliste",
+	"name": "danielfloeter/lsg-bestenliste",
 	"description": "Entwicklungsabhaengigkeiten des Plugins. Das Plugin selbst bleibt Composer-frei: vendor/ wird nicht ausgeliefert, es gibt keinen Composer-Autoloader im Produktivpfad, und ohne composer install funktioniert das Plugin unveraendert.",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",

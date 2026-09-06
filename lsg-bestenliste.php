@@ -1,12 +1,13 @@
 <?php
 /**
  * Plugin Name:       LSG Bestenliste
- * Plugin URI:        https://www.lsg-ka.de/
+ * Plugin URI:        https://github.com/DanielFloeter/lsg-bestenliste
  * Description:       Drei Gutenberg-Blöcke zur Ausgabe der LSG-Karlsruhe Laufergebnisse: Bestenliste (Jahr), Gesamtsiege (Jahr) und Ewige Bestenliste (all-time). Liest aus den bestehenden Tabellen lsg_ak, lsg_athlete, lsg_best und lsg_win.
  * Version:           1.4.0
  * Requires at least: 6.1
  * Requires PHP:      7.4
- * Author:            Karlsruher Lemminge
+ * Author:            Daniel Flöter
+ * Author URI:        https://kometschuh.de/
  * Text Domain:       lsg-bestenliste
  * Domain Path:       /languages
  * License:           GPL v2 or later
