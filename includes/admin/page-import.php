@@ -39,11 +39,18 @@ if ( ! defined( 'ABSPATH' ) ) {
  * statt des generischen Dashicons „chart-line" – das hatte mit „Bestenliste"
  * nur die Assoziation Diagramm gemein, nichts Eigenes.
  *
- * ⚠ Als Base64-SVG mit fill/stroke „black" eingebunden, wie von add_menu_page()
- * für genau diesen Fall dokumentiert: WordPress färbt so ein Icon selbst passend
- * zum jeweiligen Admin-Farbschema ein. Fehlt die Datei (Auslieferung ohne
- * assets/), faellt die Funktion auf den alten Dashicon zurueck, statt einen
- * fehlerhaften Menüpunkt zu zeigen.
+ * ⚠ Bewusst mit fest eingefaerbtem fill="#fff" (Vorgabe: die Ruhestellung
+ * soll weiss sein), NICHT mit fill="black". Ein Base64-SVG mit fill="black"
+ * wird von WordPress zwar automatisch passend zum Admin-Farbschema eingefaerbt
+ * – aber per JavaScript (wp-admin/js/svg-painter.js), das erst nach dem Laden
+ * faerbt. Bis dahin steht das Icon schwarz da, sichtbar als kurzes Aufblitzen
+ * bei jedem Seitenaufruf. Mit fester Farbe entfaellt dieser Schritt komplett:
+ * das Icon stimmt vom ersten Frame an. Preis dafuer: es passt sich nicht an
+ * exotische Admin-Farbschemata an (Ectoplasma, Midnight, ...) – bei der
+ * dunklen Standard-Sidebar faellt das nicht auf.
+ *
+ * Fehlt die Datei (Auslieferung ohne assets/), faellt die Funktion auf den
+ * alten Dashicon zurueck, statt einen fehlerhaften Menüpunkt zu zeigen.
  *
  * @return string Data-URI oder Dashicon-Klasse.
  */
