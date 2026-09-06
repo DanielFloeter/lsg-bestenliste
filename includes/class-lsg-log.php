@@ -66,6 +66,7 @@ function lsg_bl_run_feldtypen() {
 		'cnt_aktualisiert'  => '%d',
 		'cnt_uebersprungen' => '%d',
 		'cnt_fehler'        => '%d',
+		'cnt_geloescht'     => '%d',
 	);
 }
 
@@ -121,7 +122,8 @@ function lsg_bl_log_zeile( array $z, $aktion, $best_id = 0, $time_alt = '', $mel
  * Einen Vorgang samt seiner Zeilen schreiben.
  *
  * @param array $daten      Parse-Ergebnis aus dem Transient.
- * @param array $bilanz     angelegt, aktualisiert, uebersprungen, konflikte, fehler.
+ * @param array $bilanz     angelegt, aktualisiert, uebersprungen, konflikte, fehler,
+ *                          geloescht (optional, nur bei manuellen Aktionen, 7.5).
  * @param array $log_zeilen Zeilen von lsg_bl_log_zeile().
  * @return int run_id, oder 0 wenn das Log nicht geschrieben werden konnte.
  */
@@ -190,6 +192,7 @@ function lsg_bl_log_schreiben( array $daten, array $bilanz, array $log_zeilen ) 
 		'cnt_aktualisiert'  => (int) $bilanz['aktualisiert'],
 		'cnt_uebersprungen' => (int) $bilanz['uebersprungen'],
 		'cnt_fehler'        => (int) $bilanz['fehler'] + (int) $bilanz['konflikte'],
+		'cnt_geloescht'     => isset( $bilanz['geloescht'] ) ? (int) $bilanz['geloescht'] : 0,
 		'status'            => $status,
 		'note'              => $notiz ? implode( "\n", $notiz ) : null,
 	);
@@ -283,8 +286,10 @@ function lsg_bl_log_manuell_zeile( array $zeile, $aktion, $time_alt, $meldung, $
  * @param array $daten      datum (JJJJ-MM-TT), jahr, distanz, ort, event_name
  *                          (optional – nur die Gesamtsiege haben einen, 12.5),
  *                          doppelt (optional).
- * @param array $bilanz     angelegt, aktualisiert (je 0|1) - geloescht zaehlt
- *                          in lsg_import_run absichtlich nicht mit, siehe 7.5.
+ * @param array $bilanz     angelegt, aktualisiert, geloescht (je 0|1) - alle
+ *                          drei landen 1:1 in lsg_import_run, damit die
+ *                          Vorgangsuebersicht einen reinen Loeschvorgang von
+ *                          „nichts geschrieben" unterscheiden kann (7.5).
  * @param array $log_zeilen Zeilen von lsg_bl_log_manuell_zeile().
  * @return int run_id, oder 0 wenn das Log nicht geschrieben werden konnte.
  */
@@ -312,6 +317,7 @@ function lsg_bl_log_manuell( array $daten, array $bilanz, array $log_zeilen ) {
 	$import_bilanz = array(
 		'angelegt'      => isset( $bilanz['angelegt'] ) ? (int) $bilanz['angelegt'] : 0,
 		'aktualisiert'  => isset( $bilanz['aktualisiert'] ) ? (int) $bilanz['aktualisiert'] : 0,
+		'geloescht'     => isset( $bilanz['geloescht'] ) ? (int) $bilanz['geloescht'] : 0,
 		'uebersprungen' => 0,
 		'konflikte'     => 0,
 		'fehler'        => 0,

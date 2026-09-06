@@ -38,7 +38,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema-Version. Hochzählen, sobald sich eine der drei Tabellen ändert.
  */
 if ( ! defined( 'LSG_BL_DB_VERSION' ) ) {
-	define( 'LSG_BL_DB_VERSION', 2 );
+	define( 'LSG_BL_DB_VERSION', 3 );
 }
 
 /**
@@ -105,6 +105,7 @@ function lsg_bl_install_schema() {
   cnt_aktualisiert int UNSIGNED NOT NULL DEFAULT 0,
   cnt_uebersprungen int UNSIGNED NOT NULL DEFAULT 0,
   cnt_fehler int UNSIGNED NOT NULL DEFAULT 0,
+  cnt_geloescht int UNSIGNED NOT NULL DEFAULT 0,
   status varchar(16) NOT NULL DEFAULT '',
   note text NULL,
   PRIMARY KEY  (id),

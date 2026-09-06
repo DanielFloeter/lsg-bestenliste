@@ -239,6 +239,10 @@ function lsg_bl_log_vorgangsansicht( $seite, $adapter = '' ) {
 			/* translators: %s: Anzahl */
 			$bilanz[] = sprintf( __( '%s aktualisiert', 'lsg-bestenliste' ), number_format_i18n( $r['cnt_aktualisiert'] ) );
 		}
+		if ( $r['cnt_geloescht'] > 0 ) {
+			/* translators: %s: Anzahl */
+			$bilanz[] = sprintf( __( '%s gelöscht', 'lsg-bestenliste' ), number_format_i18n( $r['cnt_geloescht'] ) );
+		}
 		if ( $r['cnt_uebersprungen'] > 0 ) {
 			/* translators: %s: Anzahl */
 			$bilanz[] = sprintf( __( '%s übersprungen', 'lsg-bestenliste' ), number_format_i18n( $r['cnt_uebersprungen'] ) );
