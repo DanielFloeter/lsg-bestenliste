@@ -22,12 +22,13 @@ if ( ! class_exists( 'WP_List_Table' ) ) {
 /**
  * Die Liste über `lsg_athlete` (Plan 11.3).
  *
- * ⚠ Sortierbar sind Nachname, Jahrgang und Ergebnisse – und alle drei
- * sortieren wirklich. Das ist kein selbstverständlicher Satz: in
- * `LSG_BL_Best_Table` waren drei Spaltenköpfe als sortierbar ausgezeichnet,
- * ohne dass `prepare_items()` `orderby` je gelesen hätte. Die Links sahen aus
- * wie eine Funktion und waren keine. Hier reicht `prepare_items()` beides an
- * lsg_bl_athlet_liste() durch, und der Filter lässt nur die drei Werte zu.
+ * ⚠ Sortierbar sind Nachname, Vorname, Jahrgang, Ergebnisse, Gesamtsiege
+ * und Regeln – und alle sechs sortieren wirklich. Das ist kein
+ * selbstverständlicher Satz: in `LSG_BL_Best_Table` waren drei Spaltenköpfe
+ * als sortierbar ausgezeichnet, ohne dass `prepare_items()` `orderby` je
+ * gelesen hätte. Die Links sahen aus wie eine Funktion und waren keine. Hier
+ * reicht `prepare_items()` beides an lsg_bl_athlet_liste() durch, und der
+ * Filter lässt nur diese Werte zu.
  */
 class LSG_BL_Athlet_Table extends WP_List_Table {
 
@@ -74,8 +75,11 @@ class LSG_BL_Athlet_Table extends WP_List_Table {
 	public function get_sortable_columns() {
 		return array(
 			'name'       => array( 'name', false ),
+			'firstname'  => array( 'firstname', false ),
 			'born'       => array( 'born', false ),
 			'ergebnisse' => array( 'ergebnisse', true ),
+			'siege'      => array( 'siege', true ),
+			'regeln'     => array( 'regeln', true ),
 		);
 	}
 
@@ -141,9 +145,10 @@ class LSG_BL_Athlet_Table extends WP_List_Table {
 				);
 
 			case 'siege':
-				// Für `lsg_win` gibt es noch keine Pflegeseite (M8, 9.2) –
-				// die Zahl steht hier, der Link kommt mit der Seite.
-				return (int) $item['n_win'] > 0 ? esc_html( (string) (int) $item['n_win'] ) : '&#8211;';
+				return $this->zahl_verlinkt(
+					(int) $item['n_win'],
+					lsg_bl_win_url( array( 'athlet' => (int) $item['id'] ) )
+				);
 
 			case 'regeln':
 				return $this->zahl_verlinkt(

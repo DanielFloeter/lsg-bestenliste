@@ -290,7 +290,7 @@ function lsg_bl_athlet_filter( array $roh ) {
 	}
 
 	$orderby = isset( $roh['orderby'] ) ? (string) $roh['orderby'] : 'name';
-	if ( ! in_array( $orderby, array( 'name', 'born', 'ergebnisse' ), true ) ) {
+	if ( ! in_array( $orderby, array( 'name', 'firstname', 'born', 'ergebnisse', 'siege', 'regeln' ), true ) ) {
 		$orderby = 'name';
 	}
 
@@ -464,6 +464,12 @@ function lsg_bl_athlet_liste( array $filter, $seite = 1, $pro = 100 ) {
 				$v = $x['born'] - $y['born'];
 			} elseif ( 'ergebnisse' === $feld ) {
 				$v = $x['n_best'] - $y['n_best'];
+			} elseif ( 'siege' === $feld ) {
+				$v = $x['n_win'] - $y['n_win'];
+			} elseif ( 'regeln' === $feld ) {
+				$v = $x['n_map'] - $y['n_map'];
+			} elseif ( 'firstname' === $feld ) {
+				$v = strcoll( lsg_bl_kleinschreiben( $x['firstname'] ), lsg_bl_kleinschreiben( $y['firstname'] ) );
 			} else {
 				$v = strcoll( lsg_bl_kleinschreiben( $x['name'] ), lsg_bl_kleinschreiben( $y['name'] ) );
 			}
