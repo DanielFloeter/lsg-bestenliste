@@ -113,6 +113,7 @@ if ( is_admin() ) {
 	require_once LSG_BL_PATH . 'includes/admin/page-map.php';
 	require_once LSG_BL_PATH . 'includes/admin/page-athlet.php';
 	require_once LSG_BL_PATH . 'includes/admin/page-win.php';
+	require_once LSG_BL_PATH . 'includes/admin/plugin-details.php';
 }
 
 /**
