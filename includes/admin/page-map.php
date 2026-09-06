@@ -595,7 +595,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	echo '<table class="form-table" role="presentation"><tbody>';
 
 	/* Sportler */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Sportler', 'lsg-bestenliste' ),
 		'lsg-bl-map-athlet',
 		isset( $fehler['athletes_id'] ) ? $fehler['athletes_id'] : '',
@@ -611,7 +611,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	);
 
 	/* Nachname */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Nachname in der Liste', 'lsg-bestenliste' ),
 		'lsg-bl-map-nachname',
 		isset( $fehler['nachname'] ) ? $fehler['nachname'] : '',
@@ -628,7 +628,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	);
 
 	/* Vorname */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Vorname in der Liste', 'lsg-bestenliste' ),
 		'lsg-bl-map-vorname',
 		isset( $fehler['vorname'] ) ? $fehler['vorname'] : '',
@@ -645,7 +645,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	);
 
 	/* Jahrgang */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Jahrgang', 'lsg-bestenliste' ),
 		'lsg-bl-map-born',
 		isset( $fehler['born'] ) ? $fehler['born'] : '',
@@ -674,7 +674,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	);
 
 	/* Modus */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Vergleich', 'lsg-bestenliste' ),
 		'lsg-bl-map-modus',
 		isset( $fehler['modus'] ) ? $fehler['modus'] : '',
@@ -695,7 +695,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	);
 
 	/* Notiz */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Notiz', 'lsg-bestenliste' ),
 		'lsg-bl-map-notiz',
 		isset( $fehler['notiz'] ) ? $fehler['notiz'] : '',
@@ -712,7 +712,7 @@ function lsg_bl_map_formular_anzeigen( $action ) {
 	);
 
 	/* Aktiv */
-	lsg_bl_best_zeile_auf(
+	lsg_bl_formularzeile(
 		__( 'Aktiv', 'lsg-bestenliste' ),
 		'lsg-bl-map-aktiv',
 		'',
