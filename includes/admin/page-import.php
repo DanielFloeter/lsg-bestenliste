@@ -201,6 +201,16 @@ function lsg_bl_admin_assets( $hook ) {
 				'nonce'     => wp_create_nonce( 'wp_rest' ),
 				'zustaende' => lsg_bl_import_zustaende(),
 				'texte'     => array(
+					// Dieselben zwei Formulierungen wie im PHP-Rendering der
+					// Portalwahl (lsg_bl_import_schritt1()) – dort setzt ein
+					// voller Seitenaufbau die Beschriftung der Option
+					// „automatisch“ neu, hier tut es dieses Skript nach dem
+					// AJAX-Schritt „erkennen“, ohne die Auswahl selbst
+					// anzufassen (Plan 6.9: die Portalwahl ist Eingabe des
+					// Menschen, sie wird nicht neu gerendert).
+					'automatisch'         => __( 'automatisch', 'lsg-bestenliste' ),
+					/* translators: %s: Portalname */
+					'automatischErkannt'  => __( 'automatisch (erkannt: %s)', 'lsg-bestenliste' ),
 					'alleWaehlen'   => __( 'Alle auswählen', 'lsg-bestenliste' ),
 					/* translators: %d: Anzahl */
 					'uebernehmen1'  => __( '%d Ergebnis übernehmen', 'lsg-bestenliste' ),

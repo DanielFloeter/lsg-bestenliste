@@ -55,6 +55,21 @@
 	var abbruch      = null;
 	var beschaeftigt = false;
 
+	// Entpreller fuer das Adressfeld: „erkennen“ soll auch beim Tippen
+	// laufen, nicht erst beim Verlassen des Feldes – aber nicht bei jedem
+	// Tastendruck einzeln, sonst ginge ein Request an die fremde Quelle raus,
+	// waehrend die Adresse noch unvollstaendig ist.
+	var urlErkennenTimer = null;
+
+	// Welchen Wert „erkennen()“ zuletzt tatsächlich abgefragt hat. Ohne das
+	// feuert der native „change“ eines Textfelds beim Verlassen ein zweites
+	// Mal für denselben Wert, den der Entpreller Sekundenbruchteile vorher
+	// schon abgefragt hatte – und die Antwort tauscht dann die
+	// Wettbewerbs-Auswahl aus, ausgerechnet während sie angeklickt wird.
+	// Genau das war der Grund, weshalb man sie bisher zweimal anklicken
+	// musste.
+	var urlLetzteAnfrage = null;
+
 	/* ---------------------------------------------------------------------
 	 * Werte und Adresse
 	 * ------------------------------------------------------------------ */
@@ -208,6 +223,33 @@
 	}
 
 	/**
+	 * Die Beschriftung der Option „automatisch“ in der Portalwahl.
+	 *
+	 * Der Schritt „erkennen“ läuft bei jeder Änderung von Adresse ODER
+	 * Portalwahl (siehe der change-Handler unten). Was er über die Adresse
+	 * herausfindet, gehört sichtbar zur Auswahl selbst – sonst steht dort
+	 * dauerhaft nur „automatisch“, während zwei Zeilen tiefer längst
+	 * „Erkannt: race result – …“ steht.
+	 *
+	 * ⚠ Verändert wird NUR die Beschriftung der Option, nicht die Auswahl
+	 * selbst. Eine von Hand gewählte Portalüberschreibung bleibt stehen –
+	 * dieselbe Regel wie beim vollen Seitenaufbau (Plan 6.9,
+	 * lsg_bl_import_schritt1()).
+	 *
+	 * @param {string} label Portalname aus der Antwort, leer wenn nichts
+	 *                        erkannt wurde.
+	 */
+	function adapterBeschriftungAktualisieren( label ) {
+		var option = document.querySelector( '#lsg-bl-adapter option[value="auto"]' );
+		if ( ! option ) {
+			return;
+		}
+		option.textContent = label
+			? ( texte.automatischErkannt || 'automatisch (erkannt: %s)' ).replace( '%s', label )
+			: ( texte.automatisch || 'automatisch' );
+	}
+
+	/**
 	 * Ein Element durch das Fragment aus der Antwort ersetzen.
 	 */
 	function ersetze( id, html ) {
@@ -234,6 +276,13 @@
 		ersetze( 'lsg-bl-erkannt', data.html.erkannt );
 		ersetze( 'lsg-bl-auswahl', data.html.auswahl );
 		ersetze( 'lsg-bl-vorschau', data.html.vorschau );
+
+		// `label` steht nur in der Antwort von „erkennen“ (immer, auch als
+		// leerer String bei keinem Treffer) – die anderen drei Schritte
+		// lassen die Feldbeschriftung deshalb unangetastet.
+		if ( 'undefined' !== typeof data.label ) {
+			adapterBeschriftungAktualisieren( data.label );
+		}
 
 		if ( data.werte ) {
 			adresseNachfuehren( data.werte );
@@ -276,6 +325,7 @@
 		if ( beschaeftigt || ! w.url ) {
 			return;
 		}
+		urlLetzteAnfrage = w.url;
 		var knopf = document.getElementById( 'lsg-bl-pruefen' );
 		starten( 'erkenne', 'lsg-bl-spinner-pruefen', knopf, false );
 
@@ -558,10 +608,42 @@
 		}
 	} );
 
+	// „input“ statt „change“: change feuert bei einem Textfeld erst beim
+	// Verlassen, input bei jedem Tastendruck UND beim Einfuegen per
+	// Zwischenablage. Nur das Adressfeld braucht das – bei einem <select>
+	// wie der Portalwahl ist „change“ bereits der richtige, sofortige
+	// Zeitpunkt.
+	wrap.addEventListener( 'input', function ( e ) {
+		if ( 'url' !== e.target.name ) {
+			return;
+		}
+		if ( urlErkennenTimer ) {
+			window.clearTimeout( urlErkennenTimer );
+		}
+		urlErkennenTimer = window.setTimeout( function () {
+			urlErkennenTimer = null;
+			erkennen();
+		}, 400 );
+	} );
+
 	wrap.addEventListener( 'change', function ( e ) {
 		var name = e.target.name;
 
 		if ( 'url' === name || 'adapter' === name ) {
+			// Verlaesst der Mensch das Feld, bevor der Entpreller abgelaufen
+			// ist, soll das nicht noch einmal 400ms warten.
+			if ( urlErkennenTimer ) {
+				window.clearTimeout( urlErkennenTimer );
+				urlErkennenTimer = null;
+			}
+			// Beim Adressfeld selbst: hat der Entpreller diesen Wert schon
+			// abgefragt, während der Mensch noch im Feld stand, ist der
+			// „change“ beim Verlassen nur die zweite Anfrage für denselben
+			// Wert – überflüssig, und sie käme gerade dann zurück, wenn als
+			// nächstes in die Wettbewerbs-Auswahl geklickt wird.
+			if ( 'url' === name && werte().url === urlLetzteAnfrage ) {
+				return;
+			}
 			erkennen();
 			return;
 		}

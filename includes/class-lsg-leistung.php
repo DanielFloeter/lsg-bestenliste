@@ -289,7 +289,11 @@ function lsg_bl_best_pruefung( $distanz, $leistung, array $bestand, $eigene_id =
 	);
 
 	if ( ! $bestand ) {
-		$leer['text'] = 'Noch keine Leistung auf dieser Distanz in diesem Jahr.';
+		// Die Regel aus Plan 7.3 gehört in den Hinweis selbst: pro Sportler,
+		// Distanz und Jahr haelt die Bestenliste genau eine Zeile. Ohne
+		// Bestand ist diese Leistung nicht „auch noch eine“, sondern die,
+		// die diese Zeile wird.
+		$leer['text'] = 'Einzige Leistung auf dieser Distanz in diesem Jahr.';
 		return $leer;
 	}
 
