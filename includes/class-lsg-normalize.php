@@ -454,6 +454,114 @@ function lsg_bl_ak_berechnen( $jahrgang, $veranstaltungsjahr, $cat ) {
 	return ( 'f' === strtolower( (string) $cat ) ? 'w' : 'm' ) . $stufe;
 }
 
+/**
+ * Die Umkehrung von lsg_bl_ak_berechnen(): welches Jahrgangsband lässt ein
+ * Klassen-Code der Quelle zu?
+ *
+ * Der Anlass: race result und runtix nennen in vielen Listen gar keinen
+ * Jahrgang mehr, nur noch die Altersklasse – die KIT-Meisterschaft 2026 ist
+ * so eine Liste. Ohne Jahrgang ordnet P3 niemanden zu. Die AK ist aber keine
+ * leere Information: „M40“ bei einer Veranstaltung 2026 heißt Alter 40 bis 44,
+ * also Jahrgang 1982 bis 1986. Das reicht, um innerhalb eines Vereins einen
+ * Namen eindeutig zu machen.
+ *
+ * ⚠ Geraten wird nichts. Ein Code, dessen Schema nicht sicher erkennbar ist,
+ * liefert ein leeres Array – die Zeile bleibt dann offen, genau wie bisher.
+ * Ein zu weites Band kostet nur eine Zuordnung, die ohnehin nicht käme; ein
+ * zu enges Band schriebe ein Ergebnis dem Falschen gut.
+ *
+ * Erkannt werden:
+ *   M40 · W45 · M75      5er-Klassen ab 30      → Alter n … n+4
+ *   M20 · W20           DLV-Hauptklasse       → Alter 20 … 29
+ *   M · W · MHK · WHK    Hauptklasse ohne Zahl → Alter 0 … 29
+ *   M U23 · MJ U20      U-Klassen             → Alter 0 … n−1
+ *
+ * Nicht erkannt (leeres Array): 10er-Klassen („M40-49“), offene Klassen
+ * („M50+“), reine Zahlen (das ist ein AK-Platz, keine AK), alles Übrige.
+ *
+ * @param string $klasse             Klassen-Code der Quelle, roh.
+ * @param int    $veranstaltungsjahr Jahr des Veranstaltungsdatums.
+ * @return int[] array( von, bis ) oder leeres Array.
+ */
+function lsg_bl_jahrgangsband_aus_klasse( $klasse, $veranstaltungsjahr ) {
+	$jahr = (int) $veranstaltungsjahr;
+	if ( $jahr <= 0 ) {
+		return array();
+	}
+
+	// Führenden Platz abschneiden – dieselbe Vorarbeit wie in
+	// lsg_bl_geschlecht_aus_klasse(): „1. M35“, „DNS M40“.
+	$rest = preg_replace( '/^\s*(?:\d+\s*\.?|dnf|dsq|dns|dq)\s*/i', '', (string) $klasse );
+
+	// Leerzeichen, Punkte, Binde- und Unterstriche weg: „M U23“ → „MU23“,
+	// „MJ U20“ → „MJU20“, „W 45“ → „W45“.
+	$code = strtoupper( preg_replace( '/[\s._\-]+/u', '', (string) $rest ) );
+	if ( '' === $code ) {
+		return array();
+	}
+
+	// Erst das Geschlechtszeichen, dann ein optionales J für „Jugend“.
+	if ( ! preg_match( '/^([MWF])J?(.*)$/', $code, $m ) ) {
+		return array();
+	}
+	$rumpf = $m[2];
+
+	$band = function ( $alter_von, $alter_bis ) use ( $jahr ) {
+		$von = $jahr - (int) $alter_bis;
+		$bis = $jahr - (int) $alter_von;
+		if ( $von < 1900 ) {
+			$von = 1900;
+		}
+		if ( $bis > $jahr ) {
+			$bis = $jahr;
+		}
+		return ( $von <= $bis ) ? array( $von, $bis ) : array();
+	};
+
+	// Hauptklasse ohne Zahl. Was eine Quelle darunter fasst, schwankt – die
+	// KIT-Liste stellt „M“ neben „M U23“. Deshalb dieselbe Grenze wie in
+	// lsg_bl_ak_berechnen(): alles unter 30.
+	if ( '' === $rumpf || 'HK' === $rumpf ) {
+		return $band( 0, 29 );
+	}
+
+	// U-Klassen: „unter n“ heißt Alter höchstens n−1.
+	if ( preg_match( '/^U(\d{1,2})$/', $rumpf, $u ) ) {
+		$n = (int) $u[1];
+		return ( $n > 0 ) ? $band( 0, $n - 1 ) : array();
+	}
+
+	// Zahlenklassen.
+	if ( preg_match( '/^(\d{2})$/', $rumpf, $z ) ) {
+		$n = (int) $z[1];
+		if ( 20 === $n ) {
+			// DLV-Hauptklasse M20/W20: 20 bis 29, keine 5er-Stufe.
+			return $band( 20, 29 );
+		}
+		if ( $n >= 30 && 0 === $n % 5 ) {
+			return $band( $n, $n + 4 );
+		}
+	}
+
+	return array();
+}
+
+/**
+ * Ein Jahrgangsband als Klartext, wie es unter einer Importzeile steht.
+ *
+ * @param int[] $band array( von, bis ) aus lsg_bl_jahrgangsband_aus_klasse().
+ * @return string Leer, wenn das Band leer ist.
+ */
+function lsg_bl_jahrgangsband_text( array $band ) {
+	if ( count( $band ) < 2 ) {
+		return '';
+	}
+	if ( (int) $band[0] === (int) $band[1] ) {
+		return (string) (int) $band[0];
+	}
+	return sprintf( '%d–%d', (int) $band[0], (int) $band[1] );
+}
+
 /* -------------------------------------------------------------------------
  * Datum
  * ---------------------------------------------------------------------- */

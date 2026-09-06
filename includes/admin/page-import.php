@@ -1831,7 +1831,25 @@ function lsg_bl_import_tabelle( array $v, array $w ) {
 		echo '</td>';
 
 		/* --- Jahrgang --- */
-		echo '<td>' . lsg_bl_cell( $z['jahrgang'] ? $z['jahrgang'] : '' ) . '</td>';
+		//
+		// ⚠ Steht hier ein Band statt einer Zahl, hat die Quelle keinen
+		// Jahrgang genannt und P3 hat mit der Altersklasse gearbeitet. Das
+		// muss man der Zelle ansehen, sonst liest sich ein Schluss wie eine
+		// Angabe.
+		if ( ! empty( $z['jahrgang'] ) ) {
+			echo '<td>' . lsg_bl_cell( $z['jahrgang'] ) . '</td>';
+		} elseif ( ! empty( $z['jahrgang_aus_ak'] ) ) {
+			echo '<td>' . esc_html( $z['jahrgang_band'] )
+				. '<br /><span class="lsg-bl-roh">' . esc_html(
+					sprintf(
+						/* translators: %s: Klassen-Code der Quelle */
+						__( 'aus AK %s', 'lsg-bestenliste' ),
+						$z['quelle_klasse']
+					)
+				) . '</span></td>';
+		} else {
+			echo '<td>' . lsg_bl_cell( '' ) . '</td>';
+		}
 
 		/* --- Altersklasse --- */
 		echo '<td>' . lsg_bl_cell( $z['ak'] );
@@ -1872,6 +1890,18 @@ function lsg_bl_import_tabelle( array $v, array $w ) {
 			echo '<br /><span class="lsg-bl-warnzeile">'
 				. esc_html__( '⚠ Die Quelle nennt ein anderes Geschlecht als der zugeordnete Sportler – bitte prüfen.', 'lsg-bestenliste' )
 				. '</span>';
+		}
+
+		if ( ! empty( $z['ak_abweichung'] ) ) {
+			echo '<br /><span class="lsg-bl-warnzeile">' . esc_html(
+				sprintf(
+					/* translators: 1: Klassen-Code der Quelle, 2: Jahrgangsband dieser Klasse, 3: Jahrgang laut Quelle */
+					__( '⚠ Jahrgang und Altersklasse der Quelle passen nicht zueinander: %1$s wäre Jahrgang %2$s, genannt ist %3$s – bitte prüfen.', 'lsg-bestenliste' ),
+					$z['quelle_klasse'],
+					$z['ak_abweichung'],
+					$z['jahrgang']
+				)
+			) . '</span>';
 		}
 
 		// Ähnliche Athleten: reine Lesehilfe, kein Auswahlfeld.

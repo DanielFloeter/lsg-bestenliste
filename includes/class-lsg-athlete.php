@@ -21,29 +21,78 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Athleten mehrerer Jahrgänge auf einmal holen.
+ * Die WHERE-Bedingung für „Jahrgang in dieser Menge oder in einem dieser
+ * Bänder" – gemeinsam von Athleten und Regeln benutzt.
+ *
+ * Bänder entstehen, wenn die Quelle keinen Jahrgang nennt und P3 stattdessen
+ * mit dem Jahrgangsband der Altersklasse arbeitet (`M40` 2026 → 1982–1986).
+ *
+ * @param int[]   $jahrgaenge Einzelne Jahrgänge.
+ * @param array[] $baender    Liste von array( von, bis ).
+ * @return array{0:string,1:array} SQL-Fragment mit %d-Platzhaltern und Werte.
+ */
+function lsg_bl_jahrgang_where( array $jahrgaenge, array $baender = array() ) {
+	$jahrgaenge = array_values( array_unique( array_filter( array_map( 'intval', $jahrgaenge ) ) ) );
+
+	$teile  = array();
+	$params = array();
+
+	if ( $jahrgaenge ) {
+		$teile[] = 'born IN (' . implode( ',', array_fill( 0, count( $jahrgaenge ), '%d' ) ) . ')';
+		$params  = array_merge( $params, $jahrgaenge );
+	}
+
+	$gesehen = array();
+	foreach ( $baender as $b ) {
+		if ( ! is_array( $b ) || count( $b ) < 2 ) {
+			continue;
+		}
+		$von = (int) $b[0];
+		$bis = (int) $b[1];
+		if ( $von <= 0 || $bis <= 0 || $von > $bis ) {
+			continue;
+		}
+		$schluessel = $von . '-' . $bis;
+		if ( isset( $gesehen[ $schluessel ] ) ) {
+			continue;
+		}
+		$gesehen[ $schluessel ] = true;
+
+		$teile[] = '( born BETWEEN %d AND %d )';
+		$params[] = $von;
+		$params[] = $bis;
+	}
+
+	if ( ! $teile ) {
+		return array( '', array() );
+	}
+	return array( '( ' . implode( ' OR ', $teile ) . ' )', $params );
+}
+
+/**
+ * Athleten mehrerer Jahrgänge (und Jahrgangsbänder) auf einmal holen.
  *
  * Eine Abfrage statt einer je Zeile: bei elf LSG-Zeilen sind das elf
  * Abfragen weniger, und der Fall „zwei Läufer desselben Jahrgangs" braucht
  * ohnehin alle Kandidaten dieses Jahrgangs.
  *
- * @param int[] $jahrgaenge Jahrgänge.
+ * @param int[]   $jahrgaenge Jahrgänge.
+ * @param array[] $baender    Jahrgangsbänder aus den Altersklassen.
  * @return array<int,array> Zeilen aus lsg_athlete.
  */
-function lsg_bl_athleten_nach_jahrgang( array $jahrgaenge ) {
+function lsg_bl_athleten_nach_jahrgang( array $jahrgaenge, array $baender = array() ) {
 	global $wpdb;
 
-	$jahrgaenge = array_values( array_unique( array_filter( array_map( 'intval', $jahrgaenge ) ) ) );
-	if ( ! $jahrgaenge ) {
+	list( $where, $params ) = lsg_bl_jahrgang_where( $jahrgaenge, $baender );
+	if ( '' === $where ) {
 		return array();
 	}
 
 	$t   = lsg_bl_table( 'lsg_athlete' );
-	$in  = implode( ',', array_fill( 0, count( $jahrgaenge ), '%d' ) );
 	$sql = $wpdb->prepare(
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		"SELECT id, name, firstname, born, cat, active FROM {$t} WHERE born IN ({$in})",
-		$jahrgaenge
+		"SELECT id, name, firstname, born, cat, active FROM {$t} WHERE {$where}",
+		$params
 	);
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
@@ -72,14 +121,19 @@ function lsg_bl_athlet( $id ) {
 /**
  * Aktive Zuordnungsregeln mehrerer Jahrgänge (Mapping 2 von 2, Plan 6.5.3).
  *
- * @param int[] $jahrgaenge Jahrgänge.
+ * ⚠ Die Bänder müssen hier genauso durchschlagen wie bei den Athleten. Sonst
+ * bliebe bei einer Liste ohne Jahrgang ausgerechnet der manuelle Ausweg zu:
+ * Regeln sind für die Fälle da, die der Namensabgleich nicht trifft.
+ *
+ * @param int[]   $jahrgaenge Jahrgänge.
+ * @param array[] $baender    Jahrgangsbänder aus den Altersklassen.
  * @return array<int,array> Zeilen aus lsg_athlete_map.
  */
-function lsg_bl_map_regeln( array $jahrgaenge ) {
+function lsg_bl_map_regeln( array $jahrgaenge, array $baender = array() ) {
 	global $wpdb;
 
-	$jahrgaenge = array_values( array_unique( array_filter( array_map( 'intval', $jahrgaenge ) ) ) );
-	if ( ! $jahrgaenge ) {
+	list( $where, $params ) = lsg_bl_jahrgang_where( $jahrgaenge, $baender );
+	if ( '' === $where ) {
 		return array();
 	}
 
@@ -88,12 +142,11 @@ function lsg_bl_map_regeln( array $jahrgaenge ) {
 		return array();
 	}
 
-	$in  = implode( ',', array_fill( 0, count( $jahrgaenge ), '%d' ) );
 	$sql = $wpdb->prepare(
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		"SELECT id, athletes_id, born, vorname, nachname, modus, aktiv, notiz
-		   FROM {$t} WHERE aktiv = 1 AND born IN ({$in}) ORDER BY id ASC",
-		$jahrgaenge
+		   FROM {$t} WHERE aktiv = 1 AND {$where} ORDER BY id ASC",
+		$params
 	);
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared

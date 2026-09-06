@@ -279,7 +279,11 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 		$i_name   = self::spalte( $spalten, array( 'name', 'teilnehmer', 'athlet', 'sportler' ) );
 		$i_verein = self::spalte( $spalten, array( 'verein', 'club', 'team', 'mannschaft', 'verein ort' ) );
 		$i_jg     = self::spalte( $spalten, array( 'jg', 'jahrgang', 'jahr', 'geburtsjahr', 'yob' ) );
-		$i_ak     = self::spalte( $spalten, array( 'ak pl', 'ak', 'altersklasse', 'klasse', 'ak platz', 'ak rang' ) );
+		// ⚠ Gesucht ist der Klassen-CODE, nicht der Platz innerhalb der
+		// Klasse. „AK Pl." zuerst zu probieren lieferte in Listen, die beides
+		// führen, eine Zahl – und aus einer Zahl liest sich weder ein
+		// Geschlecht noch ein Jahrgangsband.
+		$i_ak     = self::spalte( $spalten, array( 'ak', 'altersklasse', 'klasse', 'kategorie', 'agegroup', 'age group', 'category' ) );
 		$i_mw     = self::spalte( $spalten, array( 'mw pl', 'mw', 'm w', 'geschlecht', 'sex', 'mw platz' ) );
 
 		// Nettozeit hat Vorrang. Erst wenn keines dieser Labels existiert,
@@ -304,7 +308,12 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 			);
 		}
 		if ( null === $i_jg ) {
-			$warnungen[] = 'Die Ergebnisliste nennt keinen Jahrgang. Ohne Jahrgang lässt sich kein Athlet zuordnen.';
+			// Kein Jahrgang ist inzwischen der Regelfall. Solange die Liste
+			// eine Altersklasse führt, arbeitet P3 mit deren Jahrgangsband
+			// weiter; ohne beides ist die Zeile nicht zuzuordnen.
+			$warnungen[] = ( null !== $i_ak )
+				? 'Die Ergebnisliste nennt keinen Jahrgang. Die Zuordnung stützt sich deshalb auf das Jahrgangsband der Altersklasse – wo deren Schema unbekannt ist, bleibt die Zeile offen.'
+				: 'Die Ergebnisliste nennt weder Jahrgang noch Altersklasse. So lässt sich kein Athlet zuordnen.';
 		}
 		if ( null === $i_verein ) {
 			$warnungen[] = 'Die Ergebnisliste nennt keinen Verein. Der LSG-Filter kann so nicht greifen.';

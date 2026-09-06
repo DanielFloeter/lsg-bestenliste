@@ -141,4 +141,88 @@ class Datum_Ak_Test extends TestCase {
 			'Jahrgang in der Zukunft' => array( 2030, 2026, 'm', '' ),
 		);
 	}
+
+	/* ------------------------------------------------------------------
+	 * Die Umkehrung: Jahrgangsband aus dem Klassen-Code der Quelle.
+	 *
+	 * Der Anlass ist Issue #2 – race result und runtix nennen in vielen
+	 * Listen nur noch die AK. Was hier geprüft wird, ist deshalb vor allem
+	 * die Grenze zwischen „sicher erkannt" und „lieber gar nichts".
+	 * --------------------------------------------------------------- */
+
+	/**
+	 * @dataProvider baender
+	 *
+	 * @param string $klasse   Klassen-Code der Quelle.
+	 * @param int    $jahr     Veranstaltungsjahr.
+	 * @param array  $erwartet array( von, bis ) oder array().
+	 */
+	public function test_jahrgangsband_aus_klasse( $klasse, $jahr, $erwartet ) {
+		$this->assertSame(
+			$erwartet,
+			lsg_bl_jahrgangsband_aus_klasse( $klasse, $jahr ),
+			'Klasse: ' . $klasse
+		);
+	}
+
+	/**
+	 * @return array<string,array>
+	 */
+	public function baender() {
+		return array(
+			// 5er-Klassen ab 30: „M40" 2026 heißt Alter 40 bis 44.
+			'M40'                => array( 'M40', 2026, array( 1982, 1986 ) ),
+			'W45'                => array( 'W45', 2026, array( 1977, 1981 ) ),
+			'M75'                => array( 'M75', 2026, array( 1947, 1951 ) ),
+
+			// Dieselbe Vorarbeit wie beim Geschlecht: führender Platz,
+			// Statuskürzel, Leerzeichen im Code.
+			'mit Platz'          => array( '1. M35', 2026, array( 1987, 1991 ) ),
+			'DNS-Zeile'          => array( 'DNS M40', 2026, array( 1982, 1986 ) ),
+			'runtix-Schreibweise' => array( 'M 30', 2026, array( 1992, 1996 ) ),
+
+			// DLV-Hauptklasse mit Zahl: 20 bis 29, keine 5er-Stufe.
+			'M20'                => array( 'M20', 2026, array( 1997, 2006 ) ),
+
+			// Hauptklasse ohne Zahl. Was eine Quelle darunter fasst,
+			// schwankt – deshalb dieselbe Grenze wie lsg_bl_ak_berechnen():
+			// alles unter 30.
+			'blankes M'          => array( 'M', 2026, array( 1997, 2026 ) ),
+			'blankes W mit Platz' => array( '48. W', 2026, array( 1997, 2026 ) ),
+			'MHK'                => array( 'MHK', 2026, array( 1997, 2026 ) ),
+
+			// U-Klassen: „unter n" heißt Alter höchstens n−1.
+			'M U23'              => array( 'M U23', 2026, array( 2004, 2026 ) ),
+			'MJ U20'             => array( 'MJ U20', 2026, array( 2007, 2026 ) ),
+			'WJ U18'             => array( 'WJ U18', 2026, array( 2009, 2026 ) ),
+
+			// ⚠ Und jetzt die andere Hälfte: alles, wo das Schema nicht
+			// sicher ist, liefert nichts. Ein zu enges Band schriebe ein
+			// Ergebnis dem Falschen gut – die Zeile bleibt dann lieber offen.
+			'10er-Klasse'        => array( 'M40-49', 2026, array() ),
+			'offene Klasse'      => array( 'M50+', 2026, array() ),
+			'krumme Stufe'       => array( 'M32', 2026, array() ),
+			'Klartext'           => array( 'Senioren', 2026, array() ),
+			'nur ein AK-Platz'   => array( '12.', 2026, array() ),
+			'blanke Zahl'        => array( '3', 2026, array() ),
+			'ohne Klasse'        => array( '', 2026, array() ),
+			'ohne Jahr'          => array( 'M40', 0, array() ),
+		);
+	}
+
+	/**
+	 * Das Band muss zur Berechnung passen: wer in m50 gerechnet wird, muss
+	 * auch im Band von „M50" liegen. Sonst driften die beiden Richtungen
+	 * auseinander und niemand merkt es.
+	 */
+	public function test_band_und_berechnung_passen_zusammen() {
+		foreach ( range( 1940, 2020 ) as $jahrgang ) {
+			$code = lsg_bl_ak_berechnen( $jahrgang, 2026, 'm' );
+			$band = lsg_bl_jahrgangsband_aus_klasse( strtoupper( $code ), 2026 );
+
+			$this->assertNotSame( array(), $band, 'Kein Band für ' . $code );
+			$this->assertGreaterThanOrEqual( $band[0], $jahrgang, $code );
+			$this->assertLessThanOrEqual( $band[1], $jahrgang, $code );
+		}
+	}
 }

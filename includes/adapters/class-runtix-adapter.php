@@ -503,7 +503,12 @@ final class LSG_BL_Runtix_Adapter implements LSG_BL_Ergebnis_Quelle {
 			);
 		}
 		if ( ! isset( $spalten['col-birth'] ) ) {
-			$warnungen[] = 'Diese runtix-Liste nennt keinen Jahrgang. Ohne Jahrgang lässt sich kein Athlet zuordnen.';
+			// Kein Jahrgang ist inzwischen der Regelfall. Solange die Liste
+			// eine Altersklasse führt, arbeitet P3 mit deren Jahrgangsband
+			// weiter; ohne beides ist die Zeile nicht zuzuordnen.
+			$warnungen[] = isset( $spalten['col-ageclass'] )
+				? 'Diese runtix-Liste nennt keinen Jahrgang. Die Zuordnung stützt sich deshalb auf das Jahrgangsband der Altersklasse – wo deren Schema unbekannt ist, bleibt die Zeile offen.'
+				: 'Diese runtix-Liste nennt weder Jahrgang noch Altersklasse. So lässt sich kein Athlet zuordnen.';
 		}
 		if ( ! isset( $spalten['col-team'] ) ) {
 			$warnungen[] = 'Diese runtix-Liste nennt keinen Verein. Der LSG-Filter kann so nicht greifen.';

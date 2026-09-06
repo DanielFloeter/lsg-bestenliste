@@ -488,21 +488,44 @@ function lsg_bl_parsen( array $args ) {
  */
 function lsg_bl_p3_p4( array $zeilen, $distanz, $jahr ) {
 	// Alle gebrauchten Jahrgänge in einer Abfrage – nicht eine je Zeile.
+	//
+	// ⚠ Nennt eine Liste gar keinen Jahrgang – bei race result und runtix
+	// inzwischen der Regelfall –, tritt das Jahrgangsband der Altersklasse an
+	// seine Stelle. Ohne diese Bänder bliebe $jahrgaenge leer, es würde kein
+	// einziger Kandidat geladen, und jede Zeile fiele auf `offen`.
 	$jahrgaenge = array();
+	$baender    = array();
 	foreach ( $zeilen as $e ) {
 		if ( $e->jahrgang > 0 ) {
 			$jahrgaenge[] = (int) $e->jahrgang;
+			continue;
+		}
+		$band = lsg_bl_jahrgangsband_aus_klasse( $e->quelle_klasse, $jahr );
+		if ( $band ) {
+			$baender[] = $band;
 		}
 	}
 
-	$athleten = lsg_bl_athleten_nach_jahrgang( $jahrgaenge );
-	$regeln   = lsg_bl_map_regeln( $jahrgaenge );
+	$athleten = lsg_bl_athleten_nach_jahrgang( $jahrgaenge, $baender );
+	$regeln   = lsg_bl_map_regeln( $jahrgaenge, $baender );
 	$ak_codes = lsg_bl_ak_codes();
 
 	$out = array();
 
 	foreach ( $zeilen as $e ) {
 		$z = $e->to_array();
+
+		// Das Jahrgangsband der Altersklasse – nur, wenn die Quelle keinen
+		// Jahrgang nennt. `jahrgang` selbst bleibt 0 und damit `roh_jahrgang`
+		// im Protokoll NULL: die Quelle hat keinen Jahrgang genannt, und
+		// dieser Unterschied darf nicht verlorengehen (Plan 6.5.1).
+		$band                 = ( (int) $z['jahrgang'] > 0 )
+			? array()
+			: lsg_bl_jahrgangsband_aus_klasse( $z['quelle_klasse'], $jahr );
+		$z['jahrgang_von']    = $band ? (int) $band[0] : 0;
+		$z['jahrgang_bis']    = $band ? (int) $band[1] : 0;
+		$z['jahrgang_aus_ak'] = (bool) $band;
+		$z['jahrgang_band']   = lsg_bl_jahrgangsband_text( $band );
 
 		/* ---- P3 ---- */
 		$p3 = lsg_bl_p3_zuordnen( $z, $athleten, $regeln );
@@ -514,6 +537,7 @@ function lsg_bl_p3_p4( array $zeilen, $distanz, $jahr ) {
 		$z['athlet_label']  = '';
 		$z['ak']            = '';
 		$z['ak_fehlt']      = false;
+		$z['ak_abweichung'] = '';
 		$z['geschlecht_abweichung'] = false;
 		$z['aehnliche']     = array();
 		$z['time_alt']      = '';
@@ -546,6 +570,21 @@ function lsg_bl_p3_p4( array $zeilen, $distanz, $jahr ) {
 			// Frontend, nicht die Instanz, die über die Richtigkeit eines
 			// Ergebnisses entscheidet (Plan 6.5.3).
 			$z['ak_fehlt'] = true;
+		}
+
+		// Nennt die Quelle Jahrgang UND Altersklasse, müssen beide zueinander
+		// passen. Tun sie es nicht, stimmt eines von beidem nicht – ein
+		// vertippter Jahrgang in der Meldeliste oder eine Fehlzuordnung.
+		// Dieselbe Art Hinweis wie die Geschlechtsabweichung: markieren,
+		// nicht ablehnen (Plan 6.5.1). Bei Zeilen ohne Jahrgang war das Band
+		// das Zuordnungskriterium – da kann es per Konstruktion nicht abweichen.
+		if ( $athlet && (int) $z['jahrgang'] > 0 ) {
+			$ak_band = lsg_bl_jahrgangsband_aus_klasse( $z['quelle_klasse'], $jahr );
+			if ( $ak_band
+				&& ( (int) $athlet['born'] < (int) $ak_band[0] || (int) $athlet['born'] > (int) $ak_band[1] )
+			) {
+				$z['ak_abweichung'] = lsg_bl_jahrgangsband_text( $ak_band );
+			}
 		}
 
 		// Weicht das Geschlecht der Quelle vom zugeordneten Athleten ab, ist

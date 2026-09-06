@@ -548,16 +548,27 @@ function lsg_bl_regel_gueltig( array $regel ) {
  * nicht importiert. Ein „wahrscheinlich" hätte niemand bestätigt, ohne es
  * doch von Hand zu prüfen.
  *
- * ⚠ Der Jahrgang ist in jeder Stufe Pflicht. Zwei Personen mit gleichem Namen
- * und gleichem Jahrgang im Verein sind unwahrscheinlich; ein Namensabgleich
- * ohne Jahrgang würde dagegen früher oder später Ergebnisse dem Falschen
- * zuschreiben. Liefert die Quelle keinen Jahrgang, bleibt die Zeile `offen` –
- * auch wenn der Name eindeutig aussieht.
+ * ⚠ Ein Jahrgangsbezug ist in jeder Stufe Pflicht. Zwei Personen mit gleichem
+ * Namen und gleichem Jahrgang im Verein sind unwahrscheinlich; ein
+ * Namensabgleich ganz ohne Jahrgangsbezug würde dagegen früher oder später
+ * Ergebnisse dem Falschen zuschreiben.
  *
- * @param array $zeile    nachname, vorname, jahrgang (aus P1).
- * @param array $athleten Kandidaten desselben Jahrgangs: id, name, firstname,
+ * ⚠ Der Jahrgangsbezug ist entweder der genannte Jahrgang – dann muss er auf
+ * das Jahr genau stimmen, wie bisher – oder das Jahrgangsband, das die
+ * Altersklasse der Quelle zulässt (`jahrgang_von` / `jahrgang_bis`, gefüllt
+ * aus `quelle_klasse` in lsg_bl_p3_p4()). Viele Listen nennen inzwischen nur
+ * noch die AK; „M40, Veranstaltung 2026“ heißt Jahrgang 1982 bis 1986, und
+ * das genügt, um im Verein einen Namen eindeutig zu machen. Solche Treffer
+ * bekommen einen eigenen match_type (`ak`, `regel_ak`), damit im Protokoll
+ * sichtbar bleibt, worauf die Zuordnung beruhte. Liefert die Quelle weder
+ * das eine noch das andere, bleibt die Zeile `offen` – auch wenn der Name
+ * eindeutig aussieht.
+ *
+ * @param array $zeile    nachname, vorname, jahrgang, jahrgang_von,
+ *                        jahrgang_bis (aus P1 bzw. der AK).
+ * @param array $athleten Kandidaten im Jahrgangsbezug: id, name, firstname,
  *                        born, cat, active.
- * @param array $regeln   Aktive Regeln desselben Jahrgangs aus lsg_athlete_map.
+ * @param array $regeln   Aktive Regeln im Jahrgangsbezug aus lsg_athlete_map.
  * @return array{athletes_id:int,match_type:string,meldung:string,regeln:int[]}
  */
 function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
@@ -571,9 +582,42 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	};
 
 	$jahrgang = isset( $zeile['jahrgang'] ) ? (int) $zeile['jahrgang'] : 0;
-	if ( $jahrgang <= 0 ) {
-		return $offen( 'Keine Zuordnung möglich – die Ergebnisliste nennt keinen Jahrgang' );
+	$von      = isset( $zeile['jahrgang_von'] ) ? (int) $zeile['jahrgang_von'] : 0;
+	$bis      = isset( $zeile['jahrgang_bis'] ) ? (int) $zeile['jahrgang_bis'] : 0;
+
+	// ⚠ Ein genannter Jahrgang schlägt jedes abgeleitete Band. Er ist die
+	// Angabe der Quelle; das Band ist nur ein Schluss aus der Altersklasse.
+	if ( $jahrgang > 0 ) {
+		$von = $jahrgang;
+		$bis = $jahrgang;
 	}
+
+	// Beruht die Zuordnung auf der AK statt auf einem genannten Jahrgang?
+	$aus_ak = ( $jahrgang <= 0 );
+
+	if ( $von <= 0 || $bis <= 0 || $von > $bis ) {
+		return $offen(
+			'Keine Zuordnung möglich – die Ergebnisliste nennt keinen Jahrgang und keine verwertbare Altersklasse'
+		);
+	}
+
+	// Der Jahrgangsvergleich aller drei Stufen an genau einer Stelle. Bei
+	// genanntem Jahrgang ist das Band einen Jahr breit, der Vergleich also
+	// derselbe wie vorher.
+	$passt = function ( $born ) use ( $von, $bis ) {
+		$born = (int) $born;
+		return ( $born >= $von && $born <= $bis );
+	};
+
+	// Woher der Jahrgangsbezug kam, gehört ins Protokoll – sonst sieht man
+	// einer Zeile später nicht mehr an, ob die Quelle den Jahrgang nannte
+	// oder ob er aus der Altersklasse geschlossen wurde.
+	$typ = function ( $name_typ ) use ( $aus_ak ) {
+		if ( ! $aus_ak ) {
+			return $name_typ;
+		}
+		return ( 'regel' === $name_typ ) ? 'regel_ak' : 'ak';
+	};
 
 	$q_nach = isset( $zeile['nachname'] ) ? (string) $zeile['nachname'] : '';
 	$q_vor  = isset( $zeile['vorname'] ) ? (string) $zeile['vorname'] : '';
@@ -589,7 +633,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	// im Log, obwohl er exakt war.
 	$treffer = array();
 	foreach ( $athleten as $a ) {
-		if ( (int) $a['born'] !== $jahrgang ) {
+		if ( ! $passt( $a['born'] ) ) {
 			continue;
 		}
 		if ( lsg_bl_kleinschreiben( $a['name'] ) === lsg_bl_kleinschreiben( $q_nach )
@@ -602,7 +646,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	if ( 1 === count( $treffer ) ) {
 		return array(
 			'athletes_id' => $treffer[0],
-			'match_type'  => 'exakt',
+			'match_type'  => $typ( 'exakt' ),
 			'meldung'     => '',
 			'regeln'      => array(),
 		);
@@ -610,7 +654,9 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	if ( count( $treffer ) > 1 ) {
 		return $offen(
 			sprintf(
-				'Keine Zuordnung möglich – zwei Sportler heißen gleich und sind vom selben Jahrgang (#%s)',
+				$aus_ak
+					? 'Keine Zuordnung möglich – zwei Sportler heißen gleich und fallen in dieselbe Altersklasse (#%s)'
+					: 'Keine Zuordnung möglich – zwei Sportler heißen gleich und sind vom selben Jahrgang (#%s)',
 				implode( ', #', $treffer )
 			),
 			'mehrdeutig'
@@ -620,7 +666,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	/* --- Stufe 2: Zuordnungsregel -------------------------------------- */
 	$regel_treffer = array();
 	foreach ( $regeln as $r ) {
-		if ( (int) $r['born'] !== $jahrgang ) {
+		if ( ! $passt( $r['born'] ) ) {
 			continue;
 		}
 		if ( isset( $r['aktiv'] ) && ! $r['aktiv'] ) {
@@ -650,7 +696,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 		$ids = array_keys( $regel_treffer );
 		return array(
 			'athletes_id' => (int) reset( $regel_treffer ),
-			'match_type'  => 'regel',
+			'match_type'  => $typ( 'regel' ),
 			'meldung'     => '',
 			'regeln'      => $ids,
 		);
@@ -659,7 +705,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	/* --- Stufe 3: normalisiert ----------------------------------------- */
 	$treffer = array();
 	foreach ( $athleten as $a ) {
-		if ( (int) $a['born'] !== $jahrgang ) {
+		if ( ! $passt( $a['born'] ) ) {
 			continue;
 		}
 		if ( lsg_bl_text_normalisieren( $a['name'] ) === $q_nach_norm
@@ -672,7 +718,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 	if ( 1 === count( $treffer ) ) {
 		return array(
 			'athletes_id' => $treffer[0],
-			'match_type'  => 'normalisiert',
+			'match_type'  => $typ( 'normalisiert' ),
 			'meldung'     => '',
 			'regeln'      => array(),
 		);
@@ -687,7 +733,11 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 		);
 	}
 
-	return $offen( 'Keine Zuordnung möglich – kein Sportler mit diesem Namen und Jahrgang' );
+	return $offen(
+		$aus_ak
+			? 'Keine Zuordnung möglich – kein Sportler mit diesem Namen in dieser Altersklasse'
+			: 'Keine Zuordnung möglich – kein Sportler mit diesem Namen und Jahrgang'
+	);
 }
 
 /**

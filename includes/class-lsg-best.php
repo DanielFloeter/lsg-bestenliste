@@ -557,8 +557,9 @@ function lsg_bl_map_speichern( array $w ) {
 	$daten = array(
 		'athletes_id' => (int) $w['athletes_id'],
 		// Ein leerer Jahrgang heißt „beliebig" und wird als 0 gespeichert,
-		// nicht als NULL: lsg_bl_map_regeln() liest `born IN (…)` und ein
-		// NULL trifft dort nie.
+		// nicht als NULL: lsg_bl_map_regeln() fragt über born ab – als Menge
+		// von Jahrgängen oder als Jahrgangsband der Altersklasse –, und ein
+		// NULL trifft in beidem nie.
 		'born'        => (int) $w['born'],
 		'vorname'     => (string) $w['vorname'],
 		'nachname'    => (string) $w['nachname'],
@@ -618,7 +619,8 @@ function lsg_bl_map_loeschen( $id ) {
  * ⚠ Das ist die Zahl, die eine Regel beurteilbar macht. Eine Regel, die in
  * zwei Jahren nie gegriffen hat, ist entweder falsch geschrieben oder
  * überflüssig – beides sieht man nur an dieser Spalte. Gezählt wird über
- * `match_type = 'regel'` und den Athleten, weil das Log die Regel-ID nicht
+ * `match_type IN ('regel','regel_ak')` und den Athleten, weil das Log die
+ * Regel-ID nicht
  * mitführt: die Zahl ist also eine Obergrenze je Athlet, nicht je Regel.
  * Genau so steht sie auch in der Oberfläche.
  *
@@ -634,7 +636,8 @@ function lsg_bl_map_treffer() {
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
 	$rows = $wpdb->get_results(
-		"SELECT athletes_id, COUNT(*) AS n FROM {$t} WHERE match_type = 'regel' GROUP BY athletes_id",
+		"SELECT athletes_id, COUNT(*) AS n FROM {$t}
+		  WHERE match_type IN ('regel','regel_ak') GROUP BY athletes_id",
 		ARRAY_A
 	);
 

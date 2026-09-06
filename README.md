@@ -45,7 +45,13 @@ Quelle lesen kann – Distanz, Datum, Ort.
 
 Der Import liest die ganze Liste, behält die Vereinsmitglieder, ordnet sie
 über Name und Jahrgang einem Sportler zu und legt jede Zeile mit ihrem Status
-zur Wahl vor. Was dabei wegfällt, steht als Trichter über der Tabelle:
+zur Wahl vor. Nennt eine Liste keinen Jahrgang – bei beiden Portalen
+inzwischen der Regelfall –, tritt das Jahrgangsband der Altersklasse an seine
+Stelle: „M40" bei einer Veranstaltung 2026 heißt Jahrgang 1982 bis 1986, und
+das genügt, um im Verein einen Namen eindeutig zu machen. Solche Zeilen sind
+in der Vorschau und im Log als solche erkennbar; wo die Klasse zwei
+Namensvettern nicht trennt oder ihr Schema unbekannt ist, bleibt die Zeile
+ohne Zuordnung. Was dabei wegfällt, steht als Trichter über der Tabelle:
 
 > 658 gelesen, 1 ohne Zeit → 11 LSG → 10 zugeordnet, 1 ohne Zuordnung →
 > 0 neu, 1 schneller, 6 langsamer, 3 gleich

@@ -190,6 +190,11 @@ function lsg_bl_match_types() {
 		'exakt'        => __( 'Name und Jahrgang exakt', 'lsg-bestenliste' ),
 		'regel'        => __( 'über eine Zuordnungsregel', 'lsg-bestenliste' ),
 		'normalisiert' => __( 'Name normalisiert', 'lsg-bestenliste' ),
+		// Die beiden AK-Typen: der Name war eindeutig, der Jahrgang stand
+		// aber nicht in der Liste, sondern wurde aus der Altersklasse
+		// eingegrenzt. Im Protokoll muss das unterscheidbar bleiben.
+		'ak'           => __( 'Name eindeutig, Jahrgang aus der Altersklasse', 'lsg-bestenliste' ),
+		'regel_ak'     => __( 'über eine Zuordnungsregel, Jahrgang aus der Altersklasse', 'lsg-bestenliste' ),
 		'manuell'      => __( 'von Hand gewählt', 'lsg-bestenliste' ),
 		'mehrdeutig'   => __( 'mehrdeutig – nicht zugeordnet', 'lsg-bestenliste' ),
 		'offen'        => __( 'offen – nicht zugeordnet', 'lsg-bestenliste' ),

@@ -165,12 +165,181 @@ class P3_P4_Test extends TestCase {
 		$this->assertStringContainsString( 'kein Sportler mit diesem Namen und Jahrgang', $r['meldung'] );
 	}
 
-	public function test_ohne_jahrgang_bleibt_offen() {
+	public function test_ohne_jahrgang_und_ohne_ak_bleibt_offen() {
 		// Auch wenn der Name eindeutig aussieht.
 		$r = lsg_bl_p3_zuordnen( $this->zeile( 'Körner', 'Holger', 0 ), $this->athleten(), array() );
 
 		$this->assertSame( 0, $r['athletes_id'] );
 		$this->assertStringContainsString( 'nennt keinen Jahrgang', $r['meldung'] );
+	}
+
+	/* ------------------------------------------------------------------
+	 * P3 – Zuordnung über das Jahrgangsband der Altersklasse (Issue #2)
+	 *
+	 * race result und runtix nennen in vielen Listen keinen Jahrgang mehr,
+	 * nur noch die AK. Dann tritt deren Jahrgangsband an die Stelle des
+	 * Jahrgangs – mit eigenem match_type, damit im Protokoll sichtbar
+	 * bleibt, worauf die Zuordnung beruhte.
+	 * --------------------------------------------------------------- */
+
+	/**
+	 * Eine Zeile ohne Jahrgang, dafür mit dem Band ihrer Altersklasse.
+	 *
+	 * @param string $nachname Nachname.
+	 * @param string $vorname  Vorname.
+	 * @param int    $von      Untere Grenze des Bandes.
+	 * @param int    $bis      Obere Grenze des Bandes.
+	 * @return array
+	 */
+	private function zeile_ak( $nachname, $vorname, $von, $bis ) {
+		return array(
+			'nachname'     => $nachname,
+			'vorname'      => $vorname,
+			'jahrgang'     => 0,
+			'jahrgang_von' => $von,
+			'jahrgang_bis' => $bis,
+		);
+	}
+
+	public function test_ak_band_ordnet_zu() {
+		// Körner, Holger ist 1993 – „M30" bei einer Veranstaltung 2026.
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Körner', 'Holger', 1992, 1996 ),
+			$this->athleten(),
+			array()
+		);
+
+		$this->assertSame( 500, $r['athletes_id'] );
+		// ⚠ Nicht 'exakt': der Name war exakt, der Jahrgang aber geschlossen.
+		$this->assertSame( 'ak', $r['match_type'] );
+	}
+
+	public function test_ak_band_auch_normalisiert() {
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Koerner', 'Holger', 1992, 1996 ),
+			$this->athleten(),
+			array()
+		);
+
+		$this->assertSame( 500, $r['athletes_id'] );
+		$this->assertSame( 'ak', $r['match_type'] );
+	}
+
+	public function test_ak_band_trifft_daneben_nicht() {
+		// Dasselbe Band eine Klasse weiter: Körner fällt heraus.
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Körner', 'Holger', 1987, 1991 ),
+			$this->athleten(),
+			array()
+		);
+
+		$this->assertSame( 0, $r['athletes_id'] );
+		$this->assertSame( 'offen', $r['match_type'] );
+		$this->assertStringContainsString( 'in dieser Altersklasse', $r['meldung'] );
+	}
+
+	/**
+	 * Der eigentliche Gewinn: die AK trennt zwei Namensvettern genauso wie
+	 * ein Jahrgang, solange sie in verschiedene Klassen fallen.
+	 */
+	public function test_ak_band_trennt_zwei_weber() {
+		// Weber, Claus (1969) ist 2026 in M55 – Weber, Klaus (1972) in M50.
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Weber', 'Claus', 1967, 1971 ),
+			$this->athleten(),
+			array()
+		);
+		$this->assertSame( 501, $r['athletes_id'] );
+
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Weber', 'Klaus', 1972, 1976 ),
+			$this->athleten(),
+			array()
+		);
+		$this->assertSame( 502, $r['athletes_id'] );
+	}
+
+	/**
+	 * ⚠ Und dort, wo die AK NICHT trennt, wird auch nichts zugeordnet. Das
+	 * ist der Preis des Verfahrens, und er wird bezahlt, nicht umgangen.
+	 */
+	public function test_ak_band_mehrdeutig_wird_nicht_zugeordnet() {
+		$athleten = array(
+			array(
+				'id'        => 600,
+				'name'      => 'Maier',
+				'firstname' => 'Thomas',
+				'born'      => 1982,
+				'cat'       => 'm',
+				'active'    => '1',
+			),
+			array(
+				'id'        => 601,
+				'name'      => 'Maier',
+				'firstname' => 'Thomas',
+				'born'      => 1985,
+				'cat'       => 'm',
+				'active'    => '1',
+			),
+		);
+
+		// Mit Jahrgang wären das zwei klar verschiedene Personen. Im Band
+		// von „M40" (1982–1986) liegen sie beide.
+		$r = lsg_bl_p3_zuordnen( $this->zeile_ak( 'Maier', 'Thomas', 1982, 1986 ), $athleten, array() );
+
+		$this->assertSame( 0, $r['athletes_id'] );
+		$this->assertSame( 'mehrdeutig', $r['match_type'] );
+		$this->assertStringContainsString( 'dieselbe Altersklasse', $r['meldung'] );
+
+		// Derselbe Fall mit Jahrgang trifft dagegen eindeutig.
+		$r = lsg_bl_p3_zuordnen( $this->zeile( 'Maier', 'Thomas', 1985 ), $athleten, array() );
+		$this->assertSame( 601, $r['athletes_id'] );
+		$this->assertSame( 'exakt', $r['match_type'] );
+	}
+
+	/**
+	 * Regeln müssen mitziehen – sonst bliebe bei einer Liste ohne Jahrgang
+	 * ausgerechnet der manuelle Ausweg zu.
+	 */
+	public function test_ak_band_zieht_regel_mit() {
+		// Dr. Pfeiffer, Wolfram ist 1961 – „M65" bei einer Veranstaltung 2026.
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Pfeiffer', 'Wolfram', 1957, 1961 ),
+			$this->athleten(),
+			$this->regeln()
+		);
+
+		$this->assertSame( 171, $r['athletes_id'] );
+		$this->assertSame( 'regel_ak', $r['match_type'] );
+		$this->assertSame( array( 1 ), $r['regeln'] );
+	}
+
+	/**
+	 * ⚠ Nennt die Quelle einen Jahrgang, schlägt er jedes Band. Er ist die
+	 * Angabe der Quelle; das Band ist nur ein Schluss aus der Klasse.
+	 */
+	public function test_genannter_jahrgang_schlaegt_das_band() {
+		$zeile                 = $this->zeile_ak( 'Körner', 'Holger', 1992, 1996 );
+		$zeile['jahrgang']     = 1994;
+
+		$r = lsg_bl_p3_zuordnen( $zeile, $this->athleten(), array() );
+
+		$this->assertSame( 0, $r['athletes_id'] );
+		$this->assertStringContainsString( 'kein Sportler mit diesem Namen und Jahrgang', $r['meldung'] );
+	}
+
+	/**
+	 * Ein unbrauchbares Band ist wie gar keines.
+	 */
+	public function test_verdrehtes_band_bleibt_offen() {
+		$r = lsg_bl_p3_zuordnen(
+			$this->zeile_ak( 'Körner', 'Holger', 1996, 1992 ),
+			$this->athleten(),
+			array()
+		);
+
+		$this->assertSame( 0, $r['athletes_id'] );
+		$this->assertSame( 'offen', $r['match_type'] );
 	}
 
 	/* ------------------------------------------------------------------
