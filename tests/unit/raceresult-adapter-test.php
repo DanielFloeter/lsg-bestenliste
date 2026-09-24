@@ -360,4 +360,29 @@ class RaceResult_Adapter_Test extends TestCase {
 		$this->assertSame( 'EINS', $p1['zeilen'][0]->nachname );
 		$this->assertSame( 'DREI', $p1['zeilen'][2]->nachname );
 	}
+
+	/**
+	 * „MW-Pl.“ ist Platz plus Geschlecht, keine Altersklasse. Führt eine
+	 * Liste keine AK, darf „19. M“ nicht als Hauptklasse durchgehen – sonst
+	 * wird daraus ein Jahrgangsband bis 29, und der Jahrgang aus „JG“ passt
+	 * scheinbar nicht dazu.
+	 */
+	public function test_mw_platz_ist_keine_altersklasse() {
+		$json = '{"list":{"ListName":"5 km","Fields":[' .
+			'{"Expression":"Platz","Label":"Pl."},' .
+			'{"Expression":"AnzeigeName","Label":"Name"},' .
+			'{"Expression":"YEAR","Label":"JG"},' .
+			'{"Expression":"MWPlatz","Label":"MW-Pl."},' .
+			'{"Expression":"Verein","Label":"Verein"},' .
+			'{"Expression":"T","Label":"Zeit"}' .
+			']},"data":[["7","8","25.","MUSTER Max","1986","19. M","LSG Karlsruhe","21:34"]],' .
+			'"DataFields":["BIB","ID","Platz","AnzeigeName","YEAR","MWPlatz","Verein","T"]}';
+
+		$z = LSG_BL_RaceResult_Adapter::parse_liste( $json )['zeilen'][0];
+
+		$this->assertSame( 1986, $z->jahrgang );
+		$this->assertSame( 'm', $z->geschlecht, 'Das Geschlecht kommt weiterhin aus MW-Pl.' );
+		$this->assertSame( '', $z->quelle_klasse );
+		$this->assertSame( '25', $z->platz );
+	}
 }

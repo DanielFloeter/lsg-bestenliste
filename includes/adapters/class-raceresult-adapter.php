@@ -274,7 +274,7 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 		$data_felder = isset( $j['DataFields'] ) && is_array( $j['DataFields'] ) ? array_values( $j['DataFields'] ) : array();
 		$spalten     = self::spalten_mappen( $felder, $data_felder );
 
-		$i_platz  = self::spalte( $spalten, array( 'platz', 'rang', 'pos', 'place', 'rank' ) );
+		$i_platz  = self::spalte( $spalten, array( 'platz', 'rang', 'pos', 'place', 'rank', 'pl' ) );
 		$i_stn    = self::spalte( $spalten, array( 'stn', 'startnr', 'startnummer', 'bib', 'nr', 'nummer' ) );
 		$i_name   = self::spalte( $spalten, array( 'name', 'teilnehmer', 'athlet', 'sportler' ) );
 		$i_verein = self::spalte( $spalten, array( 'verein', 'club', 'team', 'mannschaft', 'verein ort' ) );
@@ -374,7 +374,11 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 			$e->zeit_typ       = $zeit_typ;
 			$e->platz          = rtrim( $hole( $i_platz ), ' .' );
 			$e->startnummer    = $hole( $i_stn );
-			$e->quelle_klasse  = ( '' !== $ak_roh ) ? $ak_roh : $mw_roh;
+			// Nur die AK-Spalte ist eine Altersklasse. „MW-Pl." liefert
+			// „19. M“ – Platz und Geschlecht. Als Klasse gelesen, wird aus
+			// dem bloßen „M“ die Hauptklasse (Alter unter 30): falsches
+			// Jahrgangsband für P3 und eine Fehlwarnung neben jedem „JG“.
+			$e->quelle_klasse  = $ak_roh;
 
 			$zeilen[] = $e;
 		}
