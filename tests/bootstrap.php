@@ -61,6 +61,9 @@ require_once LSG_BL_PLUGIN_DIR . 'includes/adapters/class-raceresult-adapter.php
 if ( file_exists( LSG_BL_PLUGIN_DIR . 'includes/adapters/class-runtix-adapter.php' ) ) {
 	require_once LSG_BL_PLUGIN_DIR . 'includes/adapters/class-runtix-adapter.php';
 }
+if ( file_exists( LSG_BL_PLUGIN_DIR . 'includes/adapters/class-racepedia-adapter.php' ) ) {
+	require_once LSG_BL_PLUGIN_DIR . 'includes/adapters/class-racepedia-adapter.php';
+}
 
 /**
  * Eine Fixture einlesen.

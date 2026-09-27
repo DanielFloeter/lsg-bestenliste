@@ -38,10 +38,10 @@ Im Adminbereich unter „LSG Bestenliste", vier Seiten:
 - **Bestenliste** – Ergebnisse von Hand erfassen, ändern, löschen. Für alles,
   was in keiner Onlineliste steht.
 
-Angeschlossen sind zwei Quellen: **my.raceresult.com** und **runtix.com**. Die
-Adresse wird nicht geraten, sondern erkannt; welcher Wettbewerb und welche
-Liste gemeint sind, fragt die Seite nach und schlägt vor, was sie aus der
-Quelle lesen kann – Distanz, Datum, Ort.
+Angeschlossen sind drei Quellen: **my.raceresult.com**, **runtix.com** und
+**racepedia.de**. Die Adresse wird nicht geraten, sondern erkannt; welcher
+Wettbewerb und welche Liste gemeint sind, fragt die Seite nach und schlägt
+vor, was sie aus der Quelle lesen kann – Distanz, Datum, Ort.
 
 Der Import liest die ganze Liste, behält die Vereinsmitglieder, ordnet sie
 über Name und Jahrgang einem Sportler zu und legt jede Zeile mit ihrem Status

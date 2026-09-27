@@ -24,6 +24,7 @@ function lsg_bl_adapter_registry() {
 	$adapter = array(
 		'LSG_BL_RaceResult_Adapter',
 		'LSG_BL_Runtix_Adapter',
+		'LSG_BL_Racepedia_Adapter',
 	);
 
 	/**

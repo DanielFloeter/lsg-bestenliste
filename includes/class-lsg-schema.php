@@ -38,7 +38,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema-Version. Hochzählen, sobald sich eine der drei Tabellen ändert.
  */
 if ( ! defined( 'LSG_BL_DB_VERSION' ) ) {
-	define( 'LSG_BL_DB_VERSION', 3 );
+	define( 'LSG_BL_DB_VERSION', 4 );
 }
 
 /**
@@ -80,13 +80,15 @@ function lsg_bl_install_schema() {
 
 	// Der Vorgang: ein Datensatz je Klick auf „Übernehmen" – und je
 	// Formularaktion auf der Seite „Bestenliste" (adapter = 'manuell').
+	// event_id hat 64 Zeichen, weil racepedia keine Nummer kennt: dort ist
+	// die Subdomain die ID, und die darf 63 Zeichen lang sein.
 	$sql .= "CREATE TABLE {$t_run} (
   id int UNSIGNED NOT NULL AUTO_INCREMENT,
   tstamp int UNSIGNED NOT NULL DEFAULT 0,
   user_id bigint UNSIGNED NOT NULL DEFAULT 0,
   adapter varchar(32) NOT NULL DEFAULT '',
   source_url varchar(255) NOT NULL DEFAULT '',
-  event_id varchar(32) NOT NULL DEFAULT '',
+  event_id varchar(64) NOT NULL DEFAULT '',
   event_name varchar(120) NOT NULL DEFAULT '',
   event_date int UNSIGNED DEFAULT NULL,
   datum_quelle varchar(16) NOT NULL DEFAULT '',

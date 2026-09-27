@@ -1,6 +1,6 @@
 <?php
 /**
- * Contract-Test: beide Adapter erfüllen dieselbe Zusage.
+ * Contract-Test: alle Adapter erfüllen dieselbe Zusage.
  *
  * Der Sinn dieser Datei ist nicht, race result oder runtix zu prüfen – das
  * tun die beiden Adapter-Tests. Hier geht es um das, was die Pipeline
@@ -36,6 +36,8 @@ class Adapter_Contract_Test extends TestCase {
 		$rx_total  = lsg_bl_fixture( 'runtix-3152-21-total.html' );
 		$rx_jahr   = lsg_bl_fixture( 'runtix-10020-2026.html' );
 		$rx_event  = lsg_bl_fixture( 'runtix-10021-3152.html' );
+		$rp_start  = lsg_bl_fixture( 'racepedia-topiblueten-2026-ergebnisse.html' );
+		$rp_liste  = lsg_bl_fixture( 'racepedia-topiblueten-2026-8112-all.html' );
 
 		return array(
 			'raceresult' => array(
@@ -60,6 +62,17 @@ class Adapter_Contract_Test extends TestCase {
 					'/sts/10050/3152'          => $rx_total,
 				),
 			),
+			'racepedia'  => array(
+				'cls'       => 'LSG_BL_Racepedia_Adapter',
+				'url'       => 'https://topiblueten-lauf-staffort-2026.racepedia.de/ergebnisse/8112/all/all',
+				'contest'   => '8112',
+				'list'      => 'all',
+				// Reihenfolge zählt: der Fake-Getter nimmt den ersten Treffer.
+				'antworten' => array(
+					'/ergebnisse/8112/all/all' => $rp_liste,
+					'/ergebnisse'              => $rp_start,
+				),
+			),
 		);
 	}
 
@@ -70,6 +83,7 @@ class Adapter_Contract_Test extends TestCase {
 		return array(
 			'race result' => array( 'raceresult' ),
 			'runtix'      => array( 'runtix' ),
+			'racepedia'   => array( 'racepedia' ),
 		);
 	}
 
