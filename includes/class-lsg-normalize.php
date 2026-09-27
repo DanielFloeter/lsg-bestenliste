@@ -205,6 +205,10 @@ function lsg_bl_wort_ist_gross( $wort ) {
  *   2. Führender Block komplett
  *      großgeschriebener Wörter   → dieser Block ist der Nachname.
  *                                   Deckt „VON HOFF Anna-Maria" mit ab.
+ *   2b. Abschließender Block      → dieser Block ist der Nachname,
+ *      großgeschriebener Wörter     davor steht der Vorname. Manche
+ *                                   race-result-Listen schreiben
+ *                                   „Tim HILLMER" statt „HILLMER Tim".
  *   3. Sonst                      → letztes Wort = Vorname, Rest = Nachname,
  *                                   und die Zeile wird `unsicher` markiert.
  *
@@ -267,6 +271,29 @@ function lsg_bl_name_splitten( $teilnehmer ) {
 		return array(
 			'nachname' => implode( ' ', array_slice( $worte, 0, $gross ) ),
 			'vorname'  => implode( ' ', array_slice( $worte, $gross ) ),
+			'unsicher' => false,
+		);
+	}
+
+	// Regel 2b: dasselbe spiegelverkehrt – „Vorname NACHNAME".
+	//
+	// ⚠ Gefunden am 2026-09-27 in race result, Event 384858. Ohne diese
+	// Regel fiel „Tim HILLMER" in Regel 3 und kam als Nachname „Tim",
+	// Vorname „HILLMER" heraus – kein Athlet passte, und jede LSG-Zeile
+	// der Liste blieb ohne Zuordnung. Erreicht wird die Regel nur, wenn
+	// Regel 2 nicht gegriffen hat, das erste Wort also nicht groß ist.
+	$gross_ende = 0;
+	for ( $i = count( $worte ) - 1; $i >= 0; $i-- ) {
+		if ( ! lsg_bl_wort_ist_gross( $worte[ $i ] ) ) {
+			break;
+		}
+		++$gross_ende;
+	}
+
+	if ( $gross_ende > 0 && $gross_ende < count( $worte ) ) {
+		return array(
+			'nachname' => implode( ' ', array_slice( $worte, -$gross_ende ) ),
+			'vorname'  => implode( ' ', array_slice( $worte, 0, count( $worte ) - $gross_ende ) ),
 			'unsicher' => false,
 		);
 	}

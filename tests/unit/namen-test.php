@@ -56,6 +56,13 @@ class Namen_Test extends TestCase {
 			'Umlaut gross'           => array( 'KÜHN Simon', 'KÜHN', 'Simon', false ),
 			'Umlaut A gross'         => array( 'HÄFFNER Nico', 'HÄFFNER', 'Nico', false ),
 
+			// Regel 2b: abschließender GROSSBUCHSTABEN-Block. race result,
+			// Event 384858 (Ötigheimer Herbstlauf 2026) schreibt so.
+			'Vorname vorn'           => array( 'Tim HILLMER', 'HILLMER', 'Tim', false ),
+			'Vorname vorn, Umlaut'   => array( 'Samuel MÖHLER', 'MÖHLER', 'Samuel', false ),
+			'Vorname vorn, Partikel' => array( 'Anna-Maria VON HOFF', 'VON HOFF', 'Anna-Maria', false ),
+			'zwei Vornamen vorn'     => array( 'Klaus Peter MEIER', 'MEIER', 'Klaus Peter', false ),
+
 			// Regel 3: raten – und das auch sagen.
 			// Kleingeschriebene Partikel: Regel 2 greift nicht, Regel 3 rät –
 			// hier zufällig richtig, aber die Zeile wird trotzdem markiert.

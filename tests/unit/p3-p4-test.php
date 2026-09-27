@@ -391,6 +391,38 @@ class P3_P4_Test extends TestCase {
 		$this->assertNotSame( 337, $b['athletes_id'] );
 	}
 
+	public function test_stufe4_vertauschte_namen() {
+		// race result, Event 384858: „Sallak OHANNES" – die Liste schreibt
+		// „Vorname NACHNAME", die Meldung war aber verdreht.
+		$r = lsg_bl_p3_zuordnen( $this->zeile( 'Holger', 'KÖRNER', 1993 ), $this->athleten(), array() );
+		$this->assertSame( 500, $r['athletes_id'] );
+		$this->assertSame( 'vertauscht', $r['match_type'] );
+
+		$r = lsg_bl_p3_zuordnen( $this->zeile_ak( 'Holger', 'Körner', 1992, 1996 ), $this->athleten(), array() );
+		$this->assertSame( 500, $r['athletes_id'] );
+		$this->assertSame( 'vertauscht_ak', $r['match_type'] );
+
+		// Der Jahrgangsbezug gilt auch hier.
+		$r = lsg_bl_p3_zuordnen( $this->zeile( 'Holger', 'Körner', 1994 ), $this->athleten(), array() );
+		$this->assertSame( 0, $r['athletes_id'] );
+	}
+
+	public function test_stufe4_nachrangig_zur_richtigen_belegung() {
+		// Gibt es beide Belegungen im Verein, gewinnt die, die die Quelle nennt.
+		$athleten   = $this->athleten();
+		$athleten[] = array(
+			'id'        => 501,
+			'name'      => 'Holger',
+			'firstname' => 'Körner',
+			'born'      => 1993,
+			'cat'       => 'm',
+			'active'    => '1',
+		);
+		$r = lsg_bl_p3_zuordnen( $this->zeile( 'Holger', 'Körner', 1993 ), $athleten, array() );
+		$this->assertSame( 501, $r['athletes_id'] );
+		$this->assertSame( 'exakt', $r['match_type'] );
+	}
+
 	public function test_regel_greift_erst_nach_dem_exakten_treffer() {
 		// Wo der Name ohnehin exakt passt, kommt die Regel nicht zum Zug –
 		// das begrenzt den Schaden einer breiten Regel wie `harry` + 1943.

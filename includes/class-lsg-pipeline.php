@@ -540,10 +540,11 @@ function lsg_bl_regel_gueltig( array $regel ) {
  *   1  name + firstname + born exakt (case-insensitive)   → `exakt`
  *   2  Zuordnungsregel aus lsg_athlete_map                → `regel`
  *   3  normalisierter Name + born                         → `normalisiert`
+ *   4  wie 3, Vor- und Nachname vertauscht                → `vertauscht`
  *   –  mehrere Treffer                                    → `mehrdeutig`
  *   –  kein Treffer                                       → `offen`
  *
- * ⚠ Eine vierte Stufe „ähnlicher Name, wahrscheinlich dieselbe Person" gibt
+ * ⚠ Eine Stufe „ähnlicher Name, wahrscheinlich dieselbe Person" gibt
  * es bewusst NICHT. Entweder die Zuordnung ist eindeutig, oder die Zeile wird
  * nicht importiert. Ein „wahrscheinlich" hätte niemand bestätigt, ohne es
  * doch von Hand zu prüfen.
@@ -601,7 +602,7 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 		);
 	}
 
-	// Der Jahrgangsvergleich aller drei Stufen an genau einer Stelle. Bei
+	// Der Jahrgangsvergleich aller Stufen an genau einer Stelle. Bei
 	// genanntem Jahrgang ist das Band einen Jahr breit, der Vergleich also
 	// derselbe wie vorher.
 	$passt = function ( $born ) use ( $von, $bis ) {
@@ -616,7 +617,10 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 		if ( ! $aus_ak ) {
 			return $name_typ;
 		}
-		return ( 'regel' === $name_typ ) ? 'regel_ak' : 'ak';
+		if ( 'regel' === $name_typ || 'vertauscht' === $name_typ ) {
+			return $name_typ . '_ak';
+		}
+		return 'ak';
 	};
 
 	$q_nach = isset( $zeile['nachname'] ) ? (string) $zeile['nachname'] : '';
@@ -727,6 +731,46 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 		return $offen(
 			sprintf(
 				'Keine Zuordnung möglich – zwei Sportler heißen normalisiert gleich (#%s)',
+				implode( ', #', $treffer )
+			),
+			'mehrdeutig'
+		);
+	}
+
+	/* --- Stufe 4: Vor- und Nachname vertauscht ------------------------- */
+	//
+	// ⚠ Keine Ähnlichkeitssuche: beide Namen müssen normalisiert gleich
+	// sein, nur über Kreuz. Anlass ist race result, Event 384858: die Liste
+	// schreibt „Vorname NACHNAME", der Teilnehmer hat aber bei der Meldung
+	// die Felder vertauscht – dort steht „Sallak OHANNES" für Sallak,
+	// Ohannes. Welche Schreibweise eine Quelle nutzt, verrät nur die
+	// Großschreibung, und die hilft nichts, wenn schon die Meldung verdreht
+	// ist. Die Stufe kommt zuletzt, damit ein Treffer in der richtigen
+	// Belegung immer Vorrang hat.
+	$treffer = array();
+	foreach ( $athleten as $a ) {
+		if ( ! $passt( $a['born'] ) ) {
+			continue;
+		}
+		if ( lsg_bl_text_normalisieren( $a['name'] ) === $q_vor_norm
+			&& lsg_bl_text_normalisieren( $a['firstname'] ) === $q_nach_norm
+		) {
+			$treffer[] = (int) $a['id'];
+		}
+	}
+	$treffer = array_values( array_unique( $treffer ) );
+	if ( 1 === count( $treffer ) ) {
+		return array(
+			'athletes_id' => $treffer[0],
+			'match_type'  => $typ( 'vertauscht' ),
+			'meldung'     => '',
+			'regeln'      => array(),
+		);
+	}
+	if ( count( $treffer ) > 1 ) {
+		return $offen(
+			sprintf(
+				'Keine Zuordnung möglich – zwei Sportler heißen mit vertauschtem Vor- und Nachnamen gleich (#%s)',
 				implode( ', #', $treffer )
 			),
 			'mehrdeutig'
