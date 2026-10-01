@@ -1186,12 +1186,11 @@ function lsg_bl_ist_gesamtsieg( array $zeile, $gesamtwertung ) {
 	if ( ! $gesamtwertung ) {
 		return false;
 	}
-	// Eine unbestätigte Zuordnung trägt keinen Sieg: der würde dem
-	// vermuteten Athleten gutgeschrieben, ohne dass jemand den Haken
-	// gesetzt hat.
-	if ( ! empty( $zeile['bestaetigen'] ) ) {
-		return false;
-	}
+	// ⚠ Eine nur über den Namen zugeordnete Zeile (`bestaetigen`) zählt
+	// hier mit. Eingetragen wird der Sieg ohnehin erst mit einem eigenen
+	// Klick im Siegformular – der ist die Bestätigung, und das Formular
+	// sagt dazu, dass nur der Name passt. Sonst ginge ein Sieg aus einer
+	// Liste ohne Jahrgang (runtix mit AK „Männer") still verloren.
 	$platz = isset( $zeile['platz'] ) ? trim( (string) $zeile['platz'] ) : '';
 	return ( '1' === $platz );
 }

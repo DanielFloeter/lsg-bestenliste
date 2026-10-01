@@ -130,6 +130,16 @@ class Runtix_Adapter_Test extends TestCase {
 					'rlt'      => 'total',
 				),
 			),
+			// „-" ist runtix' Platzhalter, kein Listentyp: /w/-/- ist „Gesamt".
+			'Platzhalter „-"'  => array(
+				'https://runtix.com/sts/10050/3132/w/-/-',
+				array(
+					'modul'    => '10050',
+					'event_id' => '3132',
+					'contest'  => 'w',
+					'rlt'      => '',
+				),
+			),
 			'Jahresübersicht'  => array(
 				'https://runtix.com/sts/10020/2026',
 				array(
@@ -263,6 +273,38 @@ class Runtix_Adapter_Test extends TestCase {
 			),
 			$gefunden,
 			'Platz 1 in der Geschlechts- oder AK-Liste ist kein Gesamtsieg.'
+		);
+	}
+
+	/**
+	 * Die Seite /sts/10050/{id} ohne Wettbewerb hat live kein rlt-Select
+	 * (Event 3132, 2026-10-01). Die Gesamtwertung darf dann nicht wegfallen –
+	 * sonst wird kein einziger runtix-Sieg erkannt.
+	 */
+	public function test_listen_ohne_rlt_select_auf_der_rahmenseite() {
+		$ohne    = preg_replace( '#<select name="rlt".*?</select>#s', '', self::$total );
+		$adapter = new LSG_BL_Runtix_Adapter(
+			lsg_bl_fake_getter(
+				array(
+					'/sts/10050/3152' => $ohne,
+				)
+			)
+		);
+		$this->assertNotSame( self::$total, $ohne, 'Das Fixture hat kein rlt-Select mehr zum Entfernen.' );
+
+		$ref      = $adapter->eventLesen( 'https://runtix.com/sts/10050/3152/21/total' );
+		$gefunden = array();
+		foreach ( $adapter->listen( $ref, '21' ) as $l ) {
+			$gefunden[ $l->id ] = $l->gesamtwertung;
+		}
+
+		$this->assertSame(
+			array(
+				'total' => true,
+				'sex'   => false,
+				'ac'    => false,
+			),
+			$gefunden
 		);
 	}
 

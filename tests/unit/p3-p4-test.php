@@ -219,9 +219,11 @@ class P3_P4_Test extends TestCase {
 		$this->assertFalse( lsg_bl_zeile_vorauswahl( array( 'status' => 'offen' ) ) );
 	}
 
-	public function test_nur_name_traegt_keinen_gesamtsieg() {
+	public function test_nur_name_traegt_gesamtsieg() {
+		// Bestätigt wird im Siegformular, nicht schon bei der Erkennung.
 		$this->assertTrue( lsg_bl_ist_gesamtsieg( array( 'platz' => '1' ), true ) );
-		$this->assertFalse( lsg_bl_ist_gesamtsieg( array( 'platz' => '1', 'bestaetigen' => true ), true ) );
+		$this->assertTrue( lsg_bl_ist_gesamtsieg( array( 'platz' => '1', 'bestaetigen' => true ), true ) );
+		$this->assertFalse( lsg_bl_ist_gesamtsieg( array( 'platz' => '1', 'bestaetigen' => true ), false ) );
 	}
 
 	/* ------------------------------------------------------------------

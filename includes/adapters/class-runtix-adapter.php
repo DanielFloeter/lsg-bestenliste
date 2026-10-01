@@ -170,7 +170,9 @@ final class LSG_BL_Runtix_Adapter implements LSG_BL_Ergebnis_Quelle {
 		if ( isset( $seg[ $i + 3 ] ) ) {
 			$out['contest'] = $seg[ $i + 3 ];
 		}
-		if ( isset( $seg[ $i + 4 ] ) ) {
+		// „-" ist runtix' Platzhalter (/w/-/- ist die Gesamtliste) – kein
+		// Listentyp, den die Auswahl kennt.
+		if ( isset( $seg[ $i + 4 ] ) && '-' !== $seg[ $i + 4 ] ) {
 			$out['rlt'] = $seg[ $i + 4 ];
 		}
 		return $out;
@@ -765,8 +767,27 @@ final class LSG_BL_Runtix_Adapter implements LSG_BL_Ergebnis_Quelle {
 	public function listen( LSG_BL_Event_Ref $ref, $contest_id ) {
 		$rahmen = $this->rahmen( $ref );
 
+		// ⚠ rahmen() holt /sts/10050/{id} ohne Wettbewerb – und dort fehlt
+		// das rlt-Select (am 2026-10-01 an Event 3132 und 3152 gesehen). Ohne
+		// Listen fiele die Gesamtwertung weg und kein Sieg würde erkannt.
+		// Die drei Typen sind bei runtix fest, also gelten sie dann so.
+		$listen = $rahmen['listen'] ? $rahmen['listen'] : array(
+			array(
+				'id'   => 'total',
+				'name' => 'Gesamt',
+			),
+			array(
+				'id'   => 'sex',
+				'name' => 'Geschlecht',
+			),
+			array(
+				'id'   => 'ac',
+				'name' => 'Altersklasse',
+			),
+		);
+
 		$out = array();
-		foreach ( $rahmen['listen'] as $l ) {
+		foreach ( $listen as $l ) {
 			$liste                = new LSG_BL_Liste( $l['id'], $l['name'], $l['id'] );
 			$liste->gesamtwertung  = ( 'total' === $l['id'] );
 			$out[]                = $liste;

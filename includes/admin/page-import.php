@@ -1368,6 +1368,14 @@ function lsg_bl_import_siege_anzeigen( array $sieger, array $v, array $w ) {
 			)
 		);
 
+		// Nur über den Namen zugeordnet: der Klick unten ist die Bestätigung.
+		if ( ! empty( $z['bestaetigen'] ) ) {
+			printf(
+				'<p class="lsg-bl-sieg-hinweis"><strong>%s</strong></p>',
+				esc_html__( 'Nur über den Namen zugeordnet – die Liste nennt keinen Jahrgang. Bitte prüfen, ob es der richtige Sportler ist.', 'lsg-bestenliste' )
+			);
+		}
+
 		/* Veranstaltung – mit Zeichenzähler (13.2) */
 		$lang = lsg_bl_zeichen( $event );
 
