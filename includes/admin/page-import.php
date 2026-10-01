@@ -769,50 +769,67 @@ function lsg_bl_admin_import_page() {
 			$hinweise[]   = array( 'info', __( 'Die Auswahl wird frisch von der Quelle geholt.', 'lsg-bestenliste' ) );
 		}
 
-		if ( 'alias_setzen' === $aktion ) {
-			check_admin_referer( 'lsg_bl_alias' );
+		if ( 'alias_setzen' === $aktion || 'alias_weg' === $aktion ) {
+			check_admin_referer( 'alias_setzen' === $aktion ? 'lsg_bl_alias' : 'lsg_bl_alias_weg' );
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$neu_alias = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
+			$verein = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
 
-			if ( '' === trim( $neu_alias ) || lsg_bl_ohne_verein_marke() === $neu_alias ) {
+			// Der Alias gilt nur für diese Vorschau und wird nirgends
+			// gespeichert (Plan 6.5.2). Er lebt im Parse-Ergebnis – ohne das
+			// gibt es nichts, wofür er gelten könnte.
+			$daten = lsg_bl_parse_holen( $token_roh );
+			$alt   = ( $daten && isset( $daten['aliasse'] ) ) ? (array) $daten['aliasse'] : array();
+			$n     = lsg_bl_verein_normalisieren( $verein );
+			$neu   = null;
+
+			if ( ! $daten ) {
+				$hinweise[] = array( 'warning', __( 'Die Vorschau ist abgelaufen. Bitte erneut parsen.', 'lsg-bestenliste' ) );
+			} elseif ( 'alias_setzen' === $aktion && ( '' === $n || lsg_bl_ohne_verein_marke() === $verein ) ) {
 				$hinweise[] = array(
 					'error',
 					__( 'Eine leere Vereinsangabe lässt sich nicht als Alias aufnehmen – sie würde jede Zeile ohne Verein übernehmen.', 'lsg-bestenliste' ),
 				);
-			} elseif ( lsg_bl_verein_alias_hinzufuegen( $neu_alias ) ) {
-				// Der Filter hat sich geändert, also ist die Vorschau überholt.
-				// Sie wird verworfen, nicht heimlich weiterbenutzt – dieselbe
-				// Regel wie bei Datum und Distanz (Plan 6.5.1).
-				lsg_bl_parse_verwerfen( $token_roh );
-				$roh['token'] = '';
-				$hinweise[]   = array(
-					'success',
-					sprintf(
-						/* translators: %s: Vereinsschreibweise */
-						__( '„%s" gilt ab jetzt als LSG Karlsruhe. Die Vorschau ist damit überholt – bitte erneut parsen.', 'lsg-bestenliste' ),
-						$neu_alias
-					),
-				);
-			} else {
+			} elseif ( 'alias_setzen' === $aktion && in_array( $n, $alt, true ) ) {
 				$hinweise[] = array(
 					'info',
 					sprintf(
 						/* translators: %s: Vereinsschreibweise */
-						__( '„%s" stand schon in der Alias-Liste.', 'lsg-bestenliste' ),
-						$neu_alias
+						__( '„%s" zählt in dieser Vorschau schon als LSG Karlsruhe.', 'lsg-bestenliste' ),
+						$verein
 					),
 				);
+			} elseif ( 'alias_setzen' === $aktion ) {
+				$neu = array_merge( $alt, array( $n ) );
+			} elseif ( in_array( $n, $alt, true ) ) {
+				$neu = array_values( array_diff( $alt, array( $n ) ) );
 			}
-		}
 
-		if ( 'alias_weg' === $aktion ) {
-			check_admin_referer( 'lsg_bl_alias_weg' );
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$weg = isset( $_GET['verein'] ) ? sanitize_text_field( wp_unslash( $_GET['verein'] ) ) : '';
-			if ( lsg_bl_verein_alias_entfernen( $weg ) ) {
-				lsg_bl_parse_verwerfen( $token_roh );
-				$roh['token'] = '';
-				$hinweise[]   = array( 'success', __( 'Der Vereins-Alias ist entfernt. Bitte erneut parsen.', 'lsg-bestenliste' ) );
+			if ( null !== $neu ) {
+				// Der Filter hat sich geändert, also gilt die Vorschau nicht
+				// mehr. Sie wird gleich neu gerechnet, statt den Menschen ein
+				// zweites Mal auf „Parsen" klicken zu lassen.
+				try {
+					$ergebnis     = lsg_bl_parsen_mit_aliassen(
+						$daten,
+						$neu,
+						isset( $roh['ort'] ) ? sanitize_text_field( (string) $roh['ort'] ) : (string) $daten['ort'],
+						$token_roh
+					);
+					$roh['token'] = $ergebnis['token'];
+					$hinweise[]   = array(
+						'success',
+						sprintf(
+							'alias_setzen' === $aktion
+								/* translators: %s: Vereinsschreibweise */
+								? __( '„%s" zählt in dieser Vorschau als LSG Karlsruhe. Gespeichert wird das nicht – beim nächsten Parsen gilt es nicht mehr.', 'lsg-bestenliste' )
+								/* translators: %s: Vereinsschreibweise */
+								: __( '„%s" zählt in dieser Vorschau nicht mehr als LSG Karlsruhe.', 'lsg-bestenliste' ),
+							$verein
+						),
+					);
+				} catch ( LSG_BL_Quelle_Exception $e ) {
+					$hinweise[] = array( 'error', $e->getMessage() );
+				}
 			}
 		}
 	}
@@ -2125,10 +2142,10 @@ function lsg_bl_import_abgelehnte_vereine( array $v, array $w ) {
 		echo '</p>';
 	}
 
-	// Bereits gesetzte Aliasse zeigen und zurücknehmbar machen.
-	$aliasse = lsg_bl_verein_aliasse();
+	// Die Aliasse dieser Vorschau zeigen und zurücknehmbar machen.
+	$aliasse = isset( $v['aliasse'] ) ? (array) $v['aliasse'] : array();
 	if ( $aliasse ) {
-		echo '<p class="lsg-bl-aliasliste"><strong>' . esc_html__( 'Zusätzlich als LSG Karlsruhe gesetzt:', 'lsg-bestenliste' ) . '</strong> ';
+		echo '<p class="lsg-bl-aliasliste"><strong>' . esc_html__( 'In dieser Vorschau zusätzlich als LSG Karlsruhe gezählt:', 'lsg-bestenliste' ) . '</strong> ';
 		$teile = array();
 		foreach ( $aliasse as $a ) {
 			$teile[] = '<code>' . esc_html( $a ) . '</code> <a href="' . esc_url(

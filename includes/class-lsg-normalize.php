@@ -155,7 +155,8 @@ function lsg_bl_verein_normalisieren( $verein ) {
  *
  * @param string   $verein  Rohwert aus der Quelle.
  * @param string[] $aliasse Zusätzlich als LSG geltende, bereits normalisierte
- *                          Vereinsschreibweisen (Option lsg_bl_verein_alias).
+ *                          Vereinsschreibweisen – nur für das laufende
+ *                          Parse-Ergebnis, nicht gespeichert.
  * @return bool
  */
 function lsg_bl_ist_lsg( $verein, array $aliasse = array() ) {

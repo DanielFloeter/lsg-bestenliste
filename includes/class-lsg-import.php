@@ -48,15 +48,17 @@ function lsg_bl_adapter_instanz( $adapter_cls ) {
  * ---------------------------------------------------------------------- */
 
 /**
- * Zusätzlich als LSG geltende Vereinsschreibweisen, normalisiert.
+ * Vereinsschreibweisen normalisieren und doppelte entfernen.
  *
+ * ⚠ Ein Alias wird nirgends gespeichert. Er gilt nur für das Parse-Ergebnis,
+ * in dem er gesetzt wurde, und steht deshalb nur in dessen Transient
+ * (`aliasse`). Das nächste Parsen beginnt ohne – dass „LSG Ka." in einer
+ * Liste die eigenen Leute meint, sagt nichts über die nächste aus.
+ *
+ * @param array $roh Rohe oder normalisierte Schreibweisen.
  * @return string[]
  */
-function lsg_bl_verein_aliasse() {
-	$roh = get_option( 'lsg_bl_verein_alias', array() );
-	if ( ! is_array( $roh ) ) {
-		return array();
-	}
+function lsg_bl_verein_aliasse_normalisieren( array $roh ) {
 	$out = array();
 	foreach ( $roh as $a ) {
 		$n = lsg_bl_verein_normalisieren( $a );
@@ -68,44 +70,34 @@ function lsg_bl_verein_aliasse() {
 }
 
 /**
- * Eine Schreibweise als Vereins-Alias aufnehmen.
+ * Ein Parse-Ergebnis mit geänderten Aliassen neu rechnen.
  *
- * @param string $verein Rohe Schreibweise aus der Quelle.
- * @return bool True, wenn sie neu war.
- */
-function lsg_bl_verein_alias_hinzufuegen( $verein ) {
-	$n = lsg_bl_verein_normalisieren( $verein );
-	if ( '' === $n ) {
-		return false;
-	}
-
-	$liste = lsg_bl_verein_aliasse();
-	if ( in_array( $n, $liste, true ) ) {
-		return false;
-	}
-
-	$liste[] = $n;
-	update_option( 'lsg_bl_verein_alias', $liste, false );
-	return true;
-}
-
-/**
- * Einen Alias wieder entfernen.
+ * Alle Eingaben kommen aus dem Parse-Ergebnis selbst, damit die neue
+ * Vorschau dieselbe Veranstaltung, denselben Wettbewerb und dieselben
+ * Felder meint wie die alte. Die alte wird verworfen.
  *
- * @param string $verein Rohe oder normalisierte Schreibweise.
- * @return bool
+ * @param array    $daten   Bisheriges Parse-Ergebnis.
+ * @param string[] $aliasse Neue Alias-Liste.
+ * @param string   $ort     Aktueller Ort (geht in keinen Vergleich ein).
+ * @param string   $token   Token des bisherigen Ergebnisses.
+ * @return array{token:string,daten:array}
+ * @throws LSG_BL_Quelle_Exception Bei jedem Abruf- oder Parse-Fehler.
  */
-function lsg_bl_verein_alias_entfernen( $verein ) {
-	$n     = lsg_bl_verein_normalisieren( $verein );
-	$liste = lsg_bl_verein_aliasse();
-	$neu   = array_values( array_diff( $liste, array( $n ) ) );
-
-	if ( count( $neu ) === count( $liste ) ) {
-		return false;
-	}
-
-	update_option( 'lsg_bl_verein_alias', $neu, false );
-	return true;
+function lsg_bl_parsen_mit_aliassen( array $daten, array $aliasse, $ort, $token ) {
+	$ergebnis = lsg_bl_parsen(
+		array(
+			'adapter_cls' => $daten['adapter_cls'],
+			'url'         => $daten['url'],
+			'contest_id'  => $daten['contest_id'],
+			'list_id'     => $daten['list_id'],
+			'distanz'     => $daten['distanz'],
+			'datum'       => $daten['datum'],
+			'ort'         => $ort,
+			'aliasse'     => $aliasse,
+		)
+	);
+	lsg_bl_parse_verwerfen( $token );
+	return $ergebnis;
 }
 
 /* -------------------------------------------------------------------------
@@ -330,7 +322,8 @@ function lsg_bl_runtix_jahr_cache( $jahr, $get = null ) {
  * Parse-Transient, und der Token dafür ist an die `user_id` gebunden
  * (Plan 6.10).
  *
- * @param array $args adapter_cls, url, contest_id, list_id, distanz, datum, ort.
+ * @param array $args adapter_cls, url, contest_id, list_id, distanz, datum, ort,
+ *                    optional aliasse (nur für dieses Ergebnis, 6.5.2).
  * @return array{token:string,daten:array}
  * @throws LSG_BL_Quelle_Exception Bei jedem Abruf- oder Parse-Fehler.
  */
@@ -386,7 +379,8 @@ function lsg_bl_parsen( array $args ) {
 	$p1 = isset( $ref->meta['p1'] ) ? (array) $ref->meta['p1'] : array();
 
 	// P2: auf LSG Karlsruhe filtern.
-	$p2 = lsg_bl_p2_filtern( $zeilen, lsg_bl_verein_aliasse() );
+	$aliasse = lsg_bl_verein_aliasse_normalisieren( isset( $args['aliasse'] ) ? (array) $args['aliasse'] : array() );
+	$p2      = lsg_bl_p2_filtern( $zeilen, $aliasse );
 
 	// P3 + P4: zuordnen und gegen den Bestand abgleichen.
 	$jahr    = (int) substr( $datum, 0, 4 );
@@ -457,6 +451,7 @@ function lsg_bl_parsen( array $args ) {
 		'jahr'          => $jahr,
 		'abgelehnt'     => $p2['abgelehnt'],
 		'nahe'          => $p2['nahe'],
+		'aliasse'       => $aliasse,
 		// ⚠ Nur die Zeilen, die P2 passiert haben. Die Nicht-LSG-Ergebnisse
 		// werden nicht gehalten – auch nicht im Transient (Plan 6.8).
 		'zeilen'        => $geprueft,

@@ -663,5 +663,29 @@
 		}
 	} );
 
+	// Nach einer Link-Aktion (Alias setzen/entfernen) steht die Aktion samt
+	// Nonce und altem Token noch in der Adresse. Ein Reload liefe die Aktion
+	// dann ein zweites Mal gegen eine verworfene Vorschau – also die Aktion
+	// entfernen und den Token der neu gerechneten Vorschau eintragen.
+	( function () {
+		if ( ! window.history || ! window.history.replaceState ) {
+			return;
+		}
+		var url = new URL( window.location.href );
+		if ( ! url.searchParams.has( 'aktion' ) ) {
+			return;
+		}
+		[ 'aktion', 'verein', '_wpnonce' ].forEach( function ( k ) {
+			url.searchParams.delete( k );
+		} );
+		var token = werte().token;
+		if ( token ) {
+			url.searchParams.set( 'token', token );
+		} else {
+			url.searchParams.delete( 'token' );
+		}
+		window.history.replaceState( {}, '', url.toString() );
+	} )();
+
 	tabelleAufwerten();
 } )();

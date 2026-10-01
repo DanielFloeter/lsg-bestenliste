@@ -1325,8 +1325,11 @@ Zwei Sicherungen gegen stille Fehler:
   und ihrer Häufigkeit. Steht dort ein `LSG Ka.` oder `LSG KA`, sieht man den
   verpassten Treffer sofort, statt ihn nie zu bemerken.
 - Aus diesem Block heraus lässt sich eine Schreibweise per Klick als
-  **Vereins-Alias** aufnehmen (Option `lsg_bl_verein_alias`, eine Liste
-  normalisierter Strings, die zusätzlich als LSG gelten).
+  **Vereins-Alias** aufnehmen: eine normalisierte Schreibweise, die
+  zusätzlich als LSG gilt. Der Alias wird **nicht gespeichert** – er gilt nur
+  für die laufende Vorschau (Feld `aliasse` im Parse-Transient). Der Klick
+  rechnet die Vorschau sofort neu; das nächste Parsen beginnt ohne Alias.
+  (Bis 2026-10 war das eine globale Option `lsg_bl_verein_alias`.)
 
 Zeilen ohne Vereinsangabe fallen durch den Filter. Sie erscheinen im
 Nicht-übernommen-Block unter „(kein Verein)", damit ein Mitglied, das ohne
@@ -3089,8 +3092,9 @@ prüft am Ende keinen von beiden.
           Seite 137 kB, fast alles davon Links, die niemand anklickt. „(kein Verein)"
           steht mit in der oberen Tabelle: es ist der einzige Eintrag, der kein
           Verein ist, und dort können Mitglieder stecken.
-          ⚠ Ein neuer Alias verwirft die Vorschau, wie Datum und Distanz – der Filter
-          hat sich geändert. Eine leere Vereinsangabe wird als Alias abgelehnt.
+          ⚠ Ein neuer Alias rechnet die Vorschau neu – der Filter hat sich geändert.
+          Er gilt nur für diese Vorschau und wird nicht gespeichert (2026-10).
+          Eine leere Vereinsangabe wird als Alias abgelehnt.
   - [x] P3 Zuordnungsstufen exakt → regel → normalisiert → offen
         → ⚠ Stufe 1 vergleicht mit `mb_strtolower()`, nicht mit `strcasecmp()`: das
           arbeitet byteweise und faltet keine Umlaute. „KÖRNER" gegen „Körner" liefe
