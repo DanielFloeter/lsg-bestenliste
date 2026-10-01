@@ -432,8 +432,7 @@ function lsg_bl_import_rest_parsen( WP_REST_Request $req ) {
  * @return array
  */
 function lsg_bl_import_rest_zeilen( array $zeilen ) {
-	$status_liste = lsg_bl_p4_status_liste();
-	$out          = array();
+	$out = array();
 
 	foreach ( $zeilen as $i => $z ) {
 		$waehlbar = lsg_bl_zeile_waehlbar( $z['status'] );
@@ -448,7 +447,8 @@ function lsg_bl_import_rest_zeilen( array $zeilen ) {
 			'athletesId'  => (int) $z['athletes_id'],
 			'status'      => (string) $z['status'],
 			'waehlbar'    => $waehlbar,
-			'vorauswahl'  => $waehlbar && ! empty( $status_liste[ $z['status'] ]['vorauswahl'] ),
+			'vorauswahl'  => lsg_bl_zeile_vorauswahl( $z ),
+			'bestaetigen' => ! empty( $z['bestaetigen'] ),
 		);
 	}
 

@@ -505,6 +505,11 @@ function lsg_bl_p3_p4( array $zeilen, $distanz, $jahr ) {
 	$regeln   = lsg_bl_map_regeln( $jahrgaenge, $baender );
 	$ak_codes = lsg_bl_ak_codes();
 
+	// Zeilen ganz ohne Jahrgangsbezug: Kandidaten aller Jahrgänge, aber nur,
+	// wenn es solche Zeilen gibt (lsg_bl_p3_nur_name()).
+	$alle_athleten = null;
+	$alle_regeln   = null;
+
 	$out = array();
 
 	foreach ( $zeilen as $e ) {
@@ -524,6 +529,22 @@ function lsg_bl_p3_p4( array $zeilen, $distanz, $jahr ) {
 
 		/* ---- P3 ---- */
 		$p3 = lsg_bl_p3_zuordnen( $z, $athleten, $regeln );
+
+		$z['bestaetigen'] = false;
+		if ( 0 === (int) $p3['athletes_id'] && (int) $z['jahrgang'] <= 0 && ! $band ) {
+			if ( null === $alle_athleten ) {
+				// ⚠ Nicht 1 bis 9999: `born` ist YEAR(4), und MySQL liest eine
+				// 1 dort als 2001. 1901–2155 ist der ganze Wertebereich.
+				$alle          = array( array( 1901, 2155 ) );
+				$alle_athleten = lsg_bl_athleten_nach_jahrgang( array(), $alle );
+				$alle_regeln   = lsg_bl_map_regeln( array(), $alle );
+			}
+			$nur_name = lsg_bl_p3_nur_name( $z, $alle_athleten, $alle_regeln );
+			if ( $nur_name ) {
+				$p3               = $nur_name;
+				$z['bestaetigen'] = true;
+			}
+		}
 
 		$z['athletes_id']   = (int) $p3['athletes_id'];
 		$z['match_type']    = $p3['match_type'];
@@ -672,6 +693,8 @@ function lsg_bl_athleten_aehnlich_kandidaten( array $zeile ) {
  *   gleich      → nichts schreiben, protokolliert als skip_gleich
  *   offen /
  *   mehrdeutig  → hat keine Checkbox, wird nie geschrieben
+ *   bestaetigen → nur über den Namen zugeordnet; geschrieben nur, wenn der
+ *                 Haken gesetzt wurde, sonst skip_offen
  *
  * ⚠ Eine angehakte `langsamer`-Zeile schreibt hier NICHTS – anders als im
  * Formular aus 7.3. Im Import stehen vierzig Zeilen zur Auswahl, und ein
@@ -771,6 +794,21 @@ function lsg_bl_uebernehmen( $token, array $auswahl ) {
 		if ( 0 === $aid || ! lsg_bl_zeile_waehlbar( $status_alt ) ) {
 			$eintrag['aktion']  = 'skip_offen';
 			$eintrag['meldung'] = (string) $z['match_meldung'];
+			++$bilanz['uebersprungen'];
+			$log_zeilen[] = lsg_bl_log_zeile( $z, 'skip_offen', 0, '', $eintrag['meldung'] );
+			$ergebnisse[] = $eintrag;
+			continue;
+		}
+
+		/* ---- nur über den Namen zugeordnet und nicht bestätigt ---- */
+		//
+		// ⚠ Vor dem allgemeinen „nicht angehakt": diese Zeile war nie
+		// vorausgewählt, ein `skip_abgewaehlt` läse sich wie eine
+		// Entscheidung. Für das Log ist sie, was sie ohne Haken ist – nicht
+		// zugeordnet.
+		if ( ! $angehakt && ! empty( $z['bestaetigen'] ) ) {
+			$eintrag['aktion']  = 'skip_offen';
+			$eintrag['meldung'] = __( 'Zuordnung nur über den Namen – nicht bestätigt, nicht importiert.', 'lsg-bestenliste' );
 			++$bilanz['uebersprungen'];
 			$log_zeilen[] = lsg_bl_log_zeile( $z, 'skip_offen', 0, '', $eintrag['meldung'] );
 			$ergebnisse[] = $eintrag;

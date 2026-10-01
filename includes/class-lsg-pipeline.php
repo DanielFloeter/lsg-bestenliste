@@ -785,6 +785,38 @@ function lsg_bl_p3_zuordnen( array $zeile, array $athleten, array $regeln ) {
 }
 
 /**
+ * P3 ohne Jahrgangsbezug: nur über den Namen, zur Bestätigung per Häkchen.
+ *
+ * Nennt die Liste weder Jahrgang noch verwertbare Altersklasse, bleibt
+ * lsg_bl_p3_zuordnen() bei `offen`. Diese Funktion sucht dann mit denselben
+ * Stufen, aber über alle Jahrgänge. Ein eindeutiger Treffer wird als
+ * Vorschlag geführt (`match_type` = `name`) – nicht vorausgewählt und erst
+ * mit dem Haken des Menschen übernommen (lsg_bl_zeile_vorauswahl()).
+ *
+ * ⚠ Mehrere Treffer oder keiner: das Ergebnis von lsg_bl_p3_zuordnen()
+ * bleibt stehen. Ohne eindeutigen Namen gibt es nichts zu bestätigen.
+ *
+ * @param array $zeile    Wie bei lsg_bl_p3_zuordnen().
+ * @param array $athleten Kandidaten aller Jahrgänge.
+ * @param array $regeln   Aktive Regeln aller Jahrgänge.
+ * @return array{athletes_id:int,match_type:string,meldung:string,regeln:int[]}|null
+ *         Null, wenn es keinen eindeutigen Namenstreffer gibt.
+ */
+function lsg_bl_p3_nur_name( array $zeile, array $athleten, array $regeln ) {
+	$zeile['jahrgang']     = 0;
+	$zeile['jahrgang_von'] = 1;
+	$zeile['jahrgang_bis'] = 9999;
+
+	$p3 = lsg_bl_p3_zuordnen( $zeile, $athleten, $regeln );
+	if ( (int) $p3['athletes_id'] <= 0 ) {
+		return null;
+	}
+	$p3['match_type'] = 'name';
+	$p3['meldung']    = '';
+	return $p3;
+}
+
+/**
  * Ähnliche Athleten als Lesehilfe unter einer nicht zuordenbaren Zeile.
  *
  * ⚠ Reine Lesehilfe, kein Auswahlfeld. Sie beantwortet die häufigste Frage
@@ -1039,6 +1071,10 @@ function lsg_bl_status_text( array $zeile ) {
 		$text .= ' · ' . $zeile['zusatz'];
 	}
 
+	if ( ! empty( $zeile['bestaetigen'] ) ) {
+		$text .= ' · Zuordnung nur über den Namen – die Ergebnisliste nennt keinen Jahrgang und keine verwertbare Altersklasse. Erst das Häkchen bestätigt die Zuordnung.';
+	}
+
 	return $text;
 }
 
@@ -1057,11 +1093,37 @@ function lsg_bl_zeile_waehlbar( $status ) {
 }
 
 /**
+ * Ist das Häkchen dieser Zeile von Anfang an gesetzt?
+ *
+ * ⚠ Eine Zeile, die nur über den Namen zugeordnet ist (`bestaetigen`), ist
+ * NIE vorausgewählt – auch nicht bei `neu` oder `schneller`. Ohne Jahrgang
+ * ist die Zuordnung eine Vermutung; erst der Haken macht sie zur
+ * Entscheidung eines Menschen.
+ *
+ * @param array $zeile Zeile mit status und optional bestaetigen.
+ * @return bool
+ */
+function lsg_bl_zeile_vorauswahl( array $zeile ) {
+	$status = isset( $zeile['status'] ) ? (string) $zeile['status'] : '';
+	if ( ! lsg_bl_zeile_waehlbar( $status ) || ! empty( $zeile['bestaetigen'] ) ) {
+		return false;
+	}
+	$liste = lsg_bl_p4_status_liste();
+	return ! empty( $liste[ $status ]['vorauswahl'] );
+}
+
+/**
  * Innerhalb EINES Imports zweimal derselbe Athlet auf derselben Distanz?
  *
  * Kommt vor – Staffel plus Einzellauf, oder zwei Listen nacheinander. Dann
  * gewinnt die bessere Leistung; die schlechtere wird als `langsamer`
  * mitgeführt und ist abwählbar, nicht stillschweigend verworfen (Plan 6.5.4).
+ *
+ * ⚠ Nur über den Namen zugeordnete Zeilen (`bestaetigen`) machen hier nicht
+ * mit, in keiner Richtung. Sonst könnte eine unbestätigte Vermutung eine
+ * sicher zugeordnete Zeile auf `langsamer` drücken und ihr die Vorauswahl
+ * nehmen. Werden beide angehakt, sortiert die Übernahme sie ohnehin nach
+ * der besseren Zeit.
  *
  * @param array  $zeilen  Zeilen mit athletes_id, zeit, status.
  * @param string $distanz Distanzcode.
@@ -1072,7 +1134,7 @@ function lsg_bl_p4_dubletten_im_import( array $zeilen, $distanz ) {
 
 	foreach ( $zeilen as $i => $z ) {
 		$aid = isset( $z['athletes_id'] ) ? (int) $z['athletes_id'] : 0;
-		if ( ! $aid || ! lsg_bl_zeile_waehlbar( $z['status'] ) ) {
+		if ( ! $aid || ! lsg_bl_zeile_waehlbar( $z['status'] ) || ! empty( $z['bestaetigen'] ) ) {
 			continue;
 		}
 		$perf = lsg_bl_parse_performance( $distanz, $z['zeit'] );
@@ -1086,7 +1148,7 @@ function lsg_bl_p4_dubletten_im_import( array $zeilen, $distanz ) {
 
 	foreach ( $zeilen as $i => $z ) {
 		$aid = isset( $z['athletes_id'] ) ? (int) $z['athletes_id'] : 0;
-		if ( ! $aid || ! isset( $beste[ $aid ] ) || $beste[ $aid ]['index'] === $i ) {
+		if ( ! $aid || ! empty( $z['bestaetigen'] ) || ! isset( $beste[ $aid ] ) || $beste[ $aid ]['index'] === $i ) {
 			continue;
 		}
 		// Diese Zeile ist die schlechtere von zweien im selben Vorgang.
@@ -1122,6 +1184,12 @@ function lsg_bl_p4_dubletten_im_import( array $zeilen, $distanz ) {
  */
 function lsg_bl_ist_gesamtsieg( array $zeile, $gesamtwertung ) {
 	if ( ! $gesamtwertung ) {
+		return false;
+	}
+	// Eine unbestätigte Zuordnung trägt keinen Sieg: der würde dem
+	// vermuteten Athleten gutgeschrieben, ohne dass jemand den Haken
+	// gesetzt hat.
+	if ( ! empty( $zeile['bestaetigen'] ) ) {
 		return false;
 	}
 	$platz = isset( $zeile['platz'] ) ? trim( (string) $zeile['platz'] ) : '';

@@ -200,6 +200,9 @@ function lsg_bl_match_types() {
 		'ak'           => __( 'Name eindeutig, Jahrgang aus der Altersklasse', 'lsg-bestenliste' ),
 		'regel_ak'     => __( 'über eine Zuordnungsregel, Jahrgang aus der Altersklasse', 'lsg-bestenliste' ),
 		'vertauscht_ak' => __( 'Vor- und Nachname vertauscht, Jahrgang aus der Altersklasse', 'lsg-bestenliste' ),
+		// Weder Jahrgang noch Altersklasse in der Liste: der Name allein war
+		// eindeutig, und ein Mensch hat die Zuordnung per Häkchen bestätigt.
+		'name'         => __( 'nur über den Namen, per Häkchen bestätigt', 'lsg-bestenliste' ),
 		'manuell'      => __( 'von Hand gewählt', 'lsg-bestenliste' ),
 		'mehrdeutig'   => __( 'mehrdeutig – nicht zugeordnet', 'lsg-bestenliste' ),
 		'offen'        => __( 'offen – nicht zugeordnet', 'lsg-bestenliste' ),

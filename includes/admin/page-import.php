@@ -1513,11 +1513,31 @@ function lsg_bl_import_vorschau_anzeigen( array $v, array $w ) {
 
 	// Nicht zuordenbare Zeilen: die Zahl steht zusätzlich als eigene Meldung
 	// über der Tabelle, damit sie bei vierzig Zeilen nicht untergeht.
-	$ohne = 0;
+	$ohne        = 0;
+	$bestaetigen = 0;
 	foreach ( $v['zeilen'] as $z ) {
 		if ( 0 === (int) $z['athletes_id'] ) {
 			++$ohne;
+		} elseif ( ! empty( $z['bestaetigen'] ) ) {
+			++$bestaetigen;
 		}
+	}
+	if ( $bestaetigen > 0 ) {
+		printf(
+			'<div class="notice notice-warning inline"><p>%s</p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %d: Anzahl */
+					_n(
+						'%d Teilnehmer nur über den Namen zugeordnet – die Ergebnisliste nennt keinen Jahrgang und keine verwertbare Altersklasse. Importiert wird nur, wer das Häkchen bekommt.',
+						'%d Teilnehmer nur über den Namen zugeordnet – die Ergebnisliste nennt keinen Jahrgang und keine verwertbare Altersklasse. Importiert wird nur, wer das Häkchen bekommt.',
+						$bestaetigen,
+						'lsg-bestenliste'
+					),
+					$bestaetigen
+				)
+			)
+		);
 	}
 	if ( $ohne > 0 ) {
 		printf(
@@ -1769,12 +1789,11 @@ function lsg_bl_import_tabelle( array $v, array $w ) {
 
 	$gewaehlt  = 0;
 	$sichtbar  = 0;
-	$status_liste = lsg_bl_p4_status_liste();
 
 	foreach ( $v['zeilen'] as $i => $z ) {
 		$status   = (string) $z['status'];
 		$waehlbar = lsg_bl_zeile_waehlbar( $status );
-		$vorwahl  = $waehlbar && ! empty( $status_liste[ $status ]['vorauswahl'] );
+		$vorwahl  = lsg_bl_zeile_vorauswahl( $z );
 
 		if ( $vorwahl ) {
 			++$gewaehlt;
@@ -1802,10 +1821,14 @@ function lsg_bl_import_tabelle( array $v, array $w ) {
 		if ( ! $fertig ) {
 			echo '<th scope="row" class="check-column">';
 			if ( $waehlbar ) {
+				// Eine nur über den Namen zugeordnete Zeile bekommt ihr Häkchen,
+				// aber nie gesetzt – und „Alle auswählen" lässt sie aus
+				// (data-bestaetigen, admin-import.js).
 				printf(
-					'<input type="checkbox" name="zeilen[]" value="%1$d" id="lsg-bl-z%1$d"%2$s />',
+					'<input type="checkbox" name="zeilen[]" value="%1$d" id="lsg-bl-z%1$d"%2$s%3$s />',
 					(int) $i,
-					$vorwahl ? ' checked="checked"' : ''
+					$vorwahl ? ' checked="checked"' : '',
+					! empty( $z['bestaetigen'] ) ? ' data-bestaetigen="1"' : ''
 				);
 			}
 			echo '</th>';

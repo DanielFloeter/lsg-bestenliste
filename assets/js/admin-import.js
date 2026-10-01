@@ -455,6 +455,11 @@
 			// niemand vor Augen und soll sich nicht mit umschalten.
 			kaestchen().forEach( function ( el ) {
 				var zeile = el.closest( 'tr' );
+				// Nur über den Namen zugeordnet: das Häkchen ist eine
+				// Bestätigung je Zeile, kein Sammelklick.
+				if ( el.hasAttribute( 'data-bestaetigen' ) ) {
+					return;
+				}
 				if ( zeile && ! zeile.classList.contains( 'hidden' ) ) {
 					el.checked = box.checked;
 				}

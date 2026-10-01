@@ -174,6 +174,57 @@ class P3_P4_Test extends TestCase {
 	}
 
 	/* ------------------------------------------------------------------
+	 * P3 – ohne Jahrgangsbezug nur über den Namen, zur Bestätigung
+	 * --------------------------------------------------------------- */
+
+	public function test_nur_name_schlaegt_einen_eindeutigen_namen_vor() {
+		$r = lsg_bl_p3_nur_name( $this->zeile( 'Körner', 'Holger', 0 ), $this->athleten(), array() );
+
+		$this->assertSame( 500, $r['athletes_id'] );
+		$this->assertSame( 'name', $r['match_type'] );
+	}
+
+	public function test_nur_name_findet_auch_vertauschte_namen() {
+		$r = lsg_bl_p3_nur_name( $this->zeile( 'Holger', 'Körner', 0 ), $this->athleten(), array() );
+
+		$this->assertSame( 500, $r['athletes_id'] );
+		$this->assertSame( 'name', $r['match_type'] );
+	}
+
+	public function test_nur_name_ohne_treffer_schlaegt_nichts_vor() {
+		$this->assertNull( lsg_bl_p3_nur_name( $this->zeile( 'Niemand', 'Hans', 0 ), $this->athleten(), array() ) );
+	}
+
+	public function test_nur_name_bei_gleichem_namen_schlaegt_nichts_vor() {
+		$athleten   = $this->athleten();
+		$athleten[] = array(
+			'id'        => 503,
+			'name'      => 'Körner',
+			'firstname' => 'Holger',
+			'born'      => 1960,
+			'cat'       => 'm',
+			'active'    => '1',
+		);
+
+		$this->assertNull( lsg_bl_p3_nur_name( $this->zeile( 'Körner', 'Holger', 0 ), $athleten, array() ) );
+	}
+
+	public function test_nur_name_ist_nie_vorausgewaehlt() {
+		$zeile = array( 'status' => 'neu', 'bestaetigen' => true );
+		$this->assertTrue( lsg_bl_zeile_waehlbar( $zeile['status'] ) );
+		$this->assertFalse( lsg_bl_zeile_vorauswahl( $zeile ) );
+
+		$this->assertTrue( lsg_bl_zeile_vorauswahl( array( 'status' => 'neu' ) ) );
+		$this->assertFalse( lsg_bl_zeile_vorauswahl( array( 'status' => 'gleich' ) ) );
+		$this->assertFalse( lsg_bl_zeile_vorauswahl( array( 'status' => 'offen' ) ) );
+	}
+
+	public function test_nur_name_traegt_keinen_gesamtsieg() {
+		$this->assertTrue( lsg_bl_ist_gesamtsieg( array( 'platz' => '1' ), true ) );
+		$this->assertFalse( lsg_bl_ist_gesamtsieg( array( 'platz' => '1', 'bestaetigen' => true ), true ) );
+	}
+
+	/* ------------------------------------------------------------------
 	 * P3 – Zuordnung über das Jahrgangsband der Altersklasse (Issue #2)
 	 *
 	 * race result und runtix nennen in vielen Listen keinen Jahrgang mehr,
@@ -686,6 +737,18 @@ class P3_P4_Test extends TestCase {
 		$this->assertSame( 'neu', $r[1]['status'] );
 		// Ein anderer Athlet ist nicht betroffen.
 		$this->assertSame( 'neu', $r[2]['status'] );
+	}
+
+	public function test_dubletten_unbestaetigte_zeile_verdraengt_keine_sichere() {
+		$zeilen = array(
+			array( 'athletes_id' => 500, 'zeit' => '01:30:00', 'status' => 'neu', 'time_alt' => '', 'zusatz' => '', 'bestaetigen' => true ),
+			array( 'athletes_id' => 500, 'zeit' => '01:35:00', 'status' => 'neu', 'time_alt' => '', 'zusatz' => '' ),
+		);
+
+		$r = lsg_bl_p4_dubletten_im_import( $zeilen, 'HM' );
+
+		$this->assertSame( 'neu', $r[0]['status'] );
+		$this->assertSame( 'neu', $r[1]['status'] );
 	}
 
 	public function test_dubletten_lassen_offene_zeilen_in_ruhe() {

@@ -1363,6 +1363,15 @@ Jahrgang würde dagegen früher oder später Ergebnisse dem Falschen zuschreiben
 Liefert die Quelle keinen Jahrgang, bleibt die Zeile `offen` – auch wenn der
 Name eindeutig aussieht.
 
+**Ausnahme zur Bestätigung (2026-10):** Nennt die Liste weder Jahrgang noch
+eine verwertbare Altersklasse, sucht P3 dieselben Stufen über alle Jahrgänge
+(`lsg_bl_p3_nur_name()`). Ein eindeutiger Treffer wird nur *vorgeschlagen*:
+die Zeile bekommt ihr Häkchen, aber nie vorausgewählt, „Alle auswählen" lässt
+sie aus, sie trägt keinen Gesamtsieg und verdrängt in der Dublettenprüfung
+keine sicher zugeordnete Zeile. Erst der gesetzte Haken macht die Zuordnung
+gültig – im Log mit `match_type` = `name`. Ohne Haken: `skip_offen`.
+Mehrere Treffer oder keiner: die Zeile bleibt `offen`, ohne Häkchen.
+
 **Mapping 2 von 2: Zuordnungsregeln (`lsg_athlete_map`).** Hier landen die
 Fälle, die kein Namensvergleich löst – dauerhaft, damit dieselbe Korrektur
 nicht jedes Jahr neu von Hand gemacht wird.
