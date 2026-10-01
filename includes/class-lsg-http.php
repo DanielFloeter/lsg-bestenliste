@@ -78,8 +78,19 @@ function lsg_bl_url_erlaubt( $url, $adapter_cls ) {
 	return false;
 }
 
+/** Rate-Limit: so viele Abrufe pro Benutzer … */
+define( 'LSG_BL_RATE_MAX', 30 );
+/** … innerhalb dieser Zeitspanne (Sekunden). */
+define( 'LSG_BL_RATE_FENSTER', 10 * MINUTE_IN_SECONDS );
+
 /**
- * Rate-Limit pro Benutzer: höchstens 30 Abrufe in 10 Minuten.
+ * Rate-Limit pro Benutzer: höchstens LSG_BL_RATE_MAX Abrufe in
+ * LSG_BL_RATE_FENSTER.
+ *
+ * Der Transient hält neben dem Zähler auch den Ablaufzeitpunkt, damit die
+ * Fehlermeldung die verbleibende Wartezeit nennen kann
+ * (lsg_bl_rate_limit_meldung()). Den Ablauf des Transients selbst liefert
+ * WordPress nicht zuverlässig – mit Objekt-Cache gar nicht.
  *
  * @param int $user_id Benutzer, 0 = aktueller.
  * @return bool True, wenn der Abruf noch erlaubt ist.
@@ -87,14 +98,75 @@ function lsg_bl_url_erlaubt( $url, $adapter_cls ) {
 function lsg_bl_rate_limit_ok( $user_id = 0 ) {
 	$user_id = $user_id ? (int) $user_id : get_current_user_id();
 	$key     = 'lsg_bl_rate_' . $user_id;
-	$zaehler = (int) get_transient( $key );
+	$stand   = get_transient( $key );
+	$zaehler = is_array( $stand ) ? (int) $stand['n'] : (int) $stand;
 
-	if ( $zaehler >= 30 ) {
+	if ( $zaehler >= LSG_BL_RATE_MAX ) {
 		return false;
 	}
 
-	set_transient( $key, $zaehler + 1, 10 * MINUTE_IN_SECONDS );
+	$dauer = LSG_BL_RATE_FENSTER;
+	set_transient(
+		$key,
+		array(
+			'n'   => $zaehler + 1,
+			'bis' => time() + $dauer,
+		),
+		$dauer
+	);
 	return true;
+}
+
+/**
+ * Sekunden, bis das Rate-Limit wieder Abrufe zulässt.
+ *
+ * @param int $user_id Benutzer, 0 = aktueller.
+ * @return int 0, wenn nichts bekannt ist (alter Transient ohne Zeitpunkt).
+ */
+function lsg_bl_rate_limit_rest( $user_id = 0 ) {
+	$user_id = $user_id ? (int) $user_id : get_current_user_id();
+	$stand   = get_transient( 'lsg_bl_rate_' . $user_id );
+	if ( ! is_array( $stand ) || empty( $stand['bis'] ) ) {
+		return 0;
+	}
+	return max( 0, (int) $stand['bis'] - time() );
+}
+
+/**
+ * Hinweis für ein gegriffenes Rate-Limit, mit verbleibender Wartezeit.
+ *
+ * @param int $user_id Benutzer, 0 = aktueller.
+ * @return string
+ */
+function lsg_bl_rate_limit_meldung( $user_id = 0 ) {
+	$rest  = lsg_bl_rate_limit_rest( $user_id );
+	$regel = sprintf(
+		/* translators: 1: Anzahl Abrufe, 2: Minuten */
+		__( 'Erlaubt sind %1$d Abrufe in %2$d Minuten pro Benutzer.', 'lsg-bestenliste' ),
+		LSG_BL_RATE_MAX,
+		(int) ( LSG_BL_RATE_FENSTER / MINUTE_IN_SECONDS )
+	);
+
+	if ( $rest <= 0 ) {
+		return __( 'Zu viele Abrufe in kurzer Zeit.', 'lsg-bestenliste' ) . ' ' . $regel . ' '
+			. __( 'Bitte ein paar Minuten warten – die Quelle soll nicht belastet werden.', 'lsg-bestenliste' );
+	}
+
+	if ( $rest < MINUTE_IN_SECONDS ) {
+		/* translators: %d: Sekunden */
+		$wartezeit = sprintf( _n( '%d Sekunde', '%d Sekunden', $rest, 'lsg-bestenliste' ), $rest );
+	} else {
+		$minuten = (int) ceil( $rest / MINUTE_IN_SECONDS );
+		/* translators: %d: Minuten */
+		$wartezeit = sprintf( _n( '%d Minute', '%d Minuten', $minuten, 'lsg-bestenliste' ), $minuten );
+	}
+
+	return __( 'Zu viele Abrufe in kurzer Zeit.', 'lsg-bestenliste' ) . ' ' . $regel . ' '
+		. sprintf(
+			/* translators: %s: Wartezeit, z. B. „4 Minuten" */
+			__( 'Bitte noch %s warten – die Quelle soll nicht belastet werden.', 'lsg-bestenliste' ),
+			$wartezeit
+		);
 }
 
 /**

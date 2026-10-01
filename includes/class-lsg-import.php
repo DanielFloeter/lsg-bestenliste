@@ -163,7 +163,7 @@ function lsg_bl_discovery( $adapter_cls, $url, $neu_laden = false ) {
 
 	if ( ! lsg_bl_rate_limit_ok() ) {
 		throw new LSG_BL_Quelle_Exception(
-			__( 'Zu viele Abrufe in kurzer Zeit. Bitte ein paar Minuten warten – die Quelle soll nicht belastet werden.', 'lsg-bestenliste' )
+			lsg_bl_rate_limit_meldung()
 		);
 	}
 
@@ -358,7 +358,7 @@ function lsg_bl_parsen( array $args ) {
 
 	if ( ! lsg_bl_rate_limit_ok() ) {
 		throw new LSG_BL_Quelle_Exception(
-			__( 'Zu viele Abrufe in kurzer Zeit. Bitte ein paar Minuten warten – die Quelle soll nicht belastet werden.', 'lsg-bestenliste' )
+			lsg_bl_rate_limit_meldung()
 		);
 	}
 
