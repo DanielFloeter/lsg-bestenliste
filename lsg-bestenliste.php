@@ -30,7 +30,7 @@ define( 'LSG_BL_URL', plugin_dir_url( __FILE__ ) );
 /**
  * Tabellenpräfix. Die vier Tabellen (lsg_ak, lsg_athlete, lsg_best, lsg_win) wurden
  * bereits ohne WordPress-Präfix in die Datenbank importiert (1:1 aus den
- * phpMyAdmin-Dumps in /assets). Falls du die Tabellen stattdessen mit dem
+ * phpMyAdmin-Dumps in /maintenance). Falls du die Tabellen stattdessen mit dem
  * WordPress-Tabellenpräfix (z.B. wp_lsg_ak) angelegt hast, definiere vor dem
  * Laden dieses Plugins die Konstante LSG_BL_USE_WP_PREFIX als true, z.B. in der
  * wp-config.php: define( 'LSG_BL_USE_WP_PREFIX', true );
@@ -275,7 +275,7 @@ add_action( 'init', 'lsg_bl_register_editor_scripts', 5 );
 function lsg_bl_register_frontend_script() {
 	wp_register_script(
 		'lsg-bestenliste-frontend',
-		LSG_BL_URL . 'assets/js/frontend.js',
+		LSG_BL_URL . 'static/js/frontend.js',
 		array(),
 		LSG_BL_VERSION,
 		true

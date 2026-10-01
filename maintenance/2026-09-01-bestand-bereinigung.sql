@@ -1,7 +1,7 @@
 -- ------------------------------------------------------------------
 -- Bereinigung des Bestands in lsg_best  (erstellt 2026-09-01)
 --
--- Grundlage: assets/lsg_best.sql, assets/lsg_athlete.sql, assets/lsg_ak.sql
+-- Grundlage: lsg_best.sql, lsg_athlete.sql, lsg_ak.sql (im selben Ordner)
 -- Zweck:     Voraussetzung fuer den Ergebnisimport (plan.md, 6.5.4 / 7.3).
 --            Die Pipeline setzt voraus, dass es je Athlet, Distanz und
 --            Kalenderjahr genau eine Zeile gibt.

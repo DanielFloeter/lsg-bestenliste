@@ -16,7 +16,7 @@
  * Assistenten steht in der Query, nicht in einer Session – dann funktioniert
  * Browser-Zurück, ein Zwischenstand ist verlinkbar, und ein abgebrochener
  * Import hinterlässt nichts außer einem ablaufenden Transient. Das
- * `assets/js/admin-import.js` macht daraus später (M6) einen Ablauf ohne
+ * `static/js/admin-import.js` macht daraus später (M6) einen Ablauf ohne
  * Reload.
  *
  * ⚠ Capability, Nonce und `check_admin_referer()` stehen in JEDEM Handler,
@@ -35,7 +35,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * ---------------------------------------------------------------------- */
 
 /**
- * Das Icon des Menüpunkts: eine eigene Läufer-Silhouette (assets/icons/menu-icon.svg)
+ * Das Icon des Menüpunkts: eine eigene Läufer-Silhouette (static/icons/menu-icon.svg)
  * statt des generischen Dashicons „chart-line" – das hatte mit „Bestenliste"
  * nur die Assoziation Diagramm gemein, nichts Eigenes.
  *
@@ -49,13 +49,13 @@ if ( ! defined( 'ABSPATH' ) ) {
  * exotische Admin-Farbschemata an (Ectoplasma, Midnight, ...) – bei der
  * dunklen Standard-Sidebar faellt das nicht auf.
  *
- * Fehlt die Datei (Auslieferung ohne assets/), faellt die Funktion auf den
+ * Fehlt die Datei (Auslieferung ohne static/), faellt die Funktion auf den
  * alten Dashicon zurueck, statt einen fehlerhaften Menüpunkt zu zeigen.
  *
  * @return string Data-URI oder Dashicon-Klasse.
  */
 function lsg_bl_admin_menu_icon() {
-	$datei = LSG_BL_PATH . 'assets/icons/menu-icon.svg';
+	$datei = LSG_BL_PATH . 'static/icons/menu-icon.svg';
 	$svg   = is_readable( $datei ) ? file_get_contents( $datei ) : false;
 
 	if ( ! $svg ) {
@@ -174,7 +174,7 @@ function lsg_bl_admin_assets( $hook ) {
 
 	wp_enqueue_style(
 		'lsg-bestenliste-admin',
-		LSG_BL_URL . 'assets/css/admin.css',
+		LSG_BL_URL . 'static/css/admin.css',
 		array(),
 		LSG_BL_VERSION
 	);
@@ -188,7 +188,7 @@ function lsg_bl_admin_assets( $hook ) {
 	if ( isset( $GLOBALS['lsg_bl_import_hook'] ) && $hook === $GLOBALS['lsg_bl_import_hook'] ) {
 		wp_enqueue_script(
 			'lsg-bestenliste-admin-import',
-			LSG_BL_URL . 'assets/js/admin-import.js',
+			LSG_BL_URL . 'static/js/admin-import.js',
 			array(),
 			LSG_BL_VERSION,
 			true
@@ -227,7 +227,7 @@ function lsg_bl_admin_assets( $hook ) {
 	if ( isset( $GLOBALS['lsg_bl_best_hook'] ) && $hook === $GLOBALS['lsg_bl_best_hook'] ) {
 		wp_enqueue_script(
 			'lsg-bestenliste-admin-best',
-			LSG_BL_URL . 'assets/js/admin-best.js',
+			LSG_BL_URL . 'static/js/admin-best.js',
 			array(),
 			LSG_BL_VERSION,
 			true
@@ -1727,7 +1727,7 @@ function lsg_bl_import_statusfilter( array $v, array $w, $aktiv ) {
  * aus dem Trichter (Plan 6.5.3).
  *
  * ⚠ Die Kopf-Checkbox „Alle" steht nicht hier, sondern wird von
- * `assets/js/admin-import.js` nachgerüstet (Plan 6.6): ohne JavaScript hätte
+ * `static/js/admin-import.js` nachgerüstet (Plan 6.6): ohne JavaScript hätte
  * sie keine Wirkung, und ein Bedienelement, das nichts tut, ist schlimmer als
  * keines. Die leere Kopfzelle ist ihr Platz.
  *

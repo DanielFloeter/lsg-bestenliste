@@ -16,7 +16,7 @@
 		"align": [ "wide", "full" ]
 	},
 	"editorScript": "lsg-bestenliste-edit-gesamtsiege",
-	"style": "file:../../assets/css/frontend.css",
+	"style": "file:../../static/css/frontend.css",
 	"viewScript": "lsg-bestenliste-frontend",
 	"render": "file:./render.php"
 }

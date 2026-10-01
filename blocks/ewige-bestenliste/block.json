@@ -18,7 +18,7 @@
 		"align": [ "wide", "full" ]
 	},
 	"editorScript": "lsg-bestenliste-edit-ewige-bestenliste",
-	"style": "file:../../assets/css/frontend.css",
+	"style": "file:../../static/css/frontend.css",
 	"viewScript": "lsg-bestenliste-frontend",
 	"render": "file:./render.php"
 }
