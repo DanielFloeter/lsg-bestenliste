@@ -258,16 +258,23 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 	 * dem Platz, `list.Fields` kennt sie nicht. 8 Labels stehen also 9
 	 * Werten gegenüber – wer nach Index rät, liest alles um zwei verschoben.
 	 *
-	 * @param string $json Rohantwort von /results/list.
+	 * @param string     $json    Rohantwort von /results/list.
+	 * @param array|null $contest {id,name} – nur die Gruppe dieses
+	 *                            Wettbewerbs lesen. Gebraucht, wenn die
+	 *                            Liste mit contest=0 für alle Wettbewerbe
+	 *                            zugleich abgerufen wurde.
 	 * @return array{zeilen:LSG_BL_Ergebnis[],gelesen:int,verworfen:int,zeit_typ:string,warnungen:string[],listname:string}
 	 * @throws LSG_BL_Quelle_Exception Wenn die Antwort unbrauchbar ist.
 	 */
-	public static function parse_liste( $json ) {
+	public static function parse_liste( $json, $contest = null ) {
 		$j = json_decode( (string) $json, true );
 		if ( ! is_array( $j ) || ! isset( $j['data'] ) ) {
 			throw new LSG_BL_Quelle_Exception(
 				'Die Ergebnisliste von race result ist kein gültiges JSON oder enthält keine Daten.'
 			);
+		}
+		if ( null !== $contest ) {
+			$j['data'] = self::contest_gruppe( $j['data'], (string) $contest['id'], (string) $contest['name'] );
 		}
 
 		$felder      = isset( $j['list']['Fields'] ) && is_array( $j['list']['Fields'] ) ? $j['list']['Fields'] : array();
@@ -401,9 +408,54 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 	}
 
 	/**
+	 * Aus einer mit contest=0 abgerufenen Liste die Gruppe EINES
+	 * Wettbewerbs herausschneiden.
+	 *
+	 * Die oberste Ebene ist dann nach Wettbewerb gruppiert:
+	 * { "#1_10 km": …, "#2_5 km": … } (Event 388129, 2026-10-17). Die Zahl
+	 * vor dem Unterstrich ist eine laufende Gruppennummer, nicht sicher die
+	 * Contest-ID – deshalb zählt zuerst der Name, die Nummer nur als
+	 * Rückfall.
+	 *
+	 * @param mixed  $data Der data-Zweig der Antwort.
+	 * @param string $id   Contest-ID.
+	 * @param string $name Contest-Name.
+	 * @return mixed Die Gruppe des Wettbewerbs.
+	 * @throws LSG_BL_Quelle_Exception Wenn die Gruppe fehlt.
+	 */
+	private static function contest_gruppe( $data, $id, $name ) {
+		if ( ! is_array( $data ) || ! $data || isset( $data[0] ) ) {
+			// Nicht gruppiert – nichts zu trennen.
+			return $data;
+		}
+		$name_norm = lsg_bl_text_normalisieren( $name );
+		$per_nr    = null;
+		foreach ( $data as $schluessel => $gruppe ) {
+			$titel = preg_replace( '/^#\d+_/', '', (string) $schluessel );
+			if ( '' !== $name_norm && lsg_bl_text_normalisieren( $titel ) === $name_norm ) {
+				return $gruppe;
+			}
+			if ( null === $per_nr && 0 === strpos( (string) $schluessel, '#' . $id . '_' ) ) {
+				$per_nr = $gruppe;
+			}
+		}
+		if ( null !== $per_nr ) {
+			return $per_nr;
+		}
+		throw new LSG_BL_Quelle_Exception(
+			sprintf(
+				'In der Ergebnisliste von race result ist der Wettbewerb „%s“ nicht zu finden.',
+				$name
+			)
+		);
+	}
+
+	/**
 	 * `data` ist meist ein Array von Arrays – bei gruppierten Listen (z.B.
-	 * der AK-Liste) aber ein Objekt, dessen Werte je eine Gruppe halten.
-	 * Beide Formen werden zu einer flachen Zeilenliste.
+	 * der AK-Liste) aber ein Objekt, dessen Werte je eine Gruppe halten,
+	 * bei Listen über alle Wettbewerbe auch zweistufig
+	 * (Wettbewerb → Altersklasse). Alle Formen werden zu einer flachen
+	 * Zeilenliste.
 	 *
 	 * @param mixed $data Der data-Zweig der Antwort.
 	 * @return array<int,array>
@@ -412,20 +464,22 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 		if ( ! is_array( $data ) ) {
 			return array();
 		}
-		$erste = reset( $data );
-		if ( is_array( $erste ) && isset( $erste[0] ) && is_array( $erste[0] ) ) {
-			// Gruppiert: { "M30": [ [...], [...] ], … }
-			$flach = array();
-			foreach ( $data as $gruppe ) {
-				if ( is_array( $gruppe ) ) {
-					foreach ( $gruppe as $row ) {
-						$flach[] = $row;
-					}
-				}
+		$flach = array();
+		foreach ( $data as $eintrag ) {
+			if ( ! is_array( $eintrag ) ) {
+				continue;
 			}
-			return $flach;
+			$erste = reset( $eintrag );
+			if ( is_array( $erste ) ) {
+				// Gruppe: { "M30": [ [...], [...] ], … } – auch verschachtelt.
+				foreach ( self::datenzeilen( $eintrag ) as $row ) {
+					$flach[] = $row;
+				}
+			} else {
+				$flach[] = $eintrag;
+			}
 		}
-		return array_values( $data );
+		return $flach;
 	}
 
 	/**
@@ -614,6 +668,26 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 			);
 		}
 
+		// Listen mit Contest 0 gelten für alle Wettbewerbe und sind bei race
+		// result auch NUR unter contest=0 abrufbar – mit der konkreten ID
+		// kommt „404 list not found“ (Event 388129, 2026-10-17). Die Antwort
+		// enthält dann alle Wettbewerbe; parse_liste() schneidet den
+		// gewählten heraus.
+		$abruf_contest = (string) $contest_id;
+		foreach ( $config['lists'] as $l ) {
+			if ( $l['id'] === $liste->id && ( '' === (string) $l['contest'] || '0' === (string) $l['contest'] ) ) {
+				$abruf_contest = '0';
+				break;
+			}
+		}
+		$filter = null;
+		if ( '0' === $abruf_contest && '0' !== (string) $contest_id && count( $config['contests'] ) > 1 ) {
+			$filter = array(
+				'id'   => (string) $contest_id,
+				'name' => isset( $config['contests'][ (string) $contest_id ] ) ? $config['contests'][ (string) $contest_id ] : '',
+			);
+		}
+
 		if ( '' === $config['server'] ) {
 			throw new LSG_BL_Quelle_Exception(
 				'race result nennt keinen Datenserver – der Abruf wird abgebrochen.'
@@ -624,11 +698,11 @@ final class LSG_BL_RaceResult_Adapter implements LSG_BL_Ergebnis_Quelle {
 			. '?key=' . rawurlencode( $config['key'] )
 			. '&listname=' . rawurlencode( $liste->ref )
 			. '&page=results'
-			. '&contest=' . rawurlencode( (string) $contest_id )
+			. '&contest=' . rawurlencode( $abruf_contest )
 			. '&r=all&l=0';
 
 		$json = call_user_func( $this->get, $url, __CLASS__ );
-		$p1   = self::parse_liste( $json );
+		$p1   = self::parse_liste( $json, $filter );
 
 		// Kennzahlen für den Trichter und das Log am Kontext ablegen.
 		$ref->meta['p1'] = array(

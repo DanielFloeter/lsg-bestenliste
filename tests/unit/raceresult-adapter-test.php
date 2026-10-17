@@ -283,6 +283,37 @@ class RaceResult_Adapter_Test extends TestCase {
 		}
 	}
 
+	/**
+	 * Listen mit Contest 0 gelten für alle Wettbewerbe und kommen bei race
+	 * result nur unter contest=0 – mit der konkreten ID antwortet der
+	 * Server „404 list not found“ (Event 388129). Die Antwort ist dann
+	 * nach Wettbewerb und darunter nach AK gruppiert.
+	 */
+	public function test_liste_fuer_alle_wettbewerbe_wird_mit_contest_0_geholt() {
+		$abgerufen = array();
+		$adapter   = new LSG_BL_RaceResult_Adapter(
+			function ( $url ) use ( &$abgerufen ) {
+				$abgerufen[] = $url;
+				return ( false !== strpos( $url, '/results/config' ) )
+					? lsg_bl_fixture( 'raceresult-388129-config.json' )
+					: lsg_bl_fixture( 'raceresult-388129-ak-alle.json' );
+			}
+		);
+		$ref    = $adapter->eventLesen( 'https://my.raceresult.com/388129/live#0_DA705A' );
+		$zeilen = $adapter->laden( $ref, '2', 'DA705A' );
+
+		$this->assertStringContainsString( '&contest=0&', end( $abgerufen ) );
+		// Nur der gewählte Wettbewerb (5 km), über beide AK-Gruppen hinweg.
+		$namen = array_map(
+			function ( $e ) {
+				return $e->teilnehmer;
+			},
+			$zeilen
+		);
+		$this->assertSame( array( 'Lara Alkuti', 'Ella Veit', 'Max Barthel', 'Julian Krause' ), $namen );
+		$this->assertSame( '2015', (string) $zeilen[0]->jahrgang );
+	}
+
 	public function test_unbekannte_liste_wird_gemeldet() {
 		$adapter = $this->adapter();
 		$ref     = $adapter->eventLesen( 'https://my.raceresult.com/375768/' );
